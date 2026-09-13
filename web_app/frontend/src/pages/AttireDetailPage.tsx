@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import Img from '../components/Img'
 import VendorLocation from '../components/VendorLocation'
 import BackButton from '../components/BackButton'
+import DetailSkeleton from '../components/DetailSkeleton'
+import TukarHalus from '../components/TukarHalus'
 import { ArrowRight, CalendarIcon } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
 import { rupiah } from '../lib/format'
@@ -124,161 +126,164 @@ export default function AttireDetailPage() {
     }
   }
 
-  if (memuat) {
-    return <p className="mx-auto max-w-[1330px] px-6 py-20 text-[14px] text-muted">Memuat…</p>
-  }
-  if (galat || !vendor) {
-    return (
-      <div className="mx-auto max-w-[1330px] px-6 py-20">
-        <BackButton fallback={`/${kat.slug}`} />
-        <p className="mt-6 text-[15px]">{galat || 'Vendor tidak ditemukan.'}</p>
-      </div>
-    )
-  }
-
   return (
-    <div className="mx-auto max-w-[1330px] px-6 pt-12 pb-20 md:px-12">
-      <BackButton fallback={`/${kat.slug}`} />
+    <TukarHalus memuat={memuat} rangka={<DetailSkeleton label="Memuat detail penyedia jas & kebaya…" />}>
+      {() => {
+        if (galat || !vendor) {
+          return (
+            <div className="mx-auto max-w-[1330px] px-6 py-20">
+              <BackButton fallback={`/${kat.slug}`} />
+              <p className="mt-6 text-[15px]">{galat || 'Vendor tidak ditemukan.'}</p>
+            </div>
+          )
+        }
 
-      <h1 className="mt-5 font-display text-[38px] font-semibold">{vendor.business_name}</h1>
-      <p className="mt-2 text-[14px] text-[#2e6b52]">
-        {kat.label} · {namaKota(vendor.city)}
-        {vendor.is_verified && ' · Terverifikasi'}
-      </p>
+        return (
+        <div className="mx-auto max-w-[1330px] px-6 pt-12 pb-20 md:px-12">
+          <BackButton fallback={`/${kat.slug}`} />
 
-      {/* GALERI: satu foto tinggi di kiri, dua bertumpuk di kanan. */}
-      <section className="mt-6 grid gap-3 md:grid-cols-2">
-        <Img alt={vendor.business_name} emoji={kat.emoji} tint={kat.tint} className="h-[400px] w-full object-cover md:h-[640px]" />
-        <div className="grid gap-3">
-          <Img alt={`${vendor.business_name} 2`} emoji={kat.emoji} tint={kat.tint} className="h-[200px] w-full object-cover md:h-[310px]" />
-          <Img alt={`${vendor.business_name} 3`} emoji={kat.emoji} tint={kat.tint} className="h-[200px] w-full object-cover md:h-[318px]" />
-        </div>
-      </section>
-
-      <div className="mt-14 grid gap-12 lg:grid-cols-[1fr_420px]">
-        <div>
-          <h2 className="font-display text-[17px] font-semibold">Tentang Koleksi</h2>
-          <p className="mt-4 max-w-[560px] text-[15px] leading-[1.85] text-ink/85">{vendor.description || 'Vendor ini belum menuliskan deskripsi.'}</p>
-
-          <h2 className="mt-12 border-t border-line pt-12 font-display text-[26px] font-semibold">
-            Paduan Ukuran
-          </h2>
-          <p className="mt-3 max-w-[520px] text-[12px] leading-relaxed text-ink/70">
-            Pilih ukuran yang sesuai untuk kenyamanan maksimal. Layanan fitting tersedia untuk membantu
-            memastikan pakaian pas saat digunakan.
+          <h1 className="mt-5 font-display text-[38px] font-semibold">{vendor.business_name}</h1>
+          <p className="mt-2 text-[14px] text-[#2e6b52]">
+            {kat.label} · {namaKota(vendor.city)}
+            {vendor.is_verified && ' · Terverifikasi'}
           </p>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {sizeGuides[jenis].map((g) => (
-              <div key={g.size} className="border border-lavender bg-lavender/40 p-4">
-                <span className="inline-block rounded-sm bg-[#8f9bd4] px-2.5 py-0.5 text-[11px] font-bold text-white">
-                  {g.size}
-                </span>
-                <ul className="mt-3 space-y-1 border-t border-white/70 pt-3 text-[11px] leading-relaxed text-ink/85">
-                  {g.rows.map((r) => (
-                    <li key={r}>{r}</li>
-                  ))}
-                </ul>
+          {/* GALERI: satu foto tinggi di kiri, dua bertumpuk di kanan. */}
+          <section className="mt-6 grid gap-3 md:grid-cols-2">
+            <Img alt={vendor.business_name} emoji={kat.emoji} tint={kat.tint} className="h-[400px] w-full object-cover md:h-[640px]" />
+            <div className="grid gap-3">
+              <Img alt={`${vendor.business_name} 2`} emoji={kat.emoji} tint={kat.tint} className="h-[200px] w-full object-cover md:h-[310px]" />
+              <Img alt={`${vendor.business_name} 3`} emoji={kat.emoji} tint={kat.tint} className="h-[200px] w-full object-cover md:h-[318px]" />
+            </div>
+          </section>
+
+          <div className="mt-14 grid gap-12 lg:grid-cols-[1fr_420px]">
+            <div>
+              <h2 className="font-display text-[17px] font-semibold">Tentang Koleksi</h2>
+              <p className="mt-4 max-w-[560px] text-[15px] leading-[1.85] text-ink/85">{vendor.description || 'Vendor ini belum menuliskan deskripsi.'}</p>
+
+              <h2 className="mt-12 border-t border-line pt-12 font-display text-[26px] font-semibold">
+                Paduan Ukuran
+              </h2>
+              <p className="mt-3 max-w-[520px] text-[12px] leading-relaxed text-ink/70">
+                Pilih ukuran yang sesuai untuk kenyamanan maksimal. Layanan fitting tersedia untuk membantu
+                memastikan pakaian pas saat digunakan.
+              </p>
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {sizeGuides[jenis].map((g) => (
+                  <div key={g.size} className="border border-lavender bg-lavender/40 p-4">
+                    <span className="inline-block rounded-sm bg-[#8f9bd4] px-2.5 py-0.5 text-[11px] font-bold text-white">
+                      {g.size}
+                    </span>
+                    <ul className="mt-3 space-y-1 border-t border-white/70 pt-3 text-[11px] leading-relaxed text-ink/85">
+                      {g.rows.map((r) => (
+                        <li key={r}>{r}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+
+            {/* PANEL PEMESANAN */}
+            <aside className="h-fit border border-line bg-white p-5 lg:sticky lg:top-[90px]">
+              <p className="rounded-sm bg-navy-900 px-4 py-3.5 text-[15px] font-semibold text-white">
+                Detail Informasi
+              </p>
+
+              <p className="mt-5 text-[15px] font-semibold">Pilihan Kategori</p>
+              <div className="mt-2 flex gap-4">
+                <Toggle active={jenis === 'jas'} onClick={() => setJenis('jas')}>
+                  Jas
+                </Toggle>
+                <Toggle active={jenis === 'kebaya'} onClick={() => setJenis('kebaya')}>
+                  Kebaya
+                </Toggle>
+              </div>
+
+              <p className="mt-5 text-[15px] font-semibold">Input Ukuran</p>
+              <div className="mt-2 grid grid-cols-5 gap-2">
+                {sizes.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setSize(s)}
+                    aria-pressed={size === s}
+                    className={`h-10 rounded-sm border text-[13px] transition-colors ${
+                      size === s ? 'border-navy-900 bg-lavender/50 font-semibold' : 'border-line bg-white hover:border-navy-900'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+
+              <p className="mt-5 text-[15px] font-semibold">Pilih Warna</p>
+              <div className="mt-2 flex gap-2">
+                {WARNA.map((c) => (
+                  <button
+                    key={c.hex}
+                    type="button"
+                    onClick={() => setColor(c.hex)}
+                    aria-label={c.name}
+                    aria-pressed={color === c.hex}
+                    style={{ backgroundColor: c.hex }}
+                    className={`h-8 w-9 rounded-sm ring-offset-2 transition-shadow ${
+                      color === c.hex ? 'ring-2 ring-navy-900' : ''
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <DateField id="jadwal-sewa" label="Jadwal Sewa" value={tglSewa} onChange={(x) => { setTglSewa(x); setCek(null) }} />
+              <DateField id="jadwal-ambil" label="Jadwal Pengambilan" value={tglAmbil} onChange={setTglAmbil} />
+
+              <p className="mt-5 text-[15px] font-semibold">Perlu Fitting?</p>
+              <div className="mt-2 flex gap-4">
+                <Toggle active={fitting} onClick={() => setFitting(true)}>
+                  Ya
+                </Toggle>
+                <Toggle active={!fitting} onClick={() => setFitting(false)}>
+                  Tidak
+                </Toggle>
+              </div>
+
+              {/* Jadwal fitting hanya relevan kalau user memang mau fitting. */}
+              {fitting && (
+                <DateField id="jadwal-fitting" label="Jadwal Fitting" value={tglFitting} onChange={setTglFitting} />
+              )}
+
+              <div className="mt-6 flex items-baseline justify-between border-t border-line pt-4">
+                <span className="text-[14px] text-ink/80">Estimasi Harga Sewa</span>
+                <span className="font-display text-[19px] font-semibold">{utama ? rupiah(Number(utama.price)) : '-'}</span>
+              </div>
+
+              {cek && !cek.ada && (
+                <p className="mt-4 border border-maroon/30 bg-maroon/5 px-3 py-2 text-[13px] text-maroon">
+                  {cek.alasan || 'Slot tidak tersedia.'}
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={lanjutkan}
+                disabled={mengecek || !utama}
+                className="mt-4 flex h-11 w-full items-center justify-center gap-3 rounded-sm bg-amber text-[15px] font-semibold text-navy-900 transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {mengecek ? 'Mengecek jadwal…' : 'Lanjutkan Pesanan'}
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </aside>
+          </div>
+
+          <div className="mt-16">
+            <VendorLocation />
           </div>
         </div>
-
-        {/* PANEL PEMESANAN */}
-        <aside className="h-fit border border-line bg-white p-5 lg:sticky lg:top-[90px]">
-          <p className="rounded-sm bg-navy-900 px-4 py-3.5 text-[15px] font-semibold text-white">
-            Detail Informasi
-          </p>
-
-          <p className="mt-5 text-[15px] font-semibold">Pilihan Kategori</p>
-          <div className="mt-2 flex gap-4">
-            <Toggle active={jenis === 'jas'} onClick={() => setJenis('jas')}>
-              Jas
-            </Toggle>
-            <Toggle active={jenis === 'kebaya'} onClick={() => setJenis('kebaya')}>
-              Kebaya
-            </Toggle>
-          </div>
-
-          <p className="mt-5 text-[15px] font-semibold">Input Ukuran</p>
-          <div className="mt-2 grid grid-cols-5 gap-2">
-            {sizes.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setSize(s)}
-                aria-pressed={size === s}
-                className={`h-10 rounded-sm border text-[13px] transition-colors ${
-                  size === s ? 'border-navy-900 bg-lavender/50 font-semibold' : 'border-line bg-white hover:border-navy-900'
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-
-          <p className="mt-5 text-[15px] font-semibold">Pilih Warna</p>
-          <div className="mt-2 flex gap-2">
-            {WARNA.map((c) => (
-              <button
-                key={c.hex}
-                type="button"
-                onClick={() => setColor(c.hex)}
-                aria-label={c.name}
-                aria-pressed={color === c.hex}
-                style={{ backgroundColor: c.hex }}
-                className={`h-8 w-9 rounded-sm ring-offset-2 transition-shadow ${
-                  color === c.hex ? 'ring-2 ring-navy-900' : ''
-                }`}
-              />
-            ))}
-          </div>
-
-          <DateField id="jadwal-sewa" label="Jadwal Sewa" value={tglSewa} onChange={(x) => { setTglSewa(x); setCek(null) }} />
-          <DateField id="jadwal-ambil" label="Jadwal Pengambilan" value={tglAmbil} onChange={setTglAmbil} />
-
-          <p className="mt-5 text-[15px] font-semibold">Perlu Fitting?</p>
-          <div className="mt-2 flex gap-4">
-            <Toggle active={fitting} onClick={() => setFitting(true)}>
-              Ya
-            </Toggle>
-            <Toggle active={!fitting} onClick={() => setFitting(false)}>
-              Tidak
-            </Toggle>
-          </div>
-
-          {/* Jadwal fitting hanya relevan kalau user memang mau fitting. */}
-          {fitting && (
-            <DateField id="jadwal-fitting" label="Jadwal Fitting" value={tglFitting} onChange={setTglFitting} />
-          )}
-
-          <div className="mt-6 flex items-baseline justify-between border-t border-line pt-4">
-            <span className="text-[14px] text-ink/80">Estimasi Harga Sewa</span>
-            <span className="font-display text-[19px] font-semibold">{utama ? rupiah(Number(utama.price)) : '-'}</span>
-          </div>
-
-          {cek && !cek.ada && (
-            <p className="mt-4 border border-maroon/30 bg-maroon/5 px-3 py-2 text-[13px] text-maroon">
-              {cek.alasan || 'Slot tidak tersedia.'}
-            </p>
-          )}
-
-          <button
-            type="button"
-            onClick={lanjutkan}
-            disabled={mengecek || !utama}
-            className="mt-4 flex h-11 w-full items-center justify-center gap-3 rounded-sm bg-amber text-[15px] font-semibold text-navy-900 transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            {mengecek ? 'Mengecek jadwal…' : 'Lanjutkan Pesanan'}
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </aside>
-      </div>
-
-      <div className="mt-16">
-        <VendorLocation />
-      </div>
-    </div>
+        )
+      }}
+    </TukarHalus>
   )
 }
 

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import TabelSkeleton from '../components/TabelSkeleton'
+import TukarHalus from '../components/TukarHalus'
 import { Link } from 'react-router-dom'
 import Img from '../components/Img'
 import { SearchIcon, ChevronDown } from '../components/icons'
@@ -119,270 +121,273 @@ export default function PesananSayaPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1330px] px-6 pt-12 pb-20 md:px-12">
-      <h1 className="font-display text-[38px] font-semibold">Pesanan Saya</h1>
-      <p className="mt-2 max-w-[560px] text-[15px] leading-relaxed text-ink/75">
-        Pantau status pembayaran, jadwal acara, dan dana escrow setiap pesanan Anda di satu tempat.
-      </p>
+    <TukarHalus memuat={memuat} rangka={<TabelSkeleton kolom={4} baris={5} label="Memuat pesanan…" />}>
+      {() => (
+        <div className="mx-auto max-w-[1330px] px-6 pt-12 pb-20 md:px-12">
+          <h1 className="font-display text-[38px] font-semibold">Pesanan Saya</h1>
+          <p className="mt-2 max-w-[560px] text-[15px] leading-relaxed text-ink/75">
+            Pantau status pembayaran, jadwal acara, dan dana escrow setiap pesanan Anda di satu tempat.
+          </p>
 
-      {/* PENCARIAN & FILTER */}
-      <div className="mt-8 flex flex-wrap gap-4">
-        <div className="relative min-w-[280px] flex-1">
-          <SearchIcon className="absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-muted" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Cari nomor pesanan, nama vendor, atau jenis layanan..."
-            aria-label="Cari pesanan"
-            className="h-12 w-full rounded-sm border border-line bg-white pr-4 pl-11 text-[14px] outline-none placeholder:text-ink/40 focus:border-navy-900"
-          />
-        </div>
+          {/* PENCARIAN & FILTER */}
+          <div className="mt-8 flex flex-wrap gap-4">
+            <div className="relative min-w-[280px] flex-1">
+              <SearchIcon className="absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-muted" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Cari nomor pesanan, nama vendor, atau jenis layanan..."
+                aria-label="Cari pesanan"
+                className="h-12 w-full rounded-sm border border-line bg-white pr-4 pl-11 text-[14px] outline-none placeholder:text-ink/40 focus:border-navy-900"
+              />
+            </div>
 
-        <div className="relative w-[280px]">
-          <select
-            aria-label="Filter kategori"
-            value={filterKategori}
-            onChange={(e) => setFilterKategori(e.target.value)}
-            className="h-12 w-full appearance-none rounded-sm border border-line bg-white px-4 pr-9 text-[14px] outline-none focus:border-navy-900"
-          >
-            <option value="semua">Semua Layanan</option>
-            {Object.entries(KATEGORI).map(([api, key]) => (
-              <option key={api} value={api}>{categories[key].label}</option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-ink/50" />
-        </div>
-      </div>
+            <div className="relative w-[280px]">
+              <select
+                aria-label="Filter kategori"
+                value={filterKategori}
+                onChange={(e) => setFilterKategori(e.target.value)}
+                className="h-12 w-full appearance-none rounded-sm border border-line bg-white px-4 pr-9 text-[14px] outline-none focus:border-navy-900"
+              >
+                <option value="semua">Semua Layanan</option>
+                {Object.entries(KATEGORI).map(([api, key]) => (
+                  <option key={api} value={api}>{categories[key].label}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-ink/50" />
+            </div>
+          </div>
 
-      <div className="mt-5 flex flex-wrap gap-2.5">
-        {tabs.map((t) => {
-          const n = jumlah(t.id)
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              aria-pressed={tab === t.id}
-              disabled={n === 0}
-              className={`rounded-sm px-3.5 py-2 text-[11px] font-semibold tracking-[0.04em] transition-colors ${
-                tab === t.id
-                  ? 'bg-ink text-white'
-                  : n === 0
-                    ? 'bg-lavender/20 text-muted'
-                    : 'bg-lavender/40 text-ink hover:bg-lavender/60'
-              }`}
-            >
-              {t.label} ({n})
-            </button>
-          )
-        })}
-      </div>
+          <div className="mt-5 flex flex-wrap gap-2.5">
+            {tabs.map((t) => {
+              const n = jumlah(t.id)
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  aria-pressed={tab === t.id}
+                  disabled={n === 0}
+                  className={`rounded-sm px-3.5 py-2 text-[11px] font-semibold tracking-[0.04em] transition-colors ${
+                    tab === t.id
+                      ? 'bg-ink text-white'
+                      : n === 0
+                        ? 'bg-lavender/20 text-muted'
+                        : 'bg-lavender/40 text-ink hover:bg-lavender/60'
+                  }`}
+                >
+                  {t.label} ({n})
+                </button>
+              )
+            })}
+          </div>
 
-      {memuat && <p className="mt-8 text-[14px] text-muted">Memuat pesanan…</p>}
-      {galat && (
-        <p className="mt-8 border border-maroon/30 bg-maroon/5 px-5 py-4 text-[14px] text-maroon">
-          {galat}
-        </p>
-      )}
+          {galat && (
+            <p className="mt-8 border border-maroon/30 bg-maroon/5 px-5 py-4 text-[14px] text-maroon">
+              {galat}
+            </p>
+          )}
 
-      {/* DAFTAR PESANAN */}
-      <div className="mt-8 space-y-6">
-        {terlihat.map((p) => {
-          const kat = categories[KATEGORI[p.category] ?? 'eo']
-          const st = statusPesanan(p)
-          const harga = Number(p.total_price)
-          const dp = Number(p.dp_amount)
-          const lunasDp = p.payments.some(
-            (x) => x.payment_type === 'down_payment' && x.gateway_status === 'success'
-          )
-          const lunasPenuh = p.payment_status === 'fully_paid'
-          // Tagihan yang masih menggantung, kalau ada.
-          const tertunda = p.payments.find((x) => x.gateway_status === 'pending')
-          const shiftLabel = shifts.find((x) => x.value === p.time_slot)?.label ?? p.time_slot
+          {/* DAFTAR PESANAN */}
+          <div className="mt-8 space-y-6">
+            {terlihat.map((p) => {
+              const kat = categories[KATEGORI[p.category] ?? 'eo']
+              const st = statusPesanan(p)
+              const harga = Number(p.total_price)
+              const dp = Number(p.dp_amount)
+              const lunasDp = p.payments.some(
+                (x) => x.payment_type === 'down_payment' && x.gateway_status === 'success'
+              )
+              const lunasPenuh = p.payment_status === 'fully_paid'
+              // Tagihan yang masih menggantung, kalau ada.
+              const tertunda = p.payments.find((x) => x.gateway_status === 'pending')
+              const shiftLabel = shifts.find((x) => x.value === p.time_slot)?.label ?? p.time_slot
 
-          return (
-            <article key={p.booking_id} className="border border-line bg-white">
-              <header className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
-                <div className="flex flex-wrap items-center gap-3 text-[13px]">
-                  <span className="font-display text-[17px] font-semibold">
-                    #{p.booking_id.slice(0, 8).toUpperCase()}
-                  </span>
-                  <span className="text-muted">• Dipesan {tanggalPanjang(p.created_at)} •</span>
-                  <span className="rounded-sm bg-lavender/50 px-2.5 py-1 text-[10px] font-semibold tracking-[0.04em] text-navy-700">
-                    {kat.label.toUpperCase()}
-                  </span>
-                </div>
-                <span className={`rounded-sm px-3 py-1.5 text-[10px] font-semibold tracking-[0.04em] ${st.tone}`}>
-                  {st.badge}
-                </span>
-              </header>
-
-              <div className="grid gap-6 px-6 pb-5 lg:grid-cols-[210px_1fr_330px]">
-                <Img
-                  alt={p.business_name}
-                  emoji={kat.emoji}
-                  tint={kat.tint}
-                  className="h-[130px] w-full object-cover"
-                />
-
-                <div>
-                  <h2 className="font-display text-[21px] font-semibold">{p.business_name}</h2>
-                  <p className="mt-1.5 text-[14px] leading-relaxed text-ink/80">{p.service_name}</p>
-
-                  <dl className="mt-4 flex flex-wrap gap-8 border-y border-line py-3">
-                    <div>
-                      <dt className="text-[10px] font-semibold tracking-[0.04em] text-muted">TANGGAL ACARA</dt>
-                      <dd className="mt-1 text-[13px] font-semibold">
-                        {tanggalPanjang(p.event_date)} · {shiftLabel}
-                      </dd>
+              return (
+                <article key={p.booking_id} className="border border-line bg-white">
+                  <header className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
+                    <div className="flex flex-wrap items-center gap-3 text-[13px]">
+                      <span className="font-display text-[17px] font-semibold">
+                        #{p.booking_id.slice(0, 8).toUpperCase()}
+                      </span>
+                      <span className="text-muted">• Dipesan {tanggalPanjang(p.created_at)} •</span>
+                      <span className="rounded-sm bg-lavender/50 px-2.5 py-1 text-[10px] font-semibold tracking-[0.04em] text-navy-700">
+                        {kat.label.toUpperCase()}
+                      </span>
                     </div>
+                    <span className={`rounded-sm px-3 py-1.5 text-[10px] font-semibold tracking-[0.04em] ${st.tone}`}>
+                      {st.badge}
+                    </span>
+                  </header>
+
+                  <div className="grid gap-6 px-6 pb-5 lg:grid-cols-[210px_1fr_330px]">
+                    <Img
+                      alt={p.business_name}
+                      emoji={kat.emoji}
+                      tint={kat.tint}
+                      className="h-[130px] w-full object-cover"
+                    />
+
                     <div>
-                      <dt className="text-[10px] font-semibold tracking-[0.04em] text-muted">KOTA VENDOR</dt>
-                      <dd className="mt-1 text-[13px] font-semibold">{namaKota(p.city)}</dd>
+                      <h2 className="font-display text-[21px] font-semibold">{p.business_name}</h2>
+                      <p className="mt-1.5 text-[14px] leading-relaxed text-ink/80">{p.service_name}</p>
+
+                      <dl className="mt-4 flex flex-wrap gap-8 border-y border-line py-3">
+                        <div>
+                          <dt className="text-[10px] font-semibold tracking-[0.04em] text-muted">TANGGAL ACARA</dt>
+                          <dd className="mt-1 text-[13px] font-semibold">
+                            {tanggalPanjang(p.event_date)} · {shiftLabel}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-[10px] font-semibold tracking-[0.04em] text-muted">KOTA VENDOR</dt>
+                          <dd className="mt-1 text-[13px] font-semibold">{namaKota(p.city)}</dd>
+                        </div>
+                      </dl>
+
+                      {/* Detail lokasi disimpan multi-baris (venue, catatan,
+                          ukuran) — ditampilkan apa adanya. */}
+                      <p className="mt-3 whitespace-pre-line text-[13px] leading-relaxed text-ink/75">
+                        {p.event_location_detail}
+                      </p>
                     </div>
-                  </dl>
 
-                  {/* Detail lokasi disimpan multi-baris (venue, catatan,
-                      ukuran) — ditampilkan apa adanya. */}
-                  <p className="mt-3 whitespace-pre-line text-[13px] leading-relaxed text-ink/75">
-                    {p.event_location_detail}
-                  </p>
-                </div>
+                    <div className="h-fit bg-lavender/25 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[10px] font-semibold tracking-[0.04em] text-ink/70">
+                          RINCIAN ESCROW
+                        </span>
+                        <span className="text-[9px] font-semibold tracking-[0.04em] text-muted">
+                          TAHAP {lunasPenuh ? '2/2' : lunasDp ? '2/2' : '1/2'}
+                        </span>
+                      </div>
 
-                <div className="h-fit bg-lavender/25 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-[10px] font-semibold tracking-[0.04em] text-ink/70">
-                      RINCIAN ESCROW
-                    </span>
-                    <span className="text-[9px] font-semibold tracking-[0.04em] text-muted">
-                      TAHAP {lunasPenuh ? '2/2' : lunasDp ? '2/2' : '1/2'}
-                    </span>
+                      <dl className="mt-2.5 space-y-1">
+                        <div className="flex items-baseline gap-2">
+                          <dt className="text-[13px]">
+                            DP {Math.round((dp / harga) * 100)}%{lunasDp ? ' lunas:' : ':'}
+                          </dt>
+                          <dd className="text-[17px] font-semibold">{rupiah(dp)}</dd>
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                          <dt className="text-[13px]">Sisa pelunasan:</dt>
+                          <dd
+                            className={`font-semibold ${
+                              lunasPenuh ? 'text-[17px]' : 'text-[15px] text-[#c0392b]'
+                            }`}
+                          >
+                            {rupiah(harga - dp)}
+                          </dd>
+                        </div>
+                      </dl>
+
+                      <p className="mt-2 text-[11px] leading-relaxed text-ink/70">
+                        {lunasPenuh
+                          ? '*Dana ditahan Festa Escrow dan dilepas ke vendor setelah acara selesai.'
+                          : '*Dana dipegang aman oleh Festa Escrow sampai acara Anda selesai.'}
+                      </p>
+                    </div>
                   </div>
 
-                  <dl className="mt-2.5 space-y-1">
-                    <div className="flex items-baseline gap-2">
-                      <dt className="text-[13px]">
-                        DP {Math.round((dp / harga) * 100)}%{lunasDp ? ' lunas:' : ':'}
-                      </dt>
-                      <dd className="text-[17px] font-semibold">{rupiah(dp)}</dd>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                      <dt className="text-[13px]">Sisa pelunasan:</dt>
-                      <dd
-                        className={`font-semibold ${
-                          lunasPenuh ? 'text-[17px]' : 'text-[15px] text-[#c0392b]'
-                        }`}
+                  <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-6 py-3.5">
+                    <span className="text-[11px] text-muted">
+                      {p.payment_status === 'pending'
+                        && 'Slot ditahan sampai DP masuk — selesaikan pembayaran agar tidak dilepas.'}
+                    </span>
+                    <div className="flex flex-wrap gap-2.5">
+                      <Link
+                        to={`/${kat.slug}/${p.vendor_id}`}
+                        className="rounded-sm bg-lavender/40 px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] transition-colors hover:bg-lavender/60"
                       >
-                        {rupiah(harga - dp)}
-                      </dd>
+                        LIHAT PROFIL VENDOR
+                      </Link>
+
+                      <Link
+                        to={`/invoice/${p.booking_id}`}
+                        className="rounded-sm border border-line px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] transition-colors hover:border-navy-900"
+                      >
+                        INVOICE
+                      </Link>
+
+                      {/* Tagihan yang masih menggantung bisa dibuka lagi. */}
+                      {tertunda && (
+                        <Link
+                          to={`/pembayaran/${tertunda.payment_id}`}
+                          className="rounded-sm bg-amber px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] text-navy-900 transition-opacity hover:opacity-90"
+                        >
+                          LANJUTKAN PEMBAYARAN
+                        </Link>
+                      )}
+
+                      {!tertunda && lunasDp && !lunasPenuh && (
+                        <Link
+                          to={`/checkout/${p.booking_id}`}
+                          className="rounded-sm bg-amber px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] text-navy-900 transition-opacity hover:opacity-90"
+                        >
+                          BAYAR PELUNASAN ({rupiah(harga - dp)})
+                        </Link>
+                      )}
+
+                      {!tertunda && !lunasDp && p.payment_status === 'pending' && (
+                        <Link
+                          to={`/checkout/${p.booking_id}`}
+                          className="rounded-sm bg-amber px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] text-navy-900 transition-opacity hover:opacity-90"
+                        >
+                          BAYAR DP ({rupiah(dp)})
+                        </Link>
+                      )}
                     </div>
-                  </dl>
+                  </footer>
+                </article>
+              )
+            })}
 
-                  <p className="mt-2 text-[11px] leading-relaxed text-ink/70">
-                    {lunasPenuh
-                      ? '*Dana ditahan Festa Escrow dan dilepas ke vendor setelah acara selesai.'
-                      : '*Dana dipegang aman oleh Festa Escrow sampai acara Anda selesai.'}
-                  </p>
-                </div>
-              </div>
-
-              <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-6 py-3.5">
-                <span className="text-[11px] text-muted">
-                  {p.payment_status === 'pending'
-                    && 'Slot ditahan sampai DP masuk — selesaikan pembayaran agar tidak dilepas.'}
-                </span>
-                <div className="flex flex-wrap gap-2.5">
-                  <Link
-                    to={`/${kat.slug}/${p.vendor_id}`}
-                    className="rounded-sm bg-lavender/40 px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] transition-colors hover:bg-lavender/60"
-                  >
-                    LIHAT PROFIL VENDOR
-                  </Link>
-
-                  <Link
-                    to={`/invoice/${p.booking_id}`}
-                    className="rounded-sm border border-line px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] transition-colors hover:border-navy-900"
-                  >
-                    INVOICE
-                  </Link>
-
-                  {/* Tagihan yang masih menggantung bisa dibuka lagi. */}
-                  {tertunda && (
-                    <Link
-                      to={`/pembayaran/${tertunda.payment_id}`}
-                      className="rounded-sm bg-amber px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] text-navy-900 transition-opacity hover:opacity-90"
-                    >
-                      LANJUTKAN PEMBAYARAN
-                    </Link>
-                  )}
-
-                  {!tertunda && lunasDp && !lunasPenuh && (
-                    <Link
-                      to={`/checkout/${p.booking_id}`}
-                      className="rounded-sm bg-amber px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] text-navy-900 transition-opacity hover:opacity-90"
-                    >
-                      BAYAR PELUNASAN ({rupiah(harga - dp)})
-                    </Link>
-                  )}
-
-                  {!tertunda && !lunasDp && p.payment_status === 'pending' && (
-                    <Link
-                      to={`/checkout/${p.booking_id}`}
-                      className="rounded-sm bg-amber px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] text-navy-900 transition-opacity hover:opacity-90"
-                    >
-                      BAYAR DP ({rupiah(dp)})
-                    </Link>
-                  )}
-                </div>
-              </footer>
-            </article>
-          )
-        })}
-
-        {!memuat && terlihat.length === 0 && (
-          <p className="border border-line bg-white py-16 text-center text-[15px] text-muted">
-            {pesanan.length === 0
-              ? 'Anda belum punya pesanan. Mulai dari halaman kategori vendor.'
-              : 'Tidak ada pesanan pada filter ini.'}
-          </p>
-        )}
-      </div>
-
-      {/* BANTUAN */}
-      <section className="mt-10 flex flex-wrap items-center justify-between gap-6 border border-line bg-white p-7">
-        <div className="flex gap-5">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm bg-navy-900 text-[18px]">
-            🎧
-          </span>
-          <div className="max-w-[330px]">
-            <p className="text-[11px] font-semibold tracking-[0.04em] text-amber">
-              LAYANAN PRIORITAS <span className="text-muted">• Tersedia 24/7</span>
-            </p>
-            <h2 className="mt-1.5 font-display text-[19px] font-semibold">
-              Butuh bantuan dengan pesanan Anda?
-            </h2>
-            <p className="mt-2 text-[13px] leading-relaxed text-ink/75">
-              Tim Concierge Festa Festum siap membantu mediasi vendor, penyesuaian jadwal acara penting,
-              hingga konfirmasi pengembalian dana perlindungan escrow.
-            </p>
+            {!memuat && terlihat.length === 0 && (
+              <p className="border border-line bg-white py-16 text-center text-[15px] text-muted">
+                {pesanan.length === 0
+                  ? 'Anda belum punya pesanan. Mulai dari halaman kategori vendor.'
+                  : 'Tidak ada pesanan pada filter ini.'}
+              </p>
+            )}
           </div>
-        </div>
 
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            className="rounded-sm border border-line bg-lavender/25 px-4 py-2.5 text-[11px] font-semibold tracking-[0.04em] transition-colors hover:bg-lavender/40"
-          >
-            PUSAT BANTUAN FAQ
-          </button>
-          <button
-            type="button"
-            className="rounded-sm bg-ink px-4 py-2.5 text-[11px] font-semibold tracking-[0.04em] text-white transition-opacity hover:opacity-90"
-          >
-            HUBUNGI CONCIERGE
-          </button>
+          {/* BANTUAN */}
+          <section className="mt-10 flex flex-wrap items-center justify-between gap-6 border border-line bg-white p-7">
+            <div className="flex gap-5">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm bg-navy-900 text-[18px]">
+                🎧
+              </span>
+              <div className="max-w-[330px]">
+                <p className="text-[11px] font-semibold tracking-[0.04em] text-amber">
+                  LAYANAN PRIORITAS <span className="text-muted">• Tersedia 24/7</span>
+                </p>
+                <h2 className="mt-1.5 font-display text-[19px] font-semibold">
+                  Butuh bantuan dengan pesanan Anda?
+                </h2>
+                <p className="mt-2 text-[13px] leading-relaxed text-ink/75">
+                  Tim Concierge Festa Festum siap membantu mediasi vendor, penyesuaian jadwal acara penting,
+                  hingga konfirmasi pengembalian dana perlindungan escrow.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                className="rounded-sm border border-line bg-lavender/25 px-4 py-2.5 text-[11px] font-semibold tracking-[0.04em] transition-colors hover:bg-lavender/40"
+              >
+                PUSAT BANTUAN FAQ
+              </button>
+              <button
+                type="button"
+                className="rounded-sm bg-ink px-4 py-2.5 text-[11px] font-semibold tracking-[0.04em] text-white transition-opacity hover:opacity-90"
+              >
+                HUBUNGI CONCIERGE
+              </button>
+            </div>
+          </section>
         </div>
-      </section>
-    </div>
+      )}
+    </TukarHalus>
   )
 }

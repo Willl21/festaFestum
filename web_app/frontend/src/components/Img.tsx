@@ -9,12 +9,16 @@ type Props = {
   emoji?: string
   /** Kelas gradien Tailwind untuk latar fallback, mis. 'from-rose-100 to-rose-200'. */
   tint?: string
+  /** Matikan lazy-load untuk gambar yang sudah terlihat saat halaman dibuka
+   *  (hero). `loading="lazy"` pada gambar di atas lipatan justru menundanya,
+   *  dan bertentangan dengan <link rel="preload"> di index.html. */
+  prioritas?: boolean
 }
 
 /** Gambar dari /public/img. Kalau filenya belum ada (atau src kosong),
  *  tampilkan emoji kategori di atas latar berwarna supaya layout tetap
  *  terbaca dan tiap kategori langsung kelihatan bedanya. */
-export default function Img({ src, alt, className = '', emoji, tint }: Props) {
+export default function Img({ src, alt, className = '', emoji, tint, prioritas }: Props) {
   const [failed, setFailed] = useState(false)
 
   if (!src || failed) {
@@ -39,7 +43,8 @@ export default function Img({ src, alt, className = '', emoji, tint }: Props) {
     <img
       src={src}
       alt={alt}
-      loading="lazy"
+      loading={prioritas ? 'eager' : 'lazy'}
+      fetchPriority={prioritas ? 'high' : undefined}
       onError={() => setFailed(true)}
       className={className}
     />

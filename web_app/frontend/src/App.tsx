@@ -63,7 +63,10 @@ import AdminAkunPage from './pages/AdminAkunPage'
  *  yang lambat pergi. Kalau mau disetel, dua angka `duration` di bawah ini
  *  yang diubah — tidak ada tempat lain.
  *
- *  Animasi saat di-scroll ada di komponen <Reveal>, dipakai per bagian
+ *  Animasi masuk isi halaman ada di <TukarHalus> (components/TukarHalus.tsx),
+ *  bukan animasi saat di-scroll: <Reveal> dicopot 13 Sep karena `whileInView`
+ *  membuat bagian yang sudah terlihat sejak awal animasi di saat yang tidak
+ *  masuk akal, dan bertumpuk dengan fade masuk dari TukarHalus
  *  halaman yang memang perlu. */
 function SiteLayout() {
   const { pathname } = useLocation()

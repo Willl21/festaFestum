@@ -10,6 +10,11 @@
       href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <!-- Hero landing diunduh sejak HTML dibaca, sebelum React jalan. Selama
+         rangka muat tampil, isi aslinya belum terpasang, jadi tanpa ini
+         gambarnya baru mulai diunduh SESUDAH pertukaran — dan muncul
+         belakangan sebagai sentakan kedua. -->
+    <link rel="preload" as="image" href="/img/hero-landing.jpg" fetchpriority="high" />
     <title>Festa Festum — Marketplace Vendor Acara Formal</title>
   </head>
   <body>

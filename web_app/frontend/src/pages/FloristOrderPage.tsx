@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import FormSkeleton from '../components/FormSkeleton'
+import TukarHalus from '../components/TukarHalus'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import OrderLayout, { OrderField, OrderSection, OrderTextarea } from '../components/OrderLayout'
 import { CalendarIcon, MapPinIcon, NoteIcon } from '../components/icons'
@@ -116,167 +118,170 @@ export default function FloristOrderPage() {
     }
   }
 
-  if (memuat) {
-    return <p className="mx-auto max-w-[1330px] px-6 py-20 text-[14px] text-muted">Memuat…</p>
-  }
-  if (!vendor) {
-    return <p className="mx-auto max-w-[1330px] px-6 py-20 text-[15px]">{galat || 'Vendor tidak ditemukan.'}</p>
-  }
-
   return (
-    <OrderLayout
-      order={{
-        vendor: vendor.business_name,
-        packageName: paket?.service_name ?? 'Belum ada paket',
-        price: harga,
-        dp: Math.round(harga * 0.3),
-        emoji: kat.emoji,
-        tint: kat.tint,
-        backTo: `/${kat.slug}/${id}`,
-      }}
-      onSubmit={ajukan}
-      mengirim={mengirim}
-      galat={galat}
-    >
-      <OrderSection title="Informasi Acara" icon={<CalendarIcon />}>
-        {layanan.length > 1 && (
-          <div className="mb-5">
-            <label htmlFor="paket" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
-              PAKET YANG DIPESAN
-            </label>
-            <select
-              id="paket"
-              value={serviceId}
-              onChange={(e) => setServiceId(e.target.value)}
-              className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
-            >
-              {layanan.map((s) => (
-                <option key={s.service_id} value={s.service_id}>{s.service_name}</option>
-              ))}
-            </select>
-          </div>
-        )}
+    <TukarHalus memuat={memuat} rangka={<FormSkeleton label="Memuat formulir pesanan…" />}>
+      {() => {
+        if (!vendor) {
+          return <p className="mx-auto max-w-[1330px] px-6 py-20 text-[15px]">{galat || 'Vendor tidak ditemukan.'}</p>
+        }
 
-        <div className="grid gap-5 sm:grid-cols-2">
-          <OrderField
-            id="tanggal" label="TANGGAL ACARA" type="date"
-            value={tanggal} onChange={setTanggal}
-          />
-          <div>
-            <label htmlFor="shift" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
-              SHIFT
-            </label>
-            <select
-              id="shift"
-              value={shift}
-              onChange={(e) => setShift(e.target.value)}
-              className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
-            >
-              {shifts.map((s) => (
-                <option key={s.value} value={s.value}>{s.label} ({s.hours})</option>
-              ))}
-            </select>
-          </div>
-        </div>
+        return (
+          <OrderLayout
+            order={{
+              vendor: vendor.business_name,
+              packageName: paket?.service_name ?? 'Belum ada paket',
+              price: harga,
+              dp: Math.round(harga * 0.3),
+              emoji: kat.emoji,
+              tint: kat.tint,
+              backTo: `/${kat.slug}/${id}`,
+            }}
+            onSubmit={ajukan}
+            mengirim={mengirim}
+            galat={galat}
+          >
+            <OrderSection title="Informasi Acara" icon={<CalendarIcon />}>
+              {layanan.length > 1 && (
+                <div className="mb-5">
+                  <label htmlFor="paket" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
+                    PAKET YANG DIPESAN
+                  </label>
+                  <select
+                    id="paket"
+                    value={serviceId}
+                    onChange={(e) => setServiceId(e.target.value)}
+                    className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
+                  >
+                    {layanan.map((s) => (
+                      <option key={s.service_id} value={s.service_id}>{s.service_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-        <div className="mt-5 grid gap-5 sm:grid-cols-2">
-          <div>
-            <label htmlFor="jenis" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
-              JENIS ACARA
-            </label>
-            <select
-              id="jenis"
-              value={jenisAcara}
-              onChange={(e) => setJenisAcara(e.target.value)}
-              className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
-            >
-              {JENIS_ACARA.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
-          </div>
-          <OrderField
-            id="durasi" label="ESTIMASI DURASI ACARA" placeholder="Contoh: 4 jam"
-            value={durasi} onChange={setDurasi}
-          />
-        </div>
-      </OrderSection>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <OrderField
+                  id="tanggal" label="TANGGAL ACARA" type="date"
+                  value={tanggal} onChange={setTanggal}
+                />
+                <div>
+                  <label htmlFor="shift" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
+                    SHIFT
+                  </label>
+                  <select
+                    id="shift"
+                    value={shift}
+                    onChange={(e) => setShift(e.target.value)}
+                    className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
+                  >
+                    {shifts.map((s) => (
+                      <option key={s.value} value={s.value}>{s.label} ({s.hours})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
-      {/* Bunga untuk acara dan buket hadiah butuh data yang beda:
-          yang satu lokasi venue, yang satu alamat + kartu ucapan penerima. */}
-      <OrderSection title="Lokasi/Pengiriman" icon={<MapPinIcon className="h-4 w-4" />}>
-        <div className="-mt-6 flex border-b border-line">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              aria-pressed={tab === t.id}
-              className={`flex-1 border-b-2 pb-3 text-[12px] font-semibold tracking-[0.06em] transition-colors ${
-                tab === t.id ? 'border-ink text-ink' : 'border-transparent text-muted hover:text-ink'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+              <div className="mt-5 grid gap-5 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="jenis" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
+                    JENIS ACARA
+                  </label>
+                  <select
+                    id="jenis"
+                    value={jenisAcara}
+                    onChange={(e) => setJenisAcara(e.target.value)}
+                    className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
+                  >
+                    {JENIS_ACARA.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <OrderField
+                  id="durasi" label="ESTIMASI DURASI ACARA" placeholder="Contoh: 4 jam"
+                  value={durasi} onChange={setDurasi}
+                />
+              </div>
+            </OrderSection>
 
-        {tab === 'acara' ? (
-          <div className="mt-6 space-y-5">
-            <OrderField id="venue" label="NAMA VENUE/ LOKASI" value={venue} onChange={setVenue} />
-            <OrderTextarea id="alamat" label="ALAMAT LENGKAP" rows={5} value={alamat} onChange={setAlamat} />
-          </div>
-        ) : (
-          <div className="mt-6 space-y-5">
-            <div className="grid gap-5 sm:grid-cols-2">
-              <OrderField
-                id="penerima"
-                label="NAMA PENERIMA"
-                placeholder="Nama lengkap penerima buket/hadiah"
-                value={penerima} onChange={setPenerima}
-              />
-              <OrderField
-                id="telp-penerima"
-                label="NOMOR TELEPON / WHATSAPP PENERIMA"
-                type="tel"
-                placeholder="Contoh: 0812-3456-7890"
-                value={telp} onChange={setTelp}
-              />
-            </div>
-            <OrderTextarea
-              id="alamat-kirim"
-              label="ALAMAT LENGKAP PENGIRIMAN"
-              placeholder="Detail jalan, nomor rumah, lantai/apartemen, patokan"
-              rows={3}
-              value={alamatKirim} onChange={setAlamatKirim}
-            />
-            <div className="border-t border-line pt-5">
+            {/* Bunga untuk acara dan buket hadiah butuh data yang beda:
+                yang satu lokasi venue, yang satu alamat + kartu ucapan penerima. */}
+            <OrderSection title="Lokasi/Pengiriman" icon={<MapPinIcon className="h-4 w-4" />}>
+              <div className="-mt-6 flex border-b border-line">
+                {tabs.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTab(t.id)}
+                    aria-pressed={tab === t.id}
+                    className={`flex-1 border-b-2 pb-3 text-[12px] font-semibold tracking-[0.06em] transition-colors ${
+                      tab === t.id ? 'border-ink text-ink' : 'border-transparent text-muted hover:text-ink'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {tab === 'acara' ? (
+                <div className="mt-6 space-y-5">
+                  <OrderField id="venue" label="NAMA VENUE/ LOKASI" value={venue} onChange={setVenue} />
+                  <OrderTextarea id="alamat" label="ALAMAT LENGKAP" rows={5} value={alamat} onChange={setAlamat} />
+                </div>
+              ) : (
+                <div className="mt-6 space-y-5">
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <OrderField
+                      id="penerima"
+                      label="NAMA PENERIMA"
+                      placeholder="Nama lengkap penerima buket/hadiah"
+                      value={penerima} onChange={setPenerima}
+                    />
+                    <OrderField
+                      id="telp-penerima"
+                      label="NOMOR TELEPON / WHATSAPP PENERIMA"
+                      type="tel"
+                      placeholder="Contoh: 0812-3456-7890"
+                      value={telp} onChange={setTelp}
+                    />
+                  </div>
+                  <OrderTextarea
+                    id="alamat-kirim"
+                    label="ALAMAT LENGKAP PENGIRIMAN"
+                    placeholder="Detail jalan, nomor rumah, lantai/apartemen, patokan"
+                    rows={3}
+                    value={alamatKirim} onChange={setAlamatKirim}
+                  />
+                  <div className="border-t border-line pt-5">
+                    <OrderTextarea
+                      id="ucapan"
+                      label="PESAN PADA KARTU UCAPAN (GREETING CARD)"
+                      placeholder="Tuliskan ucapan istimewa untuk penerima..."
+                      rows={3}
+                      value={ucapan} onChange={setUcapan}
+                    />
+                  </div>
+                  <div className="sm:w-1/2 sm:pr-2.5">
+                    <OrderField
+                      id="pengirim"
+                      label="DARI (PENGIRIM DI KARTU)"
+                      placeholder="Tampilkan nama pengirim atau Anonim"
+                      value={pengirim} onChange={setPengirim}
+                    />
+                  </div>
+                </div>
+              )}
+            </OrderSection>
+
+            <OrderSection title="Catatan untuk Vendor" icon={<NoteIcon />}>
               <OrderTextarea
-                id="ucapan"
-                label="PESAN PADA KARTU UCAPAN (GREETING CARD)"
-                placeholder="Tuliskan ucapan istimewa untuk penerima..."
-                rows={3}
-                value={ucapan} onChange={setUcapan}
+                id="catatan" label="REQUEST KONSEP ATAU MOMEN KHUSUS"
+                value={catatan} onChange={setCatatan}
               />
-            </div>
-            <div className="sm:w-1/2 sm:pr-2.5">
-              <OrderField
-                id="pengirim"
-                label="DARI (PENGIRIM DI KARTU)"
-                placeholder="Tampilkan nama pengirim atau Anonim"
-                value={pengirim} onChange={setPengirim}
-              />
-            </div>
-          </div>
-        )}
-      </OrderSection>
-
-      <OrderSection title="Catatan untuk Vendor" icon={<NoteIcon />}>
-        <OrderTextarea
-          id="catatan" label="REQUEST KONSEP ATAU MOMEN KHUSUS"
-          value={catatan} onChange={setCatatan}
-        />
-      </OrderSection>
-    </OrderLayout>
+            </OrderSection>
+          </OrderLayout>
+        )
+      }}
+    </TukarHalus>
   )
 }

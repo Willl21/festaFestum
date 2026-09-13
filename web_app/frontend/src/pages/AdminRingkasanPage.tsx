@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import PanelSkeleton from '../components/PanelSkeleton'
+import TukarHalus from '../components/TukarHalus'
 import { Link } from 'react-router-dom'
 import { ArrowRight, ShieldIcon, WalletIcon, LockIcon, GridIcon } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
@@ -87,166 +89,171 @@ export default function AdminRingkasanPage() {
 
   const puncak = perWilayah[0]?.[1].nilai ?? 1
 
-  if (memuat) return <p className="py-20 text-center text-[14px] text-muted">Memuat ringkasan…</p>
-  if (galat) {
-    return (
-      <p role="alert" className="border border-maroon/30 bg-maroon/5 px-5 py-4 text-[14px] text-maroon">
-        {galat}
-      </p>
-    )
-  }
-
   return (
-    <>
-      <h1 className="font-display text-[32px] font-semibold text-navy-900">Ringkasan Eksekutif</h1>
-      <p className="mt-2 text-[14px] text-muted">
-        Angka marketplace Jabodetabek, dihitung langsung dari transaksi yang tercatat.
-      </p>
+    <TukarHalus memuat={memuat} rangka={<PanelSkeleton kartu={4} blok={2} label="Memuat ringkasan…" />}>
+      {() => {
+        if (galat) {
+          return (
+            <p role="alert" className="border border-maroon/30 bg-maroon/5 px-5 py-4 text-[14px] text-maroon">
+              {galat}
+            </p>
+          )
+        }
 
-      <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kartu
-          ikon={<GridIcon className="h-5 w-5 text-amber" />}
-          label="GMV Ditransaksikan"
-          nilai={stats ? rupiahBulat(Number(stats.gmv)) : '—'}
-          catatan="Dari pesanan yang DP-nya sudah masuk"
-        />
-        <Kartu
-          ikon={<WalletIcon className="h-5 w-5 text-amber" />}
-          label="Pendapatan Platform"
-          nilai={escrow ? rupiahBulat(escrow.biaya_platform) : '—'}
-          catatan={escrow ? `${escrow.platform_fee_rate * 100}% dari dana yang dirilis` : ''}
-        />
-        <Kartu
-          ikon={<LockIcon className="h-5 w-5 text-amber" />}
-          label="Tertahan di Escrow"
-          nilai={escrow ? rupiahBulat(escrow.tertahan) : '—'}
-          catatan={escrow ? `${escrow.pesanan_tertahan} acara belum berjalan` : ''}
-        />
-        <Kartu
-          ikon={<ShieldIcon className="h-5 w-5 text-amber" />}
-          label="Vendor Terverifikasi"
-          nilai={stats?.terverifikasi ?? '—'}
-          catatan={stats ? `${stats.menunggu} menunggu kurasi` : ''}
-        />
-      </div>
+        return (
+          <>
+            <h1 className="font-display text-[32px] font-semibold text-navy-900">Ringkasan Eksekutif</h1>
+            <p className="mt-2 text-[14px] text-muted">
+              Angka marketplace Jabodetabek, dihitung langsung dari transaksi yang tercatat.
+            </p>
 
-      <div className="mt-7 grid gap-6 xl:grid-cols-[1fr_360px]">
-        <section className="min-w-0 rounded-lg border border-line bg-white p-6">
-          <p className="text-[11px] tracking-wide text-muted uppercase">Saturasi Geografis</p>
-          <h2 className="mt-1 font-display text-[22px] font-semibold text-navy-900">
-            Sebaran Pemesanan Jabodetabek
-          </h2>
-
-          {perWilayah.length === 0 ? (
-            <p className="mt-5 text-[14px] text-muted">Belum ada pemesanan tercatat.</p>
-          ) : (
-            <div className="mt-5 space-y-4">
-              {perWilayah.map(([kota, v]) => (
-                <div key={kota}>
-                  <div className="flex justify-between text-[13px]">
-                    <span className="font-medium text-navy-900">{kota}</span>
-                    <span className="text-ink/75">
-                      {v.jumlah} acara · {rupiahBulat(v.nilai)}
-                    </span>
-                  </div>
-                  <div className="mt-2 h-2 rounded-full bg-lavender/60">
-                    <div
-                      className="h-full rounded-full bg-navy-900"
-                      style={{ width: `${Math.max(6, (v.nilai / puncak) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+            <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <Kartu
+                ikon={<GridIcon className="h-5 w-5 text-amber" />}
+                label="GMV Ditransaksikan"
+                nilai={stats ? rupiahBulat(Number(stats.gmv)) : '—'}
+                catatan="Dari pesanan yang DP-nya sudah masuk"
+              />
+              <Kartu
+                ikon={<WalletIcon className="h-5 w-5 text-amber" />}
+                label="Pendapatan Platform"
+                nilai={escrow ? rupiahBulat(escrow.biaya_platform) : '—'}
+                catatan={escrow ? `${escrow.platform_fee_rate * 100}% dari dana yang dirilis` : ''}
+              />
+              <Kartu
+                ikon={<LockIcon className="h-5 w-5 text-amber" />}
+                label="Tertahan di Escrow"
+                nilai={escrow ? rupiahBulat(escrow.tertahan) : '—'}
+                catatan={escrow ? `${escrow.pesanan_tertahan} acara belum berjalan` : ''}
+              />
+              <Kartu
+                ikon={<ShieldIcon className="h-5 w-5 text-amber" />}
+                label="Vendor Terverifikasi"
+                nilai={stats?.terverifikasi ?? '—'}
+                catatan={stats ? `${stats.menunggu} menunggu kurasi` : ''}
+              />
             </div>
-          )}
 
-          <p className="mt-6 border-t border-line pt-4 text-[12px] text-muted">
-            Dihitung dari {acara.length} pemesanan terbaru yang tampil di bawah.
-          </p>
-        </section>
+            <div className="mt-7 grid gap-6 xl:grid-cols-[1fr_360px]">
+              <section className="min-w-0 rounded-lg border border-line bg-white p-6">
+                <p className="text-[11px] tracking-wide text-muted uppercase">Saturasi Geografis</p>
+                <h2 className="mt-1 font-display text-[22px] font-semibold text-navy-900">
+                  Sebaran Pemesanan Jabodetabek
+                </h2>
 
-        <section className="h-fit rounded-lg border border-line bg-white p-6">
-          <p className="text-[11px] tracking-wide text-muted uppercase">Perlu Tindakan</p>
-          <h2 className="mt-1 font-display text-[22px] font-semibold text-navy-900">Antrean Admin</h2>
+                {perWilayah.length === 0 ? (
+                  <p className="mt-5 text-[14px] text-muted">Belum ada pemesanan tercatat.</p>
+                ) : (
+                  <div className="mt-5 space-y-4">
+                    {perWilayah.map(([kota, v]) => (
+                      <div key={kota}>
+                        <div className="flex justify-between text-[13px]">
+                          <span className="font-medium text-navy-900">{kota}</span>
+                          <span className="text-ink/75">
+                            {v.jumlah} acara · {rupiahBulat(v.nilai)}
+                          </span>
+                        </div>
+                        <div className="mt-2 h-2 rounded-full bg-lavender/60">
+                          <div
+                            className="h-full rounded-full bg-navy-900"
+                            style={{ width: `${Math.max(6, (v.nilai / puncak) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-          <div className="mt-5 space-y-3">
-            <Antrean
-              label="Vendor menunggu kurasi"
-              nilai={stats?.menunggu ?? '0'}
-              to="/admin/vendor"
-            />
-            <Antrean
-              label="Dokumen belum dikurasi"
-              nilai={stats?.dokumen_menunggu ?? '0'}
-              to="/admin/vendor"
-            />
-            <Antrean
-              label="Pengajuan pencairan"
-              nilai={String(escrow?.jumlah_antrean ?? 0)}
-              to="/admin/escrow"
-            />
-          </div>
+                <p className="mt-6 border-t border-line pt-4 text-[12px] text-muted">
+                  Dihitung dari {acara.length} pemesanan terbaru yang tampil di bawah.
+                </p>
+              </section>
 
-          <p className="mt-5 rounded border border-lavender bg-lavender/40 p-4 text-[12px] leading-relaxed text-ink/80">
-            Total {escrow ? rupiahBulat(escrow.antrean_pencairan) : 'Rp 0'} menunggu persetujuan
-            pencairan.
-          </p>
-        </section>
-      </div>
+              <section className="h-fit rounded-lg border border-line bg-white p-6">
+                <p className="text-[11px] tracking-wide text-muted uppercase">Perlu Tindakan</p>
+                <h2 className="mt-1 font-display text-[22px] font-semibold text-navy-900">Antrean Admin</h2>
 
-      <section className="mt-7 rounded-lg border border-line bg-white">
-        <div className="flex items-center justify-between border-b border-line px-6 py-4">
-          <h2 className="font-display text-[22px] font-semibold text-navy-900">Aliran Acara Terbaru</h2>
-        </div>
+                <div className="mt-5 space-y-3">
+                  <Antrean
+                    label="Vendor menunggu kurasi"
+                    nilai={stats?.menunggu ?? '0'}
+                    to="/admin/vendor"
+                  />
+                  <Antrean
+                    label="Dokumen belum dikurasi"
+                    nilai={stats?.dokumen_menunggu ?? '0'}
+                    to="/admin/vendor"
+                  />
+                  <Antrean
+                    label="Pengajuan pencairan"
+                    nilai={String(escrow?.jumlah_antrean ?? 0)}
+                    to="/admin/escrow"
+                  />
+                </div>
 
-        {acara.length === 0 ? (
-          <p className="p-8 text-[14px] text-muted">Belum ada pemesanan.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-[13px]">
-              <thead className="bg-cream text-[11px] tracking-wide text-ink/60 uppercase">
-                <tr>
-                  <th className="px-5 py-3 font-semibold">Klien &amp; Acara</th>
-                  <th className="px-5 py-3 font-semibold">Vendor</th>
-                  <th className="px-5 py-3 font-semibold">Tanggal</th>
-                  <th className="px-5 py-3 font-semibold">Status</th>
-                  <th className="px-5 py-3 text-right font-semibold">Nilai</th>
-                </tr>
-              </thead>
-              <tbody>
-                {acara.map((b) => (
-                  <tr key={b.booking_id} className="border-t border-line">
-                    <td className="px-5 py-4">
-                      <p className="font-semibold text-navy-900">{b.customer_name}</p>
-                      <p className="mt-1 text-[12px] text-muted">
-                        {b.service_name} · {labelKategori(b.category)}
-                      </p>
-                    </td>
-                    <td className="px-5 py-4">
-                      <p>{b.business_name}</p>
-                      <p className="mt-1 text-[12px] text-muted">{namaKota(b.city)}</p>
-                    </td>
-                    <td className="px-5 py-4">
-                      {new Date(b.event_date).toLocaleDateString('id-ID', {
-                        day: '2-digit', month: 'short', year: 'numeric',
-                      })}
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="rounded-full bg-lavender/60 px-3 py-1 text-[12px] font-medium text-navy-900">
-                        {statusLabel[b.payment_status] ?? b.payment_status}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-right font-semibold text-navy-900">
-                      {rupiahBulat(Number(b.total_price))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    </>
+                <p className="mt-5 rounded border border-lavender bg-lavender/40 p-4 text-[12px] leading-relaxed text-ink/80">
+                  Total {escrow ? rupiahBulat(escrow.antrean_pencairan) : 'Rp 0'} menunggu persetujuan
+                  pencairan.
+                </p>
+              </section>
+            </div>
+
+            <section className="mt-7 rounded-lg border border-line bg-white">
+              <div className="flex items-center justify-between border-b border-line px-6 py-4">
+                <h2 className="font-display text-[22px] font-semibold text-navy-900">Aliran Acara Terbaru</h2>
+              </div>
+
+              {acara.length === 0 ? (
+                <p className="p-8 text-[14px] text-muted">Belum ada pemesanan.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[720px] text-left text-[13px]">
+                    <thead className="bg-cream text-[11px] tracking-wide text-ink/60 uppercase">
+                      <tr>
+                        <th className="px-5 py-3 font-semibold">Klien &amp; Acara</th>
+                        <th className="px-5 py-3 font-semibold">Vendor</th>
+                        <th className="px-5 py-3 font-semibold">Tanggal</th>
+                        <th className="px-5 py-3 font-semibold">Status</th>
+                        <th className="px-5 py-3 text-right font-semibold">Nilai</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {acara.map((b) => (
+                        <tr key={b.booking_id} className="border-t border-line">
+                          <td className="px-5 py-4">
+                            <p className="font-semibold text-navy-900">{b.customer_name}</p>
+                            <p className="mt-1 text-[12px] text-muted">
+                              {b.service_name} · {labelKategori(b.category)}
+                            </p>
+                          </td>
+                          <td className="px-5 py-4">
+                            <p>{b.business_name}</p>
+                            <p className="mt-1 text-[12px] text-muted">{namaKota(b.city)}</p>
+                          </td>
+                          <td className="px-5 py-4">
+                            {new Date(b.event_date).toLocaleDateString('id-ID', {
+                              day: '2-digit', month: 'short', year: 'numeric',
+                            })}
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className="rounded-full bg-lavender/60 px-3 py-1 text-[12px] font-medium text-navy-900">
+                              {statusLabel[b.payment_status] ?? b.payment_status}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 text-right font-semibold text-navy-900">
+                            {rupiahBulat(Number(b.total_price))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </>
+        )
+      }}
+    </TukarHalus>
   )
 }
 

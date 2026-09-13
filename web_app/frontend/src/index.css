@@ -32,12 +32,68 @@ body {
   color: var(--color-ink);
 }
 
-/* Animasi halaman & scroll ditangani library `motion` (lihat App.tsx dan
-   components/Reveal.tsx), jadi tidak ada keyframes buatan tangan di sini.
-   Yang tersisa cuma scroll-behavior, yang tetap perlu dimatikan untuk
-   pengguna yang memilih gerakan minimal. */
+/* Transisi antar rute ditangani library `motion` (lihat App.tsx). Keyframes
+   buatan tangan di sini
+   adalah shimmer skeleton — `motion` tidak dipakai untuk itu karena ini
+   murni hiasan CSS yang harus jalan di ratusan elemen sekaligus tanpa
+   melibatkan React. */
+
+/* Kilau yang menyapu dari kiri ke kanan. Dipasang di kartu skeleton
+   (components/VendorCard.tsx) sebagai pengganti `animate-pulse`: pulse
+   mengayun opacity SELURUH kartu, jadi kecerahannya tidak menentu saat
+   kartu asli menggantikannya dan pergantiannya terbaca sebagai kedipan. */
+@keyframes ff-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Isi asli timbul setelah rangkanya pudar (components/TukarHalus.tsx).
+   Sedikit lebih lama dari pudarnya rangka supaya pergantiannya terasa
+   melandai, bukan dua kedipan berurutan. */
+@keyframes ff-masuk {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.masuk-halus {
+  animation: ff-masuk 0.4s ease-out;
+}
+
+.shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(255 255 255 / 0.85) 50%,
+    transparent 100%
+  );
+  animation: ff-shimmer 1.5s infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+
+  /* Kilau yang menyapu terus-menerus persis jenis gerakan yang dihindari
+     pengguna ini. Rangkanya tetap tampil, cuma diam. */
+  .shimmer::after {
+    animation: none;
+    display: none;
+  }
+
+  .masuk-halus {
+    animation: none;
   }
 }

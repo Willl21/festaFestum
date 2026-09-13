@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import FormSkeleton from '../components/FormSkeleton'
+import TukarHalus from '../components/TukarHalus'
 import { useNavigate, useParams } from 'react-router-dom'
 import Img from '../components/Img'
 import FlowLayout from '../components/FlowLayout'
@@ -56,156 +58,159 @@ export default function CheckoutPage() {
     }
   }
 
-  if (memuat) {
-    return <p className="mx-auto max-w-[1330px] px-6 py-20 text-[14px] text-muted">Memuat pesanan…</p>
-  }
-  if (!booking) {
-    return (
-      <p className="mx-auto max-w-[1330px] px-6 py-20 text-[15px]">
-        {galat || 'Pesanan tidak ditemukan.'}
-      </p>
-    )
-  }
-
-  const kat = categories[KATEGORI[booking.category] ?? 'eo']
-  const harga = Number(booking.total_price)
-  const dp = Number(booking.dp_amount)
-  const pelunasan = booking.payment_status === 'dp_paid'
-  const tagihan = pelunasan ? harga - dp : dp
-  const shiftLabel = shifts.find((s) => s.value === booking.time_slot)?.label ?? booking.time_slot
-
   return (
-    <FlowLayout title={pelunasan ? 'Selesaikan Pelunasan' : 'Selesaikan Pesanan Anda'}>
-      <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_460px]">
-        <div className="space-y-7">
-          <section className="rounded-sm border border-line bg-white">
-            <h2 className="border-b border-line px-7 py-5 font-display text-[21px] font-semibold">
-              Detail Pesanan
-            </h2>
-
-            <div className="p-7">
-              <div className="flex flex-wrap items-center gap-8">
-                <Img
-                  alt={booking.business_name}
-                  emoji={kat.emoji}
-                  tint={kat.tint}
-                  className="h-[170px] w-[170px] object-contain"
-                />
-                <div>
-                  <h3 className="font-display text-[27px] font-semibold">{booking.business_name}</h3>
-                  <p className="mt-1 text-[15px] text-muted">{booking.service_name}</p>
-                  <p className="mt-1 text-[13px] text-muted">{namaKota(booking.city)}</p>
-                </div>
-              </div>
-
-              <dl className="mt-8 grid gap-6 sm:grid-cols-2">
-                <div>
-                  <dt className="text-[14px] text-muted">Tanggal Acara</dt>
-                  <dd className="mt-1.5 font-semibold">
-                    {new Date(booking.event_date).toLocaleDateString('id-ID', {
-                      day: 'numeric', month: 'long', year: 'numeric',
-                    })}{' '}
-                    · {shiftLabel}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[14px] text-muted">Lokasi Acara</dt>
-                  {/* Detail lokasi disimpan multi-baris (venue, catatan,
-                      estimasi) — baris pertama yang paling relevan di sini. */}
-                  <dd className="mt-1.5 whitespace-pre-line font-semibold">
-                    {booking.event_location_detail}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          </section>
-
-          <section className="rounded-sm border border-line bg-white p-7">
-            <h2 className="font-display text-[21px] font-semibold">Rincian Biaya</h2>
-
-            <dl className="mt-6 space-y-4 text-[15px]">
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-muted">Harga Layanan</dt>
-                <dd className="text-[17px] font-semibold">{rupiah(harga)}</dd>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-muted">
-                  DP ({Math.round((dp / harga) * 100)}%)
-                  {pelunasan && ' — sudah dibayar'}
-                </dt>
-                <dd className="text-[17px] font-semibold">{rupiah(dp)}</dd>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-muted">Sisa pelunasan</dt>
-                <dd className="text-[17px] font-semibold">{rupiah(harga - dp)}</dd>
-              </div>
-            </dl>
-
-            <div className="mt-6 flex items-baseline justify-between gap-4 border-t border-line pt-5">
-              <span className="font-display text-[21px] font-semibold">
-                {pelunasan ? 'Tagihan Pelunasan' : 'Dibayar Sekarang (DP)'}
-              </span>
-              <span className="text-[19px] font-semibold">{rupiah(tagihan)}</span>
-            </div>
-          </section>
-        </div>
-
-        {/* METODE PEMBAYARAN */}
-        <aside className="h-fit rounded-sm border border-line bg-white p-6 lg:sticky lg:top-8">
-          <h2 className="font-display text-[21px] font-semibold">Metode Pembayaran</h2>
-
-          {grupMetode.map((grup) => (
-            <div key={grup} className="mt-5">
-              <p className="text-[11px] font-semibold tracking-[0.06em] text-muted">
-                {grup.toUpperCase()}
-              </p>
-              <div className="mt-2 space-y-2">
-                {metodeBayar.filter((m) => m.grup === grup).map((m) => (
-                  <label
-                    key={m.id}
-                    className={`block cursor-pointer rounded-sm border px-4 py-3 transition-colors ${
-                      metode === m.id ? 'border-ink bg-lavender/25' : 'border-line hover:border-ink/40'
-                    }`}
-                  >
-                    <span className="flex items-center gap-3">
-                      <input
-                        type="radio"
-                        name="metode"
-                        value={m.id}
-                        checked={metode === m.id}
-                        onChange={() => setMetode(m.id)}
-                        className="h-4 w-4 accent-ink"
-                      />
-                      <span className="flex-1 text-[14px] font-semibold">{m.label}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          ))}
-
-          {galat && (
-            <p className="mt-5 border border-maroon/30 bg-maroon/5 px-3 py-2 text-[13px] text-maroon">
-              {galat}
+    <TukarHalus memuat={memuat} rangka={<FormSkeleton label="Memuat pesanan…" />}>
+      {() => {
+        if (!booking) {
+          return (
+            <p className="mx-auto max-w-[1330px] px-6 py-20 text-[15px]">
+              {galat || 'Pesanan tidak ditemukan.'}
             </p>
-          )}
+          )
+        }
 
-          <button
-            type="button"
-            onClick={bayar}
-            disabled={membayar}
-            className="mt-6 flex h-12 w-full items-center justify-center gap-2.5 rounded-sm bg-amber text-[16px] font-medium text-navy-900 transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            <LockIcon className="h-4 w-4" />
-            {membayar ? 'Menyiapkan tagihan…' : `Bayar ${rupiah(tagihan)}`}
-          </button>
+        const kat = categories[KATEGORI[booking.category] ?? 'eo']
+        const harga = Number(booking.total_price)
+        const dp = Number(booking.dp_amount)
+        const pelunasan = booking.payment_status === 'dp_paid'
+        const tagihan = pelunasan ? harga - dp : dp
+        const shiftLabel = shifts.find((s) => s.value === booking.time_slot)?.label ?? booking.time_slot
 
-          <p className="mt-3 flex items-center justify-center gap-1.5 text-[12px] text-muted">
-            <ShieldIcon className="h-3.5 w-3.5" />
-            Pembayaran diproses secara aman.
-          </p>
-        </aside>
-      </div>
-    </FlowLayout>
+        return (
+          <FlowLayout title={pelunasan ? 'Selesaikan Pelunasan' : 'Selesaikan Pesanan Anda'}>
+            <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_460px]">
+              <div className="space-y-7">
+                <section className="rounded-sm border border-line bg-white">
+                  <h2 className="border-b border-line px-7 py-5 font-display text-[21px] font-semibold">
+                    Detail Pesanan
+                  </h2>
+
+                  <div className="p-7">
+                    <div className="flex flex-wrap items-center gap-8">
+                      <Img
+                        alt={booking.business_name}
+                        emoji={kat.emoji}
+                        tint={kat.tint}
+                        className="h-[170px] w-[170px] object-contain"
+                      />
+                      <div>
+                        <h3 className="font-display text-[27px] font-semibold">{booking.business_name}</h3>
+                        <p className="mt-1 text-[15px] text-muted">{booking.service_name}</p>
+                        <p className="mt-1 text-[13px] text-muted">{namaKota(booking.city)}</p>
+                      </div>
+                    </div>
+
+                    <dl className="mt-8 grid gap-6 sm:grid-cols-2">
+                      <div>
+                        <dt className="text-[14px] text-muted">Tanggal Acara</dt>
+                        <dd className="mt-1.5 font-semibold">
+                          {new Date(booking.event_date).toLocaleDateString('id-ID', {
+                            day: 'numeric', month: 'long', year: 'numeric',
+                          })}{' '}
+                          · {shiftLabel}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-[14px] text-muted">Lokasi Acara</dt>
+                        {/* Detail lokasi disimpan multi-baris (venue, catatan,
+                            estimasi) — baris pertama yang paling relevan di sini. */}
+                        <dd className="mt-1.5 whitespace-pre-line font-semibold">
+                          {booking.event_location_detail}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                </section>
+
+                <section className="rounded-sm border border-line bg-white p-7">
+                  <h2 className="font-display text-[21px] font-semibold">Rincian Biaya</h2>
+
+                  <dl className="mt-6 space-y-4 text-[15px]">
+                    <div className="flex items-baseline justify-between gap-4">
+                      <dt className="text-muted">Harga Layanan</dt>
+                      <dd className="text-[17px] font-semibold">{rupiah(harga)}</dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-4">
+                      <dt className="text-muted">
+                        DP ({Math.round((dp / harga) * 100)}%)
+                        {pelunasan && ' — sudah dibayar'}
+                      </dt>
+                      <dd className="text-[17px] font-semibold">{rupiah(dp)}</dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-4">
+                      <dt className="text-muted">Sisa pelunasan</dt>
+                      <dd className="text-[17px] font-semibold">{rupiah(harga - dp)}</dd>
+                    </div>
+                  </dl>
+
+                  <div className="mt-6 flex items-baseline justify-between gap-4 border-t border-line pt-5">
+                    <span className="font-display text-[21px] font-semibold">
+                      {pelunasan ? 'Tagihan Pelunasan' : 'Dibayar Sekarang (DP)'}
+                    </span>
+                    <span className="text-[19px] font-semibold">{rupiah(tagihan)}</span>
+                  </div>
+                </section>
+              </div>
+
+              {/* METODE PEMBAYARAN */}
+              <aside className="h-fit rounded-sm border border-line bg-white p-6 lg:sticky lg:top-8">
+                <h2 className="font-display text-[21px] font-semibold">Metode Pembayaran</h2>
+
+                {grupMetode.map((grup) => (
+                  <div key={grup} className="mt-5">
+                    <p className="text-[11px] font-semibold tracking-[0.06em] text-muted">
+                      {grup.toUpperCase()}
+                    </p>
+                    <div className="mt-2 space-y-2">
+                      {metodeBayar.filter((m) => m.grup === grup).map((m) => (
+                        <label
+                          key={m.id}
+                          className={`block cursor-pointer rounded-sm border px-4 py-3 transition-colors ${
+                            metode === m.id ? 'border-ink bg-lavender/25' : 'border-line hover:border-ink/40'
+                          }`}
+                        >
+                          <span className="flex items-center gap-3">
+                            <input
+                              type="radio"
+                              name="metode"
+                              value={m.id}
+                              checked={metode === m.id}
+                              onChange={() => setMetode(m.id)}
+                              className="h-4 w-4 accent-ink"
+                            />
+                            <span className="flex-1 text-[14px] font-semibold">{m.label}</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {galat && (
+                  <p className="mt-5 border border-maroon/30 bg-maroon/5 px-3 py-2 text-[13px] text-maroon">
+                    {galat}
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={bayar}
+                  disabled={membayar}
+                  className="mt-6 flex h-12 w-full items-center justify-center gap-2.5 rounded-sm bg-amber text-[16px] font-medium text-navy-900 transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  <LockIcon className="h-4 w-4" />
+                  {membayar ? 'Menyiapkan tagihan…' : `Bayar ${rupiah(tagihan)}`}
+                </button>
+
+                <p className="mt-3 flex items-center justify-center gap-1.5 text-[12px] text-muted">
+                  <ShieldIcon className="h-3.5 w-3.5" />
+                  Pembayaran diproses secara aman.
+                </p>
+              </aside>
+            </div>
+          </FlowLayout>
+        )
+      }}
+    </TukarHalus>
   )
 }

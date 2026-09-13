@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import FormSkeleton from '../components/FormSkeleton'
+import TukarHalus from '../components/TukarHalus'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import OrderLayout, { OrderField, OrderSection, OrderTextarea } from '../components/OrderLayout'
 import { CalendarIcon, MapPinIcon, NoteIcon } from '../components/icons'
@@ -147,101 +149,104 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
     }
   }
 
-  if (memuat) {
-    return <p className="mx-auto max-w-[1330px] px-6 py-20 text-[14px] text-muted">Memuat…</p>
-  }
-  if (!vendor) {
-    return <p className="mx-auto max-w-[1330px] px-6 py-20 text-[15px]">{galat || 'Vendor tidak ditemukan.'}</p>
-  }
-
   return (
-    <OrderLayout
-      order={{
-        vendor: vendor.business_name,
-        packageName: paket?.service_name ?? 'Belum ada paket',
-        price: harga,
-        // DP 30% mengikuti backend. Angka yang MENGIKAT tetap dp_amount yang
-        // dikembalikan POST /bookings dan ditampilkan di halaman checkout.
-        dp: Math.round(harga * 0.3),
-        emoji: kat.emoji,
-        tint: kat.tint,
-        backTo: `/${kat.slug}/${id}`,
+    <TukarHalus memuat={memuat} rangka={<FormSkeleton label="Memuat formulir pesanan…" />}>
+      {() => {
+        if (!vendor) {
+          return <p className="mx-auto max-w-[1330px] px-6 py-20 text-[15px]">{galat || 'Vendor tidak ditemukan.'}</p>
+        }
+
+        return (
+          <OrderLayout
+            order={{
+              vendor: vendor.business_name,
+              packageName: paket?.service_name ?? 'Belum ada paket',
+              price: harga,
+              // DP 30% mengikuti backend. Angka yang MENGIKAT tetap dp_amount yang
+              // dikembalikan POST /bookings dan ditampilkan di halaman checkout.
+              dp: Math.round(harga * 0.3),
+              emoji: kat.emoji,
+              tint: kat.tint,
+              backTo: `/${kat.slug}/${id}`,
+            }}
+            onSubmit={ajukan}
+            mengirim={mengirim}
+            galat={galat}
+          >
+            <OrderSection title="Informasi Acara" icon={<CalendarIcon />}>
+              {layanan.length > 1 && (
+                <div className="mb-5">
+                  <label htmlFor="paket" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
+                    PAKET YANG DIPESAN
+                  </label>
+                  <select
+                    id="paket"
+                    value={serviceId}
+                    onChange={(e) => setServiceId(e.target.value)}
+                    className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
+                  >
+                    {layanan.map((s) => (
+                      <option key={s.service_id} value={s.service_id}>{s.service_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="grid gap-5 sm:grid-cols-2">
+                <OrderField
+                  id="tanggal" label="TANGGAL ACARA" type="date"
+                  value={tanggal} onChange={setTanggal}
+                />
+                <div>
+                  <label htmlFor="shift" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
+                    SHIFT
+                  </label>
+                  <select
+                    id="shift"
+                    value={shift}
+                    onChange={(e) => setShift(e.target.value)}
+                    className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
+                  >
+                    {shifts.map((s) => (
+                      <option key={s.value} value={s.value}>{s.label} ({s.hours})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-5 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="jenis" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
+                    JENIS ACARA
+                  </label>
+                  <select
+                    id="jenis"
+                    value={jenisAcara}
+                    onChange={(e) => setJenisAcara(e.target.value)}
+                    className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
+                  >
+                    {JENIS_ACARA.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <OrderField {...v.estimate} value={estimasi} onChange={setEstimasi} />
+              </div>
+            </OrderSection>
+
+            <OrderSection title="Lokasi Acara" icon={<MapPinIcon className="h-4 w-4" />}>
+              <div className="space-y-5">
+                <OrderField id="venue" label={v.venueLabel} value={venue} onChange={setVenue} />
+                <OrderTextarea id="alamat" label="ALAMAT LENGKAP" value={alamat} onChange={setAlamat} />
+              </div>
+            </OrderSection>
+
+            <OrderSection title="Catatan untuk Vendor" icon={<NoteIcon />}>
+              <OrderTextarea id="catatan" {...v.note} value={catatan} onChange={setCatatan} />
+            </OrderSection>
+          </OrderLayout>
+        )
       }}
-      onSubmit={ajukan}
-      mengirim={mengirim}
-      galat={galat}
-    >
-      <OrderSection title="Informasi Acara" icon={<CalendarIcon />}>
-        {layanan.length > 1 && (
-          <div className="mb-5">
-            <label htmlFor="paket" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
-              PAKET YANG DIPESAN
-            </label>
-            <select
-              id="paket"
-              value={serviceId}
-              onChange={(e) => setServiceId(e.target.value)}
-              className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
-            >
-              {layanan.map((s) => (
-                <option key={s.service_id} value={s.service_id}>{s.service_name}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div className="grid gap-5 sm:grid-cols-2">
-          <OrderField
-            id="tanggal" label="TANGGAL ACARA" type="date"
-            value={tanggal} onChange={setTanggal}
-          />
-          <div>
-            <label htmlFor="shift" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
-              SHIFT
-            </label>
-            <select
-              id="shift"
-              value={shift}
-              onChange={(e) => setShift(e.target.value)}
-              className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
-            >
-              {shifts.map((s) => (
-                <option key={s.value} value={s.value}>{s.label} ({s.hours})</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-5 sm:grid-cols-2">
-          <div>
-            <label htmlFor="jenis" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
-              JENIS ACARA
-            </label>
-            <select
-              id="jenis"
-              value={jenisAcara}
-              onChange={(e) => setJenisAcara(e.target.value)}
-              className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
-            >
-              {JENIS_ACARA.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
-          </div>
-          <OrderField {...v.estimate} value={estimasi} onChange={setEstimasi} />
-        </div>
-      </OrderSection>
-
-      <OrderSection title="Lokasi Acara" icon={<MapPinIcon className="h-4 w-4" />}>
-        <div className="space-y-5">
-          <OrderField id="venue" label={v.venueLabel} value={venue} onChange={setVenue} />
-          <OrderTextarea id="alamat" label="ALAMAT LENGKAP" value={alamat} onChange={setAlamat} />
-        </div>
-      </OrderSection>
-
-      <OrderSection title="Catatan untuk Vendor" icon={<NoteIcon />}>
-        <OrderTextarea id="catatan" {...v.note} value={catatan} onChange={setCatatan} />
-      </OrderSection>
-    </OrderLayout>
+    </TukarHalus>
   )
 }

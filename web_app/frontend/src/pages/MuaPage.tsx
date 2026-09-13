@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import Img from '../components/Img'
 import SearchPanel, { type Field } from '../components/SearchPanel'
 import VendorCard, { type Vendor } from '../components/VendorCard'
+import KategoriSkeleton from '../components/KategoriSkeleton'
+import TukarHalus from '../components/TukarHalus'
 import AiBanner from '../components/AiBanner'
+import Reveal from '../components/Reveal'
 import { listVendors } from '../lib/api'
 import { categories, namaKota } from '../data/categories'
 
@@ -54,7 +57,9 @@ export default function MuaPage() {
   }, [])
 
   return (
-    <>
+    <TukarHalus memuat={memuat} rangka={<KategoriSkeleton label="Memuat makeup artist…" />}>
+      {() => (
+        <>
       {/* HERO */}
       <section className="relative">
         <div className="h-[340px] overflow-hidden md:h-[500px]">
@@ -76,7 +81,6 @@ export default function MuaPage() {
       <section className="mx-auto max-w-[1330px] px-6 pt-10 md:px-12">
         <h2 className="font-display text-[32px] font-semibold">Pilihan MUA</h2>
 
-        {memuat && <p className="mt-7 text-[14px] text-muted">Memuat makeup artist…</p>}
 
         {galat && (
           <p className="mt-7 border border-line bg-white px-5 py-4 text-[14px] text-ink/80">
@@ -91,19 +95,21 @@ export default function MuaPage() {
         )}
 
         <div className="mt-7 grid gap-7 sm:grid-cols-2 lg:grid-cols-3">
-          {vendors.map((v) => (
-            <VendorCard key={v.id} vendor={v} to={`/${kategori.slug}/${v.id}`} />
+          {vendors.map((v, i) => (
+            <VendorCard key={v.id} index={i} vendor={v} to={`/${kategori.slug}/${v.id}`} />
           ))}
         </div>
       </section>
 
-      <div className="pt-20">
+      <Reveal className="pt-20">
         <AiBanner
           subtitle="Belum Tahu Style Makeup yang Cocok?"
           body="Biarkan AI membantu menemukan rekomendasi MUA dan style makeup berdasarkan acara, preferensi, dan budget Anda."
           cta="Mulai Menyusun"
         />
-      </div>
-    </>
+      </Reveal>
+      </>
+      )}
+    </TukarHalus>
   )
 }

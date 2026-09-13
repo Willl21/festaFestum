@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import FormSkeleton from '../components/FormSkeleton'
+import TukarHalus from '../components/TukarHalus'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import OrderLayout, { OrderField, OrderSection, OrderTextarea } from '../components/OrderLayout'
 import { CalendarIcon, ChevronDown, NoteIcon } from '../components/icons'
@@ -100,103 +102,106 @@ export default function AttireOrderPage() {
     }
   }
 
-  if (memuat) {
-    return <p className="mx-auto max-w-[1330px] px-6 py-20 text-[14px] text-muted">Memuat…</p>
-  }
-  if (!vendor) {
-    return <p className="mx-auto max-w-[1330px] px-6 py-20 text-[15px]">{galat || 'Vendor tidak ditemukan.'}</p>
-  }
-
   return (
-    <OrderLayout
-      order={{
-        vendor: vendor.business_name,
-        packageName: paket?.service_name ?? 'Belum ada paket',
-        price: harga,
-        dp: Math.round(harga * 0.3),
-        emoji: kat.emoji,
-        tint: kat.tint,
-        backTo: `/${kat.slug}/${id}`,
+    <TukarHalus memuat={memuat} rangka={<FormSkeleton label="Memuat formulir pesanan…" />}>
+      {() => {
+        if (!vendor) {
+          return <p className="mx-auto max-w-[1330px] px-6 py-20 text-[15px]">{galat || 'Vendor tidak ditemukan.'}</p>
+        }
+
+        return (
+          <OrderLayout
+            order={{
+              vendor: vendor.business_name,
+              packageName: paket?.service_name ?? 'Belum ada paket',
+              price: harga,
+              dp: Math.round(harga * 0.3),
+              emoji: kat.emoji,
+              tint: kat.tint,
+              backTo: `/${kat.slug}/${id}`,
+            }}
+            onSubmit={ajukan}
+            mengirim={mengirim}
+            galat={galat}
+          >
+            {/* Sewa busana tidak punya lokasi acara — yang dibutuhkan ukuran,
+                warna, dan tiga tanggal (sewa, pengambilan, fitting). */}
+            <OrderSection title="Informasi Acara" icon={<CalendarIcon />}>
+              {layanan.length > 1 && (
+                <div className="mb-5">
+                  <Select
+                    id="paket" label="PAKET YANG DISEWA"
+                    value={serviceId} onChange={setServiceId}
+                    options={layanan.map((s) => ({ value: s.service_id, label: s.service_name }))}
+                  />
+                </div>
+              )}
+
+              <div className="grid gap-5 sm:grid-cols-2">
+                <Select
+                  id="ukuran" label="PILIH UKURAN" value={ukuran} onChange={setUkuran}
+                  options={sizes.map((s) => ({ value: s, label: s }))}
+                />
+                <Select
+                  id="warna" label="PILIH WARNA" value={warna} onChange={setWarna}
+                  options={colors.map((c) => ({ value: c, label: c }))}
+                />
+                <OrderField
+                  id="tanggal-sewa" label="TANGGAL SEWA" type="date"
+                  value={tglSewa} onChange={setTglSewa}
+                />
+                <OrderField
+                  id="tanggal-ambil" label="TANGGAL  PENGAMBILAN" type="date"
+                  value={tglAmbil} onChange={setTglAmbil}
+                />
+                <Select
+                  id="jenis" label="JENIS ACARA" value={jenisAcara} onChange={setJenisAcara}
+                  options={JENIS_ACARA}
+                />
+              </div>
+
+              <fieldset className="mt-6 flex items-center gap-6">
+                <legend className="float-left mr-6 text-[11px] font-semibold tracking-[0.06em] text-ink/70">
+                  PERLU FITTING?
+                </legend>
+                {[
+                  { label: 'Ya', value: true },
+                  { label: 'Tidak', value: false },
+                ].map((o) => (
+                  <label key={o.label} className="flex cursor-pointer items-center gap-2 text-[14px]">
+                    <input
+                      type="radio"
+                      name="fitting"
+                      checked={fitting === o.value}
+                      onChange={() => setFitting(o.value)}
+                      className="h-4 w-4 accent-ink"
+                    />
+                    {o.label}
+                  </label>
+                ))}
+              </fieldset>
+
+              {fitting && (
+                <div className="mt-5 grid gap-5 sm:grid-cols-2">
+                  <OrderField
+                    id="tanggal-fitting" label="TANGGAL  FITTING" type="date"
+                    value={tglFitting} onChange={setTglFitting}
+                  />
+                  <OrderField
+                    id="jam-fitting" label="JAM FITTING" type="time"
+                    value={jamFitting} onChange={setJamFitting}
+                  />
+                </div>
+              )}
+            </OrderSection>
+
+            <OrderSection title="Catatan untuk Vendor" icon={<NoteIcon />}>
+              <OrderTextarea id="catatan" label="REQUEST KHUSUS" value={catatan} onChange={setCatatan} />
+            </OrderSection>
+          </OrderLayout>
+        )
       }}
-      onSubmit={ajukan}
-      mengirim={mengirim}
-      galat={galat}
-    >
-      {/* Sewa busana tidak punya lokasi acara — yang dibutuhkan ukuran,
-          warna, dan tiga tanggal (sewa, pengambilan, fitting). */}
-      <OrderSection title="Informasi Acara" icon={<CalendarIcon />}>
-        {layanan.length > 1 && (
-          <div className="mb-5">
-            <Select
-              id="paket" label="PAKET YANG DISEWA"
-              value={serviceId} onChange={setServiceId}
-              options={layanan.map((s) => ({ value: s.service_id, label: s.service_name }))}
-            />
-          </div>
-        )}
-
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Select
-            id="ukuran" label="PILIH UKURAN" value={ukuran} onChange={setUkuran}
-            options={sizes.map((s) => ({ value: s, label: s }))}
-          />
-          <Select
-            id="warna" label="PILIH WARNA" value={warna} onChange={setWarna}
-            options={colors.map((c) => ({ value: c, label: c }))}
-          />
-          <OrderField
-            id="tanggal-sewa" label="TANGGAL SEWA" type="date"
-            value={tglSewa} onChange={setTglSewa}
-          />
-          <OrderField
-            id="tanggal-ambil" label="TANGGAL  PENGAMBILAN" type="date"
-            value={tglAmbil} onChange={setTglAmbil}
-          />
-          <Select
-            id="jenis" label="JENIS ACARA" value={jenisAcara} onChange={setJenisAcara}
-            options={JENIS_ACARA}
-          />
-        </div>
-
-        <fieldset className="mt-6 flex items-center gap-6">
-          <legend className="float-left mr-6 text-[11px] font-semibold tracking-[0.06em] text-ink/70">
-            PERLU FITTING?
-          </legend>
-          {[
-            { label: 'Ya', value: true },
-            { label: 'Tidak', value: false },
-          ].map((o) => (
-            <label key={o.label} className="flex cursor-pointer items-center gap-2 text-[14px]">
-              <input
-                type="radio"
-                name="fitting"
-                checked={fitting === o.value}
-                onChange={() => setFitting(o.value)}
-                className="h-4 w-4 accent-ink"
-              />
-              {o.label}
-            </label>
-          ))}
-        </fieldset>
-
-        {fitting && (
-          <div className="mt-5 grid gap-5 sm:grid-cols-2">
-            <OrderField
-              id="tanggal-fitting" label="TANGGAL  FITTING" type="date"
-              value={tglFitting} onChange={setTglFitting}
-            />
-            <OrderField
-              id="jam-fitting" label="JAM FITTING" type="time"
-              value={jamFitting} onChange={setJamFitting}
-            />
-          </div>
-        )}
-      </OrderSection>
-
-      <OrderSection title="Catatan untuk Vendor" icon={<NoteIcon />}>
-        <OrderTextarea id="catatan" label="REQUEST KHUSUS" value={catatan} onChange={setCatatan} />
-      </OrderSection>
-    </OrderLayout>
+    </TukarHalus>
   )
 }
 

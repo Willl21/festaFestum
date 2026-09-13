@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { motion } from 'motion/react'
 import Img from './Img'
 import { StarIcon } from './icons'
 import { rupiahBulat } from '../lib/format'
@@ -16,10 +17,30 @@ export type Vendor = {
   tint?: string
 }
 
-/** Kartu vendor di grid halaman kategori. */
-export default function VendorCard({ vendor, to }: { vendor: Vendor; to: string }) {
+/** Kartu vendor di grid halaman kategori.
+ *
+ *  Masuk dengan fade, bukan muncul mendadak: skeleton yang dia gantikan
+ *  hilang seketika di tengah denyut `animate-pulse`, jadi pertukaran tanpa
+ *  transisi terbaca sebagai kedipan. Mulai dari 0.45, bukan 0, supaya
+ *  kecerahannya nyambung dengan skeleton yang berayun 1 → 0.5. */
+export default function VendorCard({
+  vendor,
+  to,
+  index = 0,
+}: {
+  vendor: Vendor
+  to: string
+  /** Urutan di grid — dipakai untuk jeda masuk, supaya kartunya beriak
+   *  satu per satu dan bukan bertukar serentak dalam satu frame. */
+  index?: number
+}) {
   return (
-    <article className="flex flex-col border border-line bg-white">
+    <motion.article
+      className="flex flex-col border border-line bg-white"
+      initial={{ opacity: 0.45 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3, delay: Math.min(index * 0.05, 0.3), ease: 'easeOut' }}
+    >
       <Img
         src={vendor.image}
         alt={vendor.name}
@@ -53,6 +74,42 @@ export default function VendorCard({ vendor, to }: { vendor: Vendor; to: string 
         >
           Lihat Profil
         </Link>
+      </div>
+    </motion.article>
+  )
+}
+
+/** Rangka kartu selagi data vendor dimuat.
+ *
+ *  Ukurannya sengaja menyalin VendorCard baris demi baris — tinggi gambar,
+ *  border, dan garis footer — supaya tidak ada yang melompat begitu data
+ *  datang. Kalau kartunya diubah, ubah yang ini juga.
+ *
+ *  Kilaunya dari kelas `.shimmer` di index.css, bukan `animate-pulse`:
+ *  pulse mengayun opacity seluruh kartu, jadi saat kartu asli masuk
+ *  kecerahannya melompat dan terbaca sebagai kedipan.
+ *
+ *  `aria-hidden` karena ini murni hiasan; status muatnya diumumkan lewat
+ *  role="status" di pemanggilnya. */
+export function VendorCardSkeleton() {
+  return (
+    <article className="shimmer flex flex-col border border-line bg-white" aria-hidden>
+      <div className="h-[210px] w-full bg-line" />
+
+      <div className="px-5 pt-4 pb-4">
+        <div className="h-[22px] w-[70%] rounded-sm bg-line/80" />
+        <div className="mt-2.5 flex items-center justify-between">
+          <div className="h-3 w-20 rounded-sm bg-line/50" />
+          <div className="h-3 w-14 rounded-sm bg-line/50" />
+        </div>
+      </div>
+
+      <div className="mt-auto flex items-end justify-between border-t border-line px-5 py-4">
+        <div>
+          <div className="h-3 w-16 rounded-sm bg-line/50" />
+          <div className="mt-2 h-[21px] w-28 rounded-sm bg-line/80" />
+        </div>
+        <div className="h-[29px] w-24 rounded-sm bg-line/50" />
       </div>
     </article>
   )
