@@ -3,6 +3,10 @@ const { acquireLock, lockHolder, LOCK_TTL_SECONDS } = require('../config/redis')
 
 const VALID_SLOTS = ['pagi', 'siang', 'malam'];
 
+// Rentang maksimal satu permintaan ketersediaan. Kalender cuma butuh
+// sebulan; 92 hari memberi ruang untuk tampilan tiga bulan.
+const MAX_RENTANG_HARI = 92;
+
 // Format YYYY-MM-DD, sekaligus menolak tanggal ngawur seperti 2026-02-31.
 function isValidDate(s) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
@@ -58,6 +62,76 @@ async function setSchedules(req, res, next) {
       created: result.rows.length,
       skipped: slots.length - result.rows.length,
       schedules: result.rows,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/v1/services/:serviceId/availability?from=YYYY-MM-DD&to=YYYY-MM-DD  (public)
+// Status seluruh slot dalam satu rentang, untuk menggambar kalender pemesanan.
+//
+// Ada karena /schedules/check cuma menjawab SATU tanggal sekali panggil —
+// kalender sebulan akan menembakkan 60 request. Di sini satu query.
+//
+// Yang dikembalikan hanya slot yang benar-benar dibuka vendor. Tanggal yang
+// tidak muncul berarti tidak bisa dipesan, jadi frontend tidak perlu tahu
+// bedanya "vendor tutup" dan "tidak pernah dibuka".
+//
+// Lock Redis SENGAJA tidak diperiksa di sini: statusnya berubah dalam
+// hitungan menit dan memeriksa 60 tanggal ke Redis untuk menggambar kalender
+// itu mahal. Slot yang sedang dipegang orang lain tetap tertangkap saat
+// /schedules/check dipanggil setelah user memilih, lalu sekali lagi oleh
+// lock + constraint saat booking dibuat.
+async function listAvailability(req, res, next) {
+  try {
+    const { serviceId } = req.params;
+    const { from, to } = req.query;
+
+    if (!isValidDate(from) || !isValidDate(to)) {
+      return res.status(400).json({ message: 'from dan to wajib diisi, format YYYY-MM-DD' });
+    }
+    if (from > to) {
+      return res.status(400).json({ message: 'from tidak boleh setelah to' });
+    }
+
+    // Batas rentang supaya satu request tidak bisa menarik data bertahun-tahun.
+    const hari = (new Date(`${to}T00:00:00Z`) - new Date(`${from}T00:00:00Z`)) / 86400000;
+    if (hari > MAX_RENTANG_HARI) {
+      return res.status(400).json({ message: `Rentang maksimal ${MAX_RENTANG_HARI} hari` });
+    }
+
+    const svc = await pool.query(
+      `SELECT vendor_id, minimum_notice_days,
+              (CURRENT_DATE + minimum_notice_days)::text AS paling_cepat
+         FROM services
+        WHERE service_id = $1 AND is_active = TRUE`,
+      [serviceId]
+    );
+
+    if (svc.rows.length === 0) {
+      return res.status(404).json({ message: 'Layanan tidak ditemukan atau sudah tidak aktif' });
+    }
+
+    const { vendor_id, minimum_notice_days, paling_cepat } = svc.rows[0];
+
+    const slots = await pool.query(
+      `SELECT event_date::text AS event_date, time_slot, status
+         FROM vendor_schedules
+        WHERE vendor_id = $1
+          AND event_date BETWEEN $2::date AND $3::date
+        ORDER BY event_date, time_slot`,
+      [vendor_id, from, to]
+    );
+
+    res.json({
+      service_id: serviceId,
+      vendor_id,
+      minimum_notice_days,
+      // Tanggal paling awal yang boleh dipesan. Dihitung di DB supaya zona
+      // waktu server yang dipakai, bukan zona waktu browser pemesan.
+      earliest_date: paling_cepat,
+      data: slots.rows,
     });
   } catch (err) {
     next(err);
@@ -270,5 +344,6 @@ async function deleteSchedule(req, res, next) {
 }
 
 module.exports = {
-  setSchedules, checkAvailability, holdSlot, listMySchedules, deleteSchedule,
+  setSchedules, checkAvailability, listAvailability, holdSlot, listMySchedules,
+  deleteSchedule,
 };

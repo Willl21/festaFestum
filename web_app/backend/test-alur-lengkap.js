@@ -112,6 +112,30 @@ const ok = (l) => { langkah++; console.log(`  ${String(langkah).padStart(2)}. ${
   assert.strictEqual(mepet.body.available, false, 'lead time 3 hari harusnya menolak H+1');
   ok('Tanggal terlalu mepet ditolak sebelum user mengisi form');
 
+  // Kalender pemesanan menarik sebulan sekaligus lewat endpoint sendiri —
+  // /schedules/check cuma menjawab satu tanggal, jadi menggambar grid bulan
+  // dengan itu berarti 60 request.
+  const rentang = await api(
+    `/services/${serviceId}/availability?from=${futureDate(0)}&to=${futureDate(40)}`
+  );
+  assert.strictEqual(rentang.status, 200, `availability gagal: ${JSON.stringify(rentang.body)}`);
+  assert.ok(Array.isArray(rentang.body.data), 'availability harus punya kunci data');
+  assert.ok(
+    rentang.body.data.some((x) => x.event_date === TGL && x.time_slot === 'pagi'),
+    'slot yang baru dibuka tidak muncul di rentang'
+  );
+  // Tanggal paling awal ikut menghitung minimum_notice_days, supaya kalender
+  // bisa mematikan tanggal yang terlalu mepet tanpa menebak di browser.
+  assert.ok(rentang.body.earliest_date > futureDate(0), 'earliest_date harus menghormati lead time');
+  ok('Kalender: ketersediaan sebulan terbaca dalam satu request');
+
+  // Rentang ngawur ditolak, bukan menarik data bertahun-tahun.
+  const kejauhan = await api(
+    `/services/${serviceId}/availability?from=${futureDate(0)}&to=${futureDate(400)}`
+  );
+  assert.strictEqual(kejauhan.status, 400, 'rentang 400 hari harusnya ditolak');
+  ok('Kalender: rentang terlalu lebar ditolak');
+
   // === 5. Halaman pesan: POST /bookings ==================================
   const customerToken = await register('customer');
   const booking = await api('/bookings', {

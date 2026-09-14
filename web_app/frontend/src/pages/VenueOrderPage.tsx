@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
+import KalenderSlot from '../components/KalenderSlot'
 import FormSkeleton from '../components/FormSkeleton'
 import TukarHalus from '../components/TukarHalus'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import OrderLayout, { OrderField, OrderSection, OrderTextarea } from '../components/OrderLayout'
 import { CalendarIcon, MapPinIcon, NoteIcon } from '../components/icons'
-import { shifts } from '../data/shifts'
 import { categories, type CategoryKey } from '../data/categories'
 import {
   getVendor, getVendorServices, buatBooking,
@@ -93,7 +93,10 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
   // halaman detailnya, jadi tanggal & shift diisi di sini.
   const [serviceId, setServiceId] = useState(params.get('service') ?? '')
   const [tanggal, setTanggal] = useState(params.get('date') ?? '')
-  const [shift, setShift] = useState(params.get('slot') ?? shifts[0].value)
+  // Tanpa nilai cadangan 'pagi': KalenderSlot yang menentukan shift mana
+  // yang bebas di tanggal terpilih. Kalau halaman ini dibuka dari kartu
+  // vendor dengan ?slot=, nilai itu tetap dipakai sebagai pilihan awal.
+  const [shift, setShift] = useState(params.get('slot') ?? '')
 
   const [jenisAcara, setJenisAcara] = useState(JENIS_ACARA[0].value)
   const [estimasi, setEstimasi] = useState('')
@@ -192,27 +195,26 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
                 </div>
               )}
 
-              <div className="grid gap-5 sm:grid-cols-2">
-                <OrderField
-                  id="tanggal" label="TANGGAL ACARA" type="date"
-                  value={tanggal} onChange={setTanggal}
-                />
-                <div>
-                  <label htmlFor="shift" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
-                    SHIFT
-                  </label>
-                  <select
-                    id="shift"
-                    value={shift}
-                    onChange={(e) => setShift(e.target.value)}
-                    className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
-                  >
-                    {shifts.map((s) => (
-                      <option key={s.value} value={s.value}>{s.label} ({s.hours})</option>
-                    ))}
-                  </select>
+              <p className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
+                TANGGAL ACARA
+              </p>
+              {/* Kalender menggantikan input tanggal + dropdown shift: di
+                  halaman pesan pun tanggal yang tidak bisa dipesan harus mati
+                  sejak awal, bukan ditolak setelah tombol ditekan. */}
+              {paket ? (
+                <div className="mt-3">
+                  <KalenderSlot
+                    serviceId={paket.service_id}
+                    tanggal={tanggal}
+                    shift={shift}
+                    onPilih={(t, sh) => { setTanggal(t); setShift(sh) }}
+                  />
                 </div>
-              </div>
+              ) : (
+                <p className="mt-3 text-[13px] text-muted">
+                  Vendor ini belum menambahkan paket, jadi jadwalnya belum bisa dilihat.
+                </p>
+              )}
 
               <div className="mt-5 grid gap-5 sm:grid-cols-2">
                 <div>

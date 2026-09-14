@@ -3,9 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom'
 import Img from '../components/Img'
 import VendorLocation from '../components/VendorLocation'
 import BackButton from '../components/BackButton'
+import KalenderSlot from '../components/KalenderSlot'
+import KalenderTanggal from '../components/KalenderTanggal'
 import DetailSkeleton from '../components/DetailSkeleton'
 import TukarHalus from '../components/TukarHalus'
-import { ArrowRight, CalendarIcon } from '../components/icons'
+import { ArrowRight } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
 import { rupiah } from '../lib/format'
 import {
@@ -90,14 +92,16 @@ export default function AttireDetailPage() {
   }, [id])
 
   const utama = layanan[0]
+  const [shift, setShift] = useState('')
 
   // Jadwal sewa dipakai sebagai tanggal acara — itu hari busananya dipakai.
-  // Shift dikunci 'pagi': penyewaan busana tidak punya shift di mockup, tapi
-  // vendor_schedules menyimpan ketersediaan per shift.
+  // Shift dulu dikunci 'pagi'; sekarang dipilih lewat kalender, karena
+  // vendor_schedules menyimpan ketersediaan per shift dan slot pagi bisa saja
+  // sudah penuh sementara slot lain masih kosong.
   async function lanjutkan() {
     if (!utama) return
-    if (!tglSewa) {
-      setCek({ ada: false, alasan: 'Isi jadwal sewa dulu.' })
+    if (!tglSewa || !shift) {
+      setCek({ ada: false, alasan: 'Pilih tanggal dan shift dulu.' })
       return
     }
     if (!size) {
@@ -108,12 +112,12 @@ export default function AttireDetailPage() {
     setMengecek(true)
     try {
       const r = await cekKetersediaan({
-        service_id: utama.service_id, event_date: tglSewa, time_slot: 'pagi',
+        service_id: utama.service_id, event_date: tglSewa, time_slot: shift,
       })
       setCek({ ada: r.available, alasan: r.reason })
       if (r.available) {
         const q = new URLSearchParams({
-          service: utama.service_id, date: tglSewa, slot: 'pagi',
+          service: utama.service_id, date: tglSewa, slot: shift,
           jenis, size, color, fitting: String(fitting),
           ambil: tglAmbil, ...(fitting && tglFitting ? { tglFitting } : {}),
         })
@@ -236,8 +240,34 @@ export default function AttireDetailPage() {
                 ))}
               </div>
 
-              <DateField id="jadwal-sewa" label="Jadwal Sewa" value={tglSewa} onChange={(x) => { setTglSewa(x); setCek(null) }} />
-              <DateField id="jadwal-ambil" label="Jadwal Pengambilan" value={tglAmbil} onChange={setTglAmbil} />
+              <p className="mt-5 text-[15px] font-semibold">Jadwal Sewa</p>
+              {utama ? (
+                <div className="mt-3">
+                  <KalenderSlot
+                    serviceId={utama.service_id}
+                    tanggal={tglSewa}
+                    shift={shift}
+                    onPilih={(t, sh) => { setTglSewa(t); setShift(sh); setCek(null) }}
+                  />
+                </div>
+              ) : (
+                <p className="mt-3 text-[13px] text-muted">
+                  Vendor ini belum menambahkan paket, jadi jadwalnya belum bisa dilihat.
+                </p>
+              )}
+              {/* Pengambilan bukan slot pemesanan — tidak tersimpan di
+                  vendor_schedules dan tidak memakan kuota — jadi kalendernya
+                  polos: tanpa shift, tanpa pengabuan ketersediaan. Batas
+                  paling awalnya tanggal sewa, karena baju tidak bisa diambil
+                  setelah hari pakainya lewat. */}
+              <p className="mt-5 text-[15px] font-semibold">Jadwal Pengambilan</p>
+              <div className="mt-3">
+                <KalenderTanggal
+                  tanggal={tglAmbil}
+                  onPilih={setTglAmbil}
+                  mulaiDari={tglSewa || undefined}
+                />
+              </div>
 
               <p className="mt-5 text-[15px] font-semibold">Perlu Fitting?</p>
               <div className="mt-2 flex gap-4">
@@ -251,7 +281,14 @@ export default function AttireDetailPage() {
 
               {/* Jadwal fitting hanya relevan kalau user memang mau fitting. */}
               {fitting && (
-                <DateField id="jadwal-fitting" label="Jadwal Fitting" value={tglFitting} onChange={setTglFitting} />
+                <>
+                  <p className="mt-5 text-[15px] font-semibold">Jadwal Fitting</p>
+                  <div className="mt-3">
+                    {/* Fitting harus SEBELUM hari pakai, jadi tidak dibatasi
+                        tanggal sewa seperti pengambilan. */}
+                    <KalenderTanggal tanggal={tglFitting} onPilih={setTglFitting} />
+                  </div>
+                </>
               )}
 
               <div className="mt-6 flex items-baseline justify-between border-t border-line pt-4">
@@ -284,28 +321,5 @@ export default function AttireDetailPage() {
         )
       }}
     </TukarHalus>
-  )
-}
-
-function DateField(
-  { id, label, value, onChange }:
-  { id: string; label: string; value: string; onChange: (v: string) => void }
-) {
-  return (
-    <>
-      <label htmlFor={id} className="mt-5 block text-[15px] font-semibold">
-        {label}
-      </label>
-      <div className="relative mt-2">
-        <input
-          id={id}
-          type="date"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="h-11 w-full rounded-sm border border-line bg-white px-3 pr-9 text-[14px] outline-none focus:border-navy-900"
-        />
-        <CalendarIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-      </div>
-    </>
   )
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import KalenderSlot from '../components/KalenderSlot'
 import FormSkeleton from '../components/FormSkeleton'
 import TukarHalus from '../components/TukarHalus'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -41,6 +42,10 @@ export default function AttireOrderPage() {
   const [serviceId, setServiceId] = useState(params.get('service') ?? '')
   const [ukuran, setUkuran] = useState(params.get('size') ?? '')
   const [tglSewa, setTglSewa] = useState(params.get('date') ?? '')
+  // Dulu shift dipatok 'pagi' diam-diam, jadi penyewaan di tanggal yang slot
+  // paginya penuh gagal tanpa user pernah diberi pilihan. Sekarang dipilih
+  // lewat kalender, sama seperti kategori lain.
+  const [shift, setShift] = useState(params.get('slot') ?? '')
   const [tglAmbil, setTglAmbil] = useState(params.get('ambil') ?? '')
   const [fitting, setFitting] = useState(params.get('fitting') !== 'false')
   const [tglFitting, setTglFitting] = useState(params.get('tglFitting') ?? '')
@@ -69,6 +74,7 @@ export default function AttireOrderPage() {
     setGalat('')
     if (!paket) return setGalat('Vendor ini belum punya layanan aktif.')
     if (!tglSewa) return setGalat('Tanggal sewa wajib diisi.')
+    if (!shift) return setGalat('Pilih shift dulu.')
     if (!ukuran) return setGalat('Ukuran wajib dipilih.')
 
     // Tabel bookings tidak punya kolom ukuran/warna/fitting. Semuanya
@@ -88,9 +94,7 @@ export default function AttireOrderPage() {
       const r = await buatBooking({
         service_id: paket.service_id,
         event_date: tglSewa,
-        // Penyewaan busana tidak mengenal shift; 'pagi' dipakai konsisten
-        // dengan halaman detail supaya slot yang dicek dan yang dipesan sama.
-        time_slot: params.get('slot') ?? 'pagi',
+        time_slot: shift,
         event_type: jenisAcara,
         event_location_detail: detail,
       })
@@ -147,10 +151,6 @@ export default function AttireOrderPage() {
                   options={colors.map((c) => ({ value: c, label: c }))}
                 />
                 <OrderField
-                  id="tanggal-sewa" label="TANGGAL SEWA" type="date"
-                  value={tglSewa} onChange={setTglSewa}
-                />
-                <OrderField
                   id="tanggal-ambil" label="TANGGAL  PENGAMBILAN" type="date"
                   value={tglAmbil} onChange={setTglAmbil}
                 />
@@ -159,6 +159,24 @@ export default function AttireOrderPage() {
                   options={JENIS_ACARA}
                 />
               </div>
+
+              <p className="mt-6 block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
+                TANGGAL SEWA
+              </p>
+              {paket ? (
+                <div className="mt-3">
+                  <KalenderSlot
+                    serviceId={paket.service_id}
+                    tanggal={tglSewa}
+                    shift={shift}
+                    onPilih={(t, sh) => { setTglSewa(t); setShift(sh) }}
+                  />
+                </div>
+              ) : (
+                <p className="mt-3 text-[13px] text-muted">
+                  Vendor ini belum menambahkan paket, jadi jadwalnya belum bisa dilihat.
+                </p>
+              )}
 
               <fieldset className="mt-6 flex items-center gap-6">
                 <legend className="float-left mr-6 text-[11px] font-semibold tracking-[0.06em] text-ink/70">

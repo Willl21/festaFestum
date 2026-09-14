@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import Img from '../components/Img'
-import { inputClass } from '../components/AuthLayout'
-import { ArrowRight, ShieldIcon } from '../components/icons'
+import AuthLayout, { inputClass } from '../components/AuthLayout'
+import { ShieldIcon } from '../components/icons'
 import { categories } from '../data/categories'
 import { post, saveAuth, type AuthResponse, type ApiVendor } from '../lib/api'
 
@@ -13,7 +12,49 @@ import { post, saveAuth, type AuthResponse, type ApiVendor } from '../lib/api'
  *  Kategori layanan TIDAK tersimpan di sini: kolom `category` ada di tabel
  *  services, bukan vendors (keputusan desain — satu vendor boleh lintas
  *  kategori). Pilihannya dititipkan ke halaman onboarding lewat navigate
- *  state, dan di sana jadi layanan pertama vendor. */
+ *  state, dan di sana jadi layanan pertama vendor.
+ *
+ *  Tata letaknya memakai <AuthLayout>, sama persis dengan halaman daftar
+ *  user: dulu halaman ini punya layout sendiri (layar penuh, panel kiri
+ *  separuh, judul 44px) sehingga terasa seperti aplikasi yang berbeda. */
+const isian = [
+  {
+    name: 'business_name',
+    label: 'Nama Perusahaan',
+    type: 'text',
+    placeholder: 'Misal: Elegance Florist',
+    autoComplete: 'organization',
+  },
+  {
+    name: 'name',
+    label: 'Nama Penanggung Jawab',
+    type: 'text',
+    placeholder: 'Nama lengkap Anda',
+    autoComplete: 'name',
+  },
+  {
+    name: 'email',
+    label: 'Email Bisnis',
+    type: 'email',
+    placeholder: 'kontak@bisnis.com',
+    autoComplete: 'email',
+  },
+  {
+    name: 'phone',
+    label: 'Nomor WhatsApp',
+    type: 'tel',
+    placeholder: '0812-3456-7890',
+    autoComplete: 'tel',
+  },
+  {
+    name: 'password',
+    label: 'Kata Sandi',
+    type: 'password',
+    placeholder: 'Minimal 8 karakter',
+    autoComplete: 'new-password',
+  },
+]
+
 export default function VendorRegisterPage() {
   const navigate = useNavigate()
   const [error, setError] = useState('')
@@ -51,179 +92,97 @@ export default function VendorRegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
-      <div className="relative hidden w-1/2 shrink-0 md:block">
-        <Img
-          src="/img/vendor-hero.jpg"
-          alt="Florist menata rangkaian bunga di ballroom"
-          emoji="💐"
-          tint="from-rose-100 to-rose-200"
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-black/20" />
+    <AuthLayout
+      image="/img/auth-register.jpg"
+      imageAlt="Rangkaian bunga di ballroom klasik"
+      body="Raih klien high-end dan kelola pemesanan dengan aman melalui perlindungan escrow Festa Festum."
+    >
+      <p className="font-display text-[22px] font-semibold text-navy-900">
+        Festa <span className="text-amber italic">Vendor</span>
+      </p>
+      <h1 className="mt-4 font-display text-[26px] font-semibold text-navy-900">
+        Daftar sebagai Vendor
+      </h1>
+      <p className="mt-2 text-[13px] text-muted">
+        Lengkapi data di bawah untuk bergabung sebagai vendor terverifikasi.
+      </p>
 
-        <div className="absolute top-10 left-10 font-display text-[32px] font-semibold text-white">
-          Festa <span className="text-amber italic">Vendor</span>
-        </div>
-
-        <div className="absolute bottom-16 left-10 w-[78%] text-white">
-          <h2 className="font-display text-[44px] leading-tight font-semibold">
-            Kembangkan Bisnis Event Anda.
-          </h2>
-          <p className="mt-5 text-[15px] leading-relaxed text-white/85">
-            Bergabunglah dengan ekosistem marketplace event premium pertama di Indonesia. Raih klien
-            high-end dan kelola pemesanan dengan aman melalui perlindungan escrow kami.
-          </p>
-        </div>
-      </div>
-
-      <div className="flex flex-1 items-center bg-cream px-6 py-12 md:px-14">
-        <div className="mx-auto w-full max-w-[460px]">
-          <h1 className="font-display text-[32px] font-semibold text-navy-900">Pendaftaran Akun</h1>
-          <p className="mt-2 text-[14px] text-muted">
-            Lengkapi data di bawah untuk bergabung sebagai vendor terverifikasi.
-          </p>
-
-          <form onSubmit={handleSubmit} className="mt-8">
-            <label
-              htmlFor="business_name"
-              className="block text-[12px] font-semibold tracking-wide text-navy-900 uppercase"
-            >
-              Nama Perusahaan
-            </label>
-            <input
-              id="business_name"
-              name="business_name"
-              required
-              placeholder="Misal: Elegance Florist"
-              className={`mt-2 ${inputClass}`}
-            />
-
-            <label
-              htmlFor="category"
-              className="mt-5 block text-[12px] font-semibold tracking-wide text-navy-900 uppercase"
-            >
-              Kategori Layanan
-            </label>
-            <select id="category" name="category" required defaultValue="" className={`mt-2 ${inputClass}`}>
-              <option value="" disabled>
-                Pilih Kategori Utama
+      <form onSubmit={handleSubmit} className="mt-6">
+        <div className="mb-4">
+          <label htmlFor="category" className="block text-[13px] font-semibold text-navy-900">
+            Kategori Layanan
+          </label>
+          <select
+            id="category"
+            name="category"
+            required
+            defaultValue=""
+            className={`mt-2 ${inputClass}`}
+          >
+            <option value="" disabled>
+              Pilih Kategori Utama
+            </option>
+            {Object.values(categories).map((c) => (
+              <option key={c.apiCategory} value={c.apiCategory}>
+                {c.emoji} {c.label}
               </option>
-              {Object.values(categories).map((c) => (
-                <option key={c.apiCategory} value={c.apiCategory}>
-                  {c.emoji} {c.label}
-                </option>
-              ))}
-            </select>
+            ))}
+          </select>
+        </div>
 
-            <label
-              htmlFor="name"
-              className="mt-5 block text-[12px] font-semibold tracking-wide text-navy-900 uppercase"
-            >
-              Nama Penanggung Jawab
+        {isian.map((f) => (
+          <div key={f.name} className="mb-4">
+            <label htmlFor={f.name} className="block text-[13px] font-semibold text-navy-900">
+              {f.label}
             </label>
             <input
-              id="name"
-              name="name"
+              id={f.name}
+              name={f.name}
+              type={f.type}
               required
-              autoComplete="name"
-              placeholder="Nama lengkap Anda"
+              autoComplete={f.autoComplete}
+              placeholder={f.placeholder}
+              // Backend menolak password < 8 karakter; cegat di browser dulu.
+              minLength={f.name === 'password' ? 8 : undefined}
               className={`mt-2 ${inputClass}`}
             />
+          </div>
+        ))}
 
-            <div className="mt-5 grid gap-5 sm:grid-cols-2">
-              <div>
-                <label
-                  htmlFor="email"
-                  className="block text-[12px] font-semibold tracking-wide text-navy-900 uppercase"
-                >
-                  Email Bisnis
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  placeholder="kontak@bisnis.com"
-                  className={`mt-2 ${inputClass}`}
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="phone"
-                  className="block text-[12px] font-semibold tracking-wide text-navy-900 uppercase"
-                >
-                  Nomor WhatsApp
-                </label>
-                <input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  required
-                  autoComplete="tel"
-                  placeholder="0812-3456-7890"
-                  className={`mt-2 ${inputClass}`}
-                />
-              </div>
-            </div>
-
-            {/* Tidak ada di mockup, tapi akun tanpa kata sandi tidak bisa dibuat —
-                backend menolak di bawah 8 karakter. */}
-            <label
-              htmlFor="password"
-              className="mt-5 block text-[12px] font-semibold tracking-wide text-navy-900 uppercase"
-            >
-              Kata Sandi
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              minLength={8}
-              autoComplete="new-password"
-              placeholder="Minimal 8 karakter"
-              className={`mt-2 ${inputClass}`}
-            />
-
-            <div className="mt-6 flex gap-3 rounded border border-lavender bg-lavender/40 p-4">
-              <ShieldIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
-              <div>
-                <p className="text-[12px] font-semibold tracking-wide text-navy-900 uppercase">
-                  Festa Verified Vendor Program
-                </p>
-                <p className="mt-1 text-[13px] leading-relaxed text-ink/80">
-                  Pendaftaran ini adalah langkah awal. Tim kami akan memverifikasi portofolio dan
-                  legalitas Anda untuk memastikan standar kualitas Festa Escrow Protected.
-                </p>
-              </div>
-            </div>
-
-            {error && (
-              <p role="alert" className="mt-5 text-[14px] text-maroon">
-                {error}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded bg-navy-900 text-[13px] font-semibold tracking-wide text-white uppercase transition-opacity hover:opacity-90 disabled:opacity-60"
-            >
-              {loading ? 'Memproses…' : 'Daftar sebagai Vendor'}
-              {!loading && <ArrowRight className="h-4 w-4" />}
-            </button>
-          </form>
-
-          <p className="mt-8 border-t border-line pt-6 text-[14px] text-ink">
-            Sudah memiliki akun vendor?{' '}
-            <Link to="/vendor/masuk" className="font-semibold hover:underline">
-              Masuk di sini
-            </Link>
+        <div className="mt-5 flex gap-3 rounded border border-lavender bg-lavender/40 p-3.5">
+          <ShieldIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
+          <p className="text-[12px] leading-relaxed text-ink/80">
+            <span className="font-semibold text-navy-900">Festa Verified Vendor Program.</span> Tim
+            kami akan memverifikasi portofolio dan legalitas Anda sebelum akun diaktifkan.
           </p>
         </div>
-      </div>
-    </div>
+
+        {error && (
+          <p role="alert" className="mt-4 text-[14px] text-maroon">
+            {error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="mt-5 h-11 w-full rounded bg-ink text-[15px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+        >
+          {loading ? 'Memproses…' : 'Daftar sebagai Vendor'}
+        </button>
+      </form>
+
+      <p className="mt-5 text-center text-[14px] text-ink">
+        Sudah memiliki akun vendor?{' '}
+        <Link to="/vendor/masuk" className="font-semibold hover:underline">
+          Masuk di sini
+        </Link>
+      </p>
+
+      <p className="mt-5 text-center text-[12px] leading-relaxed text-muted">
+        Dengan mendaftar, Anda menyetujui <span className="underline">Syarat &amp; Ketentuan</span>{' '}
+        dan <span className="underline">Kebijakan Privasi</span>.
+      </p>
+    </AuthLayout>
   )
 }

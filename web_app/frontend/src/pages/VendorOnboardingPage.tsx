@@ -85,22 +85,29 @@ export default function VendorOnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-cream">
-      <header className="flex items-center justify-between border-b border-line bg-white px-6 py-5 md:px-12">
-        <p className="font-display text-[22px] font-semibold text-navy-900">Festa Festum</p>
-        <p className="text-[14px] text-muted">Onboarding Vendor</p>
-      </header>
+    <div className="min-h-screen bg-cream px-4 py-12">
+      <h1 className="text-center font-display text-[36px] font-semibold text-navy-900">
+        Festa Vendor
+      </h1>
 
-      <div className="mx-auto w-full max-w-[900px] px-6 py-12">
-        <h1 className="font-display text-[34px] font-semibold text-navy-900">
+      <div className="mx-auto mt-10 w-full max-w-[800px]">
+        <div className="flex items-baseline justify-between text-[12px] font-semibold tracking-wide text-navy-900 uppercase">
+          <span>Langkah 3 dari 3</span>
+          <span>Profil Bisnis</span>
+        </div>
+        <div className="mt-3 h-1.5 rounded-full bg-lavender">
+          <div className="h-full w-full rounded-full bg-navy-900" />
+        </div>
+
+        <h2 className="mt-8 font-display text-[30px] font-semibold text-navy-900">
           Selamat Datang di Festa, Vendor.
-        </h1>
-        <p className="mt-3 max-w-[620px] text-[15px] leading-relaxed text-muted">
+        </h2>
+        <p className="mt-2 max-w-[620px] text-[14px] leading-relaxed text-muted">
           Mari mulai dengan menceritakan sedikit tentang bisnis Anda dan mengunggah portofolio
           terbaik untuk menarik klien premium kami.
         </p>
 
-        <form onSubmit={handleSubmit} className="mt-10">
+        <form onSubmit={handleSubmit} className="mt-8">
           <section className="rounded-lg border border-line bg-white p-7">
             <h2 className="flex items-center gap-2 font-display text-[22px] font-semibold text-navy-900">
               <FolderIcon className="h-5 w-5 text-amber" />

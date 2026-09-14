@@ -146,6 +146,27 @@ export const cekKetersediaan = (body: {
   service_id: string; event_date: string; time_slot: string
 }) => post<Availability>('/schedules/check', body)
 
+export type SlotKetersediaan = {
+  event_date: string
+  time_slot: 'pagi' | 'siang' | 'malam'
+  status: 'available' | 'held' | 'booked' | 'blocked'
+}
+
+export type Ketersediaan = {
+  service_id: string
+  vendor_id: string
+  minimum_notice_days: number
+  /** Tanggal paling awal yang boleh dipesan, sudah menghitung
+   *  minimum_notice_days memakai zona waktu server. */
+  earliest_date: string
+  data: SlotKetersediaan[]
+}
+
+/** Status seluruh slot dalam satu rentang, untuk menggambar kalender.
+ *  Tanggal yang tidak muncul di `data` berarti vendor tidak membuka slot. */
+export const listKetersediaan = (serviceId: string, from: string, to: string) =>
+  get<Ketersediaan>(`/services/${serviceId}/availability`, { from, to })
+
 export type ApiBooking = {
   booking_id: string
   event_type: string

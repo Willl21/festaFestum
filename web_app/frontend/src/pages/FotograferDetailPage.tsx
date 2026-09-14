@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import Img from '../components/Img'
 import BackButton from '../components/BackButton'
+import KalenderSlot from '../components/KalenderSlot'
 import DetailSkeleton from '../components/DetailSkeleton'
 import TukarHalus from '../components/TukarHalus'
-import { ArrowRight, CalendarIcon, CheckCircleIcon, ChevronDown } from '../components/icons'
-import { shifts } from '../data/shifts'
+import { ArrowRight, CheckCircleIcon, ChevronDown } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
 import { rupiah } from '../lib/format'
 import {
@@ -37,7 +37,8 @@ export default function FotograferDetailPage() {
 
   const [paketId, setPaketId] = useState('')
   const [tanggal, setTanggal] = useState('')
-  const [shift, setShift] = useState(shifts[0].value as string)
+  // Sengaja kosong: KalenderSlot yang menentukan shift mana yang bebas.
+  const [shift, setShift] = useState('')
   const [cek, setCek] = useState<{ ada: boolean; alasan: string | null } | null>(null)
   const [mengecek, setMengecek] = useState(false)
 
@@ -216,39 +217,24 @@ export default function FotograferDetailPage() {
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/50" />
               </div>
 
-              <label htmlFor="event-date" className="mt-6 block text-[15px] font-semibold">
-                Tanggal Acara
-              </label>
-              <div className="relative mt-2 max-w-[300px] border-b border-line pb-1.5">
-                <input
-                  id="event-date"
-                  type="date"
-                  value={tanggal}
-                  onChange={(e) => { setTanggal(e.target.value); setCek(null) }}
-                  className="w-full bg-transparent pr-7 text-[15px] outline-none"
-                />
-                <CalendarIcon className="pointer-events-none absolute right-1 top-1 h-4 w-4 text-muted" />
-              </div>
-
-              <p className="mt-6 text-[15px] font-semibold">Shift Layanan</p>
-              <div className="mt-3 flex max-w-[300px] gap-4">
-                {shifts.map((s) => (
-                  <label
-                    key={s.value}
-                    className="flex-1 cursor-pointer rounded-sm border border-line py-3 text-center text-[14px] has-checked:border-navy-900 has-checked:bg-navy-900 has-checked:text-white"
-                  >
-                    <input
-                      type="radio"
-                      name="shift"
-                      value={s.value}
-                      checked={shift === s.value}
-                      onChange={() => { setShift(s.value); setCek(null) }}
-                      className="sr-only"
-                    />
-                    {s.label}
-                  </label>
-                ))}
-              </div>
+              <p className="mt-6 text-[15px] font-semibold">Tanggal Acara</p>
+              {/* Kalender menggantikan <input type="date"> + radio shift: tanggal
+                  yang vendornya tidak buka, sudah penuh, atau masih di dalam
+                  minimum_notice_days langsung mati di grid. */}
+              {dipilih ? (
+                <div className="mt-3">
+                  <KalenderSlot
+                    serviceId={dipilih.service_id}
+                    tanggal={tanggal}
+                    shift={shift}
+                    onPilih={(t, sh) => { setTanggal(t); setShift(sh); setCek(null) }}
+                  />
+                </div>
+              ) : (
+                <p className="mt-3 text-[13px] text-muted">
+                  Vendor ini belum menambahkan paket, jadi jadwalnya belum bisa dilihat.
+                </p>
+              )}
 
               {cek && !cek.ada && (
                 <p className="mt-5 max-w-[420px] border border-maroon/30 bg-maroon/5 px-3 py-2 text-[13px] text-maroon">
