@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { gambarBermasalah } = require('../lib/gambar');
 
 const VALID_CITIES = [
   'jakarta_pusat', 'jakarta_utara', 'jakarta_barat', 'jakarta_selatan', 'jakarta_timur',
@@ -353,7 +354,75 @@ async function listMyDocuments(req, res, next) {
   }
 }
 
+// Jumlah foto portofolio. Slot-nya tetap: indeks 0 selalu hero, jadi kartu
+// etalase tahu foto mana yang dipakai tanpa perlu kolom penanda.
+const SLOT_FOTO = 3;
+
+// ~150 KB setelah base64. Jauh di atas foto profil (80 KB) karena ini gambar
+// hero selebar layar, bukan avatar bulat 256px. Tetap di bawah plafon
+// express.json() 1 MB di app.js.
+const FOTO_MAX_CHARS = 200_000;
+
+// PUT /api/v1/vendors/me/photos/:slot
+// Satu foto per request, meniru PUT /me/documents/:docType. Mengirim tiga
+// gambar sekaligus akan menembus batas ukuran body, dan kalau satu foto
+// ditolak, dua lainnya ikut gagal padahal tidak salah apa-apa.
+async function setMyPhoto(req, res, next) {
+  try {
+    const slot = Number(req.params.slot);
+    if (!Number.isInteger(slot) || slot < 0 || slot >= SLOT_FOTO) {
+      return res.status(400).json({ message: `Slot foto harus 0 sampai ${SLOT_FOTO - 1}` });
+    }
+
+    const { image } = req.body;
+
+    // String kosong = hapus foto di slot ini.
+    if (image !== '') {
+      const salah = gambarBermasalah(image, FOTO_MAX_CHARS, 'Foto portofolio');
+      if (salah) return res.status(400).json({ message: salah });
+    }
+
+    const vendorId = await findMyVendorId(req.user.user_id);
+    if (!vendorId) {
+      return res.status(404).json({ message: 'Anda belum memiliki profil vendor' });
+    }
+
+    // Baca–ubah–tulis, bukan satu UPDATE pintar: menulis ke gallery[5] saat
+    // panjangnya baru 1 membuat Postgres menyisipkan NULL di lubang tengahnya,
+    // dan galeri jadi berisi NULL yang harus dijaga di setiap pembacanya.
+    // Dipanjangkan di sini dengan string kosong supaya slot kosong punya
+    // bentuk yang sama dengan slot yang dihapus.
+    // ponytail: baca lalu tulis tanpa penguncian. Dua unggahan yang benar-benar
+    // bersamaan bisa saling menimpa — frontend mengirimnya berurutan. Pakai
+    // satu UPDATE atomik kalau nanti bisa diunggah paralel.
+    const sekarang = await pool.query(
+      'SELECT gallery FROM vendors WHERE vendor_id = $1 AND owner_user_id = $2',
+      [vendorId, req.user.user_id]
+    );
+
+    if (sekarang.rows.length === 0) {
+      return res.status(404).json({ message: 'Vendor tidak ditemukan atau bukan milik Anda' });
+    }
+
+    const galeri = [...sekarang.rows[0].gallery];
+    while (galeri.length <= slot) galeri.push('');
+    galeri[slot] = image;
+
+    const isi = await pool.query(
+      `UPDATE vendors SET gallery = $1, updated_at = now()
+        WHERE vendor_id = $2 AND owner_user_id = $3
+        RETURNING gallery`,
+      [galeri, vendorId, req.user.user_id]
+    );
+
+    res.json({ gallery: isi.rows[0].gallery });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
+  setMyPhoto,
   createVendor, listVendors, getMyVendor, getVendorDetail, updateVendor,
   upsertMyDocument, listMyDocuments,
 };

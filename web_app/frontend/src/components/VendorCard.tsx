@@ -20,9 +20,14 @@ export type Vendor = {
 /** Kartu vendor di grid halaman kategori.
  *
  *  Masuk dengan fade, bukan muncul mendadak: skeleton yang dia gantikan
- *  hilang seketika di tengah denyut `animate-pulse`, jadi pertukaran tanpa
- *  transisi terbaca sebagai kedipan. Mulai dari 0.45, bukan 0, supaya
- *  kecerahannya nyambung dengan skeleton yang berayun 1 → 0.5. */
+ *  hilang seketika, jadi pertukaran tanpa transisi terbaca sebagai kedipan.
+ *  Mulai dari 0.45, bukan 0, karena fade induk (`.masuk-halus` dari
+ *  TukarHalus) dan fade kartu saling dikalikan — mulai dari 0 membuat
+ *  kartunya kelewat lama gelap sebelum kelihatan.
+ *
+ *  Pop-nya di hover, bukan saat masuk: yang masuk sudah cukup ramai dengan
+ *  fade induk + fade kartu berurutan, sedangkan hover butuh balasan supaya
+ *  kartunya terbaca bisa ditunjuk. */
 export default function VendorCard({
   vendor,
   to,
@@ -40,6 +45,10 @@ export default function VendorCard({
       initial={{ opacity: 0.45 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3, delay: Math.min(index * 0.05, 0.3), ease: 'easeOut' }}
+      // Transisinya ditulis DI DALAM whileHover supaya tidak mewarisi
+      // `transition` di atas — delay stagger-nya ikut terbawa ke hover, dan
+      // kartu keenam dan seterusnya baru membesar setelah menunggu 0.3 detik.
+      whileHover={{ scale: 1.02, transition: { duration: 0.2, ease: 'easeOut' } }}
     >
       <Img
         src={vendor.image}

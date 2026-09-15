@@ -131,6 +131,10 @@ export type ApiVendor = {
   rating_count: number
   categories: string[]
   price_start_from: string | null
+  /** Foto portofolio, data URL. Indeks 0 = hero. Slot kosong berisi string
+   *  kosong, bukan dilewati — lihat setMyPhoto di backend. Hanya ikut terbawa
+   *  di GET /vendors/me; listing dan detail publik belum mengirimkannya. */
+  gallery?: string[]
 }
 
 /** Perhatikan: response listing memakai kunci `data`, bukan `vendors`. */
@@ -331,6 +335,11 @@ export const listVendorBookings = () => get<{ data: ApiBooking[] }>('/bookings/v
 export const getVendorStats = () => get<{ stats: VendorStats }>('/bookings/vendor/stats')
 export const getVendorBalance = () => get<{ balance: VendorBalance }>('/bookings/vendor/balance')
 export const getMyVendor = () => get<{ vendor: ApiVendor }>('/vendors/me')
+
+/** Satu foto per panggilan — backend menolak body yang memuat tiga gambar
+ *  sekaligus. Kirim `image: ''` untuk mengosongkan slot. */
+export const simpanFotoVendor = (slot: number, image: string) =>
+  kirim<{ gallery: string[] }>(`/vendors/me/photos/${slot}`, 'PUT', { image })
 
 export const listMySchedules = (from: string, to: string) =>
   get<{ data: ApiSchedule[] }>('/schedules/me', { from, to })

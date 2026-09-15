@@ -149,7 +149,7 @@ export default function LandingPage() {
               {besar && (() => {
                 const kat = categories[KATEGORI[besar.categories[0]] ?? 'eo']
                 return (
-                  <article className="flex flex-col border border-line bg-white">
+                  <article className="flex flex-col border border-line bg-white transition-transform duration-200 motion-safe:hover:scale-[1.02]">
                     <Img
                       alt={besar.business_name}
                       emoji={kat.emoji}
@@ -183,7 +183,7 @@ export default function LandingPage() {
                 {kecil.map((v) => {
                   const kat = categories[KATEGORI[v.categories[0]] ?? 'eo']
                   return (
-                    <article key={v.vendor_id} className="flex flex-col border border-line bg-white">
+                    <article key={v.vendor_id} className="flex flex-col border border-line bg-white transition-transform duration-200 motion-safe:hover:scale-[1.02]">
                       <Img
                         alt={v.business_name}
                         emoji={kat.emoji}

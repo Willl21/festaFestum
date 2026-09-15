@@ -96,6 +96,9 @@ export default function VendorRegisterPage() {
       image="/img/auth-register.jpg"
       imageAlt="Rangkaian bunga di ballroom klasik"
       body="Raih klien high-end dan kelola pemesanan dengan aman melalui perlindungan escrow Festa Festum."
+      // Enam field bertumpuk di kolom 360px bikin kartunya kepanjangan sampai
+      // perlu di-scroll. Dilebarkan supaya muat dua kolom.
+      isiClass="max-w-[420px]"
     >
       <p className="font-display text-[22px] font-semibold text-navy-900">
         Festa <span className="text-amber italic">Vendor</span>
@@ -108,46 +111,52 @@ export default function VendorRegisterPage() {
       </p>
 
       <form onSubmit={handleSubmit} className="mt-6">
-        <div className="mb-4">
-          <label htmlFor="category" className="block text-[13px] font-semibold text-navy-900">
-            Kategori Layanan
-          </label>
-          <select
-            id="category"
-            name="category"
-            required
-            defaultValue=""
-            className={`mt-2 ${inputClass}`}
-          >
-            <option value="" disabled>
-              Pilih Kategori Utama
-            </option>
-            {Object.values(categories).map((c) => (
-              <option key={c.apiCategory} value={c.apiCategory}>
-                {c.emoji} {c.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {isian.map((f) => (
-          <div key={f.name} className="mb-4">
-            <label htmlFor={f.name} className="block text-[13px] font-semibold text-navy-900">
-              {f.label}
+        {/* Satu grid untuk semua field; jarak antar field diurus `gap`,
+            jadi tiap field tidak lagi bawa mb-4 sendiri. */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label htmlFor="category" className="block text-[13px] font-semibold text-navy-900">
+              Kategori Layanan
             </label>
-            <input
-              id={f.name}
-              name={f.name}
-              type={f.type}
+            <select
+              id="category"
+              name="category"
               required
-              autoComplete={f.autoComplete}
-              placeholder={f.placeholder}
-              // Backend menolak password < 8 karakter; cegat di browser dulu.
-              minLength={f.name === 'password' ? 8 : undefined}
+              defaultValue=""
               className={`mt-2 ${inputClass}`}
-            />
+            >
+              <option value="" disabled>
+                Pilih Kategori Utama
+              </option>
+              {Object.values(categories).map((c) => (
+                <option key={c.apiCategory} value={c.apiCategory}>
+                  {c.emoji} {c.label}
+                </option>
+              ))}
+            </select>
           </div>
-        ))}
+
+          {isian.map((f) => (
+            // Kata sandi melebar penuh: jumlah field-nya ganjil, jadi kalau
+            // dipasangkan barisnya timpang sebelah.
+            <div key={f.name} className={f.name === 'password' ? 'sm:col-span-2' : undefined}>
+              <label htmlFor={f.name} className="block text-[13px] font-semibold text-navy-900">
+                {f.label}
+              </label>
+              <input
+                id={f.name}
+                name={f.name}
+                type={f.type}
+                required
+                autoComplete={f.autoComplete}
+                placeholder={f.placeholder}
+                // Backend menolak password < 8 karakter; cegat di browser dulu.
+                minLength={f.name === 'password' ? 8 : undefined}
+                className={`mt-2 ${inputClass}`}
+              />
+            </div>
+          ))}
+        </div>
 
         <div className="mt-5 flex gap-3 rounded border border-lavender bg-lavender/40 p-3.5">
           <ShieldIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber" />

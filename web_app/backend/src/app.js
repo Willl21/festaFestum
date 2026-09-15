@@ -26,7 +26,11 @@ app.use(cors({
   // !origin = curl / Postman / webhook Midtrans, bukan browser — biarkan lewat.
   origin: (origin, cb) => cb(null, !origin || ORIGINS.includes(origin)),
 }));
-app.use(express.json());
+// Bawaan express.json() 100 KB, dan satu foto portofolio hero sudah
+// menembusnya sendirian (data URL base64, lihat migrasi 008). Batas per
+// gambar dijaga di controller — FOTO_MAX_CHARS ~150 KB — jadi angka di
+// sini cuma plafon kasar, bukan izin mengirim apa saja.
+app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 

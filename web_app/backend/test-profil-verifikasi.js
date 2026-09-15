@@ -56,10 +56,19 @@ const emails = [];
   });
   assert.strictEqual(r.status, 400, 'avatar kebesaran seharusnya ditolak');
 
-  // Di atas batas express.json() penolakannya datang lebih awal sebagai 413.
+  // Batas express.json() naik ke 1 MB demi foto portofolio vendor (app.js),
+  // jadi avatar 150 KB sekarang lolos parser dan ditolak controller — 400
+  // dengan pesan yang bisa dibaca, bukan 413 telanjang. Itu yang diinginkan.
   r = await api('/auth/me', {
     method: 'PATCH', token: user.token,
     body: { avatar_url: `data:image/png;base64,${'A'.repeat(200_000)}` },
+  });
+  assert.strictEqual(r.status, 400, 'avatar 150 KB seharusnya ditolak controller');
+
+  // Di atas 1 MB penolakannya tetap datang lebih awal dari body parser.
+  r = await api('/auth/me', {
+    method: 'PATCH', token: user.token,
+    body: { avatar_url: `data:image/png;base64,${'A'.repeat(1_200_000)}` },
   });
   assert.strictEqual(r.status, 413, 'payload raksasa seharusnya ditolak body parser');
 

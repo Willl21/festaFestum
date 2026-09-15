@@ -13,12 +13,23 @@ type Props = {
   imageAlt: string
   body: string
   panelClass?: string
+  /** Lebar isi panel kanan. Dilebarkan oleh halaman yang form-nya dua kolom
+   *  (daftar vendor) — 360px cuma muat satu kolom. Ditulis sebagai kelas
+   *  utuh, bukan angka, supaya Tailwind ikut memindainya. */
+  isiClass?: string
   children: React.ReactNode
 }
 
 /** Kartu auth di tengah layar: foto + kutipan di kiri, form di kanan.
  *  Di layar kecil fotonya disembunyikan supaya form dapat seluruh kartu. */
-export default function AuthLayout({ image, imageAlt, body, panelClass = 'bg-white', children }: Props) {
+export default function AuthLayout({
+  image,
+  imageAlt,
+  body,
+  panelClass = 'bg-white',
+  isiClass = 'max-w-[360px]',
+  children,
+}: Props) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-lavender/50 px-4 py-10">
       <div className="mb-4 w-full max-w-[940px]">
@@ -43,7 +54,7 @@ export default function AuthLayout({ image, imageAlt, body, panelClass = 'bg-whi
         </div>
 
         <div className={`flex flex-1 flex-col justify-center px-8 py-11 sm:px-11 ${panelClass}`}>
-          <div className="mx-auto w-full max-w-[360px]">{children}</div>
+          <div className={`mx-auto w-full ${isiClass}`}>{children}</div>
         </div>
       </div>
     </div>

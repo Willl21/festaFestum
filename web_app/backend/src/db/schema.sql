@@ -59,6 +59,10 @@ CREATE TABLE users (
   shipping_address   TEXT,
   shipping_note      VARCHAR(200),
   notification_prefs JSONB NOT NULL DEFAULT '{}'::jsonb,
+  -- Rekening tujuan pengembalian dana & payout (migrasi 007).
+  bank_name           VARCHAR(30),
+  bank_account_number VARCHAR(20),
+  bank_account_holder VARCHAR(60),
   password_hash      TEXT NOT NULL,
   role               user_role NOT NULL DEFAULT 'customer',
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),

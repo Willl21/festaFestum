@@ -1,4 +1,5 @@
 import { NavLink, Link, useNavigate } from 'react-router-dom'
+import { motion } from 'motion/react'
 import { clearAuth, usePengguna } from '../lib/api'
 
 export default function Navbar() {
@@ -32,15 +33,36 @@ export default function Navbar() {
               key={l.to}
               to={l.to}
               end={l.to === '/'}
+              // Border bawahnya tetap ada di SEMUA tautan tapi selalu bening —
+              // garis aktifnya sekarang elemen tersendiri. Bordernya disisakan
+              // murni sebagai pengganjal 2px supaya tinggi tautan tidak berubah
+              // dan navbar tidak bergeser sepiksel pun.
               className={({ isActive }) =>
-                `pb-1 text-[15px] transition-colors ${
-                  isActive
-                    ? 'border-b-2 border-ink font-medium text-ink'
-                    : 'border-b-2 border-transparent text-ink/80 hover:text-ink'
+                `relative border-b-2 border-transparent pb-1 text-[15px] transition-colors ${
+                  isActive ? 'font-medium text-ink' : 'text-ink/80 hover:text-ink'
                 }`
               }
             >
-              {l.label}
+              {({ isActive }) => (
+                <>
+                  {l.label}
+                  {isActive && (
+                    <motion.span
+                      // Satu-satunya yang bikin garisnya meluncur, bukan
+                      // lompat: `layoutId` yang sama membuat motion mengenali
+                      // garis yang dicopot di tautan lama dan yang dipasang di
+                      // tautan baru sebagai BENDA YANG SAMA, lalu menganimasikan
+                      // jarak antar keduanya sendiri.
+                      layoutId="garis-navbar"
+                      // -bottom-0.5 menaruhnya persis di tempat border-b-2 tadi:
+                      // posisi absolut diukur dari kotak padding, sedangkan
+                      // border duduk 2px di luarnya.
+                      className="absolute -bottom-0.5 left-0 h-0.5 w-full bg-ink"
+                      transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                    />
+                  )}
+                </>
+              )}
             </NavLink>
           ))}
         </nav>

@@ -45,8 +45,12 @@ export default function VendorLoginPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-cream px-4 py-12">
       <div className="w-full max-w-[440px] rounded-lg border border-line bg-white px-8 py-10 sm:px-11">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-lavender text-[22px]">
-          🏪
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-lavender">
+          {/* ponytail: PNG 31x27 dari Figma, dipasang apa adanya. Di layar
+              retina dia mulai buram kalau diperbesar lewat 24px — ganti ke
+              SVG inline di icons.tsx kalau nanti butuh lebih besar atau butuh
+              ikut warna teks. */}
+          <img src="/img/icon-vendor.png" alt="" width={22} height={19} />
         </div>
 
         <h1 className="mt-6 text-center font-display text-[30px] font-semibold text-navy-900">

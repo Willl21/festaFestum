@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
+const { gambarBermasalah } = require('../lib/gambar');
 
 const SALT_ROUNDS = 10;
 const ALLOWED_SELF_REGISTER_ROLES = ['customer', 'vendor_owner'];
@@ -85,6 +86,7 @@ async function login(req, res, next) {
 
 const PROFILE_COLUMNS = `user_id, name, full_name, email, phone, birth_date, avatar_url,
           shipping_address, shipping_note, notification_prefs, role,
+          bank_name, bank_account_number, bank_account_holder,
           is_verified, verified_at, created_at`;
 
 // GET /api/v1/auth/me (protected)
@@ -113,7 +115,46 @@ async function me(req, res, next) {
 const EDITABLE_PROFILE_FIELDS = [
   'name', 'full_name', 'phone', 'birth_date', 'avatar_url',
   'shipping_address', 'shipping_note', 'notification_prefs',
+  'bank_name', 'bank_account_number', 'bank_account_holder',
 ];
+
+// Daftar bank tujuan transfer. Hanya kode yang divalidasi di sini; nama
+// panjangnya ("PT Bank Central Asia Tbk") hidup di frontend karena cuma untuk
+// ditampilkan. Kalau daftar ini bertambah, tambahkan di dua tempat.
+const BANK_CODES = new Set([
+  'bca', 'bni', 'bri', 'mandiri', 'bsi', 'cimb', 'permata',
+  'danamon', 'btn', 'panin', 'ocbc', 'maybank', 'jago',
+]);
+
+const BANK_FIELDS = ['bank_name', 'bank_account_number', 'bank_account_holder'];
+
+// Rekening setengah terisi tidak bisa ditransfer ke mana-mana, jadi ketiganya
+// wajib berangkat bersama — atau ketiganya dikosongkan untuk mencabut rekening.
+function rekeningBermasalah(body) {
+  const dikirim = BANK_FIELDS.filter((f) => f in body);
+  if (dikirim.length === 0) return null;
+
+  const isi = Object.fromEntries(
+    BANK_FIELDS.map((f) => [f, typeof body[f] === 'string' ? body[f].trim() : body[f]])
+  );
+  const terisi = BANK_FIELDS.filter((f) => isi[f] !== '' && isi[f] != null);
+
+  if (terisi.length === 0) return null;          // dicabut, semua dikosongkan
+  if (terisi.length < BANK_FIELDS.length) {
+    return 'Nama bank, nomor rekening, dan nama pemilik harus diisi semuanya';
+  }
+
+  if (!BANK_CODES.has(String(isi.bank_name).toLowerCase())) {
+    return 'Bank tersebut belum didukung';
+  }
+  if (!/^[0-9]{8,20}$/.test(isi.bank_account_number)) {
+    return 'Nomor rekening harus 8-20 digit angka';
+  }
+  if (!/^[A-Za-z.,'\- ]{3,60}$/.test(isi.bank_account_holder)) {
+    return 'Nama pemilik rekening harus 3-60 huruf, sesuai KTP';
+  }
+  return null;
+}
 
 // Foto profil disimpan sebagai data URL di kolom avatar_url, bukan file di
 // disk: tidak ada storage/CDN di proyek ini dan browser sudah mengecilkan
@@ -121,24 +162,17 @@ const EDITABLE_PROFILE_FIELDS = [
 // waras kalau ada yang menembak endpoint ini langsung.
 // ponytail: data URL di DB. Pindah ke object storage kalau fotonya makin besar
 // atau baris users mulai berat dibaca.
-// Plafon sebenarnya datang dari express.json() yang default 100 KB dan
-// membalas 413 sebelum kode ini jalan — angka di bawah sengaja di bawahnya
-// supaya penolakannya berupa pesan yang bisa dibaca user, bukan 413 telanjang.
-// Foto 256px JPEG hasil kecilkanFoto() cuma ~20 KB, jadi lapang.
+// Plafon express.json() sekarang 1 MB (dinaikkan demi foto portofolio vendor,
+// lihat app.js), jadi angka di bawah ini yang benar-benar menolak avatar
+// kebesaran — dan penolakannya berupa pesan yang bisa dibaca user, bukan 413
+// telanjang. Foto 256px JPEG hasil kecilkanGambar() cuma ~20 KB, jadi lapang.
 const AVATAR_MAX_CHARS = 80_000; // ~60 KB setelah base64
-
-function avatarBermasalah(value) {
-  if (typeof value !== 'string') return 'avatar_url harus berupa teks';
-  if (value.length > AVATAR_MAX_CHARS) return 'Foto profil terlalu besar, maksimal ~60 KB';
-  if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value) &&
-      !/^https?:\/\//.test(value)) {
-    return 'Foto profil harus gambar PNG/JPEG/WebP';
-  }
-  return null;
-}
 
 async function updateMe(req, res, next) {
   try {
+    const salahRekening = rekeningBermasalah(req.body);
+    if (salahRekening) return res.status(400).json({ message: salahRekening });
+
     const sets = [];
     const values = [];
 
@@ -147,8 +181,14 @@ async function updateMe(req, res, next) {
       let value = req.body[field];
 
       if (field === 'avatar_url' && value !== '' && value !== null) {
-        const salah = avatarBermasalah(value);
+        const salah = gambarBermasalah(value, AVATAR_MAX_CHARS, 'Foto profil');
         if (salah) return res.status(400).json({ message: salah });
+      }
+
+      if (BANK_FIELDS.includes(field) && typeof value === 'string') {
+        value = value.trim();
+        if (field === 'bank_name') value = value.toLowerCase();
+        if (field === 'bank_account_holder') value = value.toUpperCase();
       }
 
       if (field === 'notification_prefs') {
@@ -187,4 +227,48 @@ async function updateMe(req, res, next) {
   }
 }
 
-module.exports = { register, login, me, updateMe };
+// PATCH /api/v1/auth/password (protected)
+// Sengaja terpisah dari updateMe: ganti sandi butuh sandi lama sebagai bukti
+// kepemilikan. Tanpa itu, token yang dicuri bisa dipakai mengunci pemilik asli
+// keluar dari akunnya sendiri.
+async function changePassword(req, res, next) {
+  try {
+    const { current_password, new_password } = req.body;
+
+    if (!current_password || !new_password) {
+      return res.status(400).json({ message: 'Sandi lama dan sandi baru wajib diisi' });
+    }
+    if (new_password.length < 8) {
+      return res.status(400).json({ message: 'Sandi baru minimal 8 karakter' });
+    }
+    if (new_password === current_password) {
+      return res.status(400).json({ message: 'Sandi baru harus berbeda dari sandi lama' });
+    }
+
+    const result = await pool.query(
+      'SELECT password_hash FROM users WHERE user_id = $1',
+      [req.user.user_id]
+    );
+    const user = result.rows[0];
+    if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
+
+    const cocok = await bcrypt.compare(current_password, user.password_hash);
+    if (!cocok) return res.status(401).json({ message: 'Sandi lama salah' });
+
+    await pool.query(
+      'UPDATE users SET password_hash = $1, updated_at = now() WHERE user_id = $2',
+      [await bcrypt.hash(new_password, SALT_ROUNDS), req.user.user_id]
+    );
+
+    // Token lama TIDAK dicabut: JWT di proyek ini stateless, mencabutnya butuh
+    // daftar hitam di Redis. Berarti sesi di perangkat lain tetap hidup sampai
+    // token kedaluwarsa.
+    // ponytail: tanpa pencabutan token. Tambah blacklist di Redis (sudah ada di
+    // proyek) kalau "keluarkan semua perangkat" jadi kebutuhan nyata.
+    res.json({ message: 'Sandi berhasil diganti' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { register, login, me, updateMe, changePassword };

@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { inputClass } from '../components/AuthLayout'
 import { ArrowRight, FolderIcon, PhotoIcon, UploadCloudIcon } from '../components/icons'
 import { categories } from '../data/categories'
-import { getMyVendor, kirim, tambahLayanan, type ApiVendor } from '../lib/api'
+import { getMyVendor, kirim, simpanFotoVendor, tambahLayanan, type ApiVendor } from '../lib/api'
+import { PORTOFOLIO, kecilkanGambar } from '../lib/gambar'
 
 /** Langkah 3 onboarding vendor: lengkapi profil bisnis.
  *
@@ -11,9 +12,11 @@ import { getMyVendor, kirim, tambahLayanan, type ApiVendor } from '../lib/api'
  *  - Mockup mengunci lokasi ke "Jabodetabek", padahal kolom `city` di DB
  *    adalah enum per wilayah dan dipakai untuk filter pencarian. Vendor
  *    tanpa kota tidak akan muncul di discovery, jadi di sini jadi pilihan.
- *  - Unggah portofolio belum ada penyimpanannya, jadi kotaknya dimatikan
- *    alih-alih pura-pura menerima file.
- *    ponytail: foto ditunda; upgrade-nya Supabase Storage + kolom di services. */
+ *  - Foto portofolio disimpan sebagai data URL di kolom vendors.gallery
+ *    (migrasi 008), bukan berkas di storage. Dikecilkan dulu di browser ke
+ *    900x600 supaya muat.
+ *    ponytail: data URL di DB. Upgrade-nya Supabase Storage + simpan URL-nya
+ *    di kolom yang sama. */
 
 const kota = [
   'jakarta_pusat', 'jakarta_utara', 'jakarta_barat', 'jakarta_selatan', 'jakarta_timur',
@@ -38,6 +41,10 @@ export default function VendorOnboardingPage() {
 
   const [vendorId, setVendorId] = useState(state.vendorId ?? '')
   const [error, setError] = useState('')
+  // Galeri ditahan di state supaya pratinjaunya langsung tampil; yang tersimpan
+  // di server baru menyusul setelah tiap unggahan selesai.
+  const [galeri, setGaleri] = useState<string[]>(['', '', ''])
+  const [unggah, setUnggah] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
 
   // Kalau halaman ini dibuka ulang (refresh / masuk lagi), id vendornya
@@ -45,7 +52,12 @@ export default function VendorOnboardingPage() {
   useEffect(() => {
     if (vendorId) return
     getMyVendor()
-      .then(({ vendor }) => setVendorId(vendor.vendor_id))
+      .then(({ vendor }) => {
+        setVendorId(vendor.vendor_id)
+        // Foto yang sudah terunggah ikut dibaca, supaya vendor yang kembali ke
+        // halaman ini melihat portofolionya, bukan tiga kotak kosong.
+        if (vendor.gallery) setGaleri(lengkapi(vendor.gallery))
+      })
       .catch((err) => setError((err as Error).message))
   }, [vendorId])
 
@@ -81,6 +93,37 @@ export default function VendorOnboardingPage() {
       setError((err as Error).message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function pilihFoto(slot: number, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // supaya memilih berkas yang sama lagi tetap memicu onChange
+    if (!file) return
+
+    setError('')
+    setUnggah(slot)
+    try {
+      const kecil = await kecilkanGambar(file, ...PORTOFOLIO)
+      const { gallery } = await simpanFotoVendor(slot, kecil)
+      setGaleri(lengkapi(gallery))
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setUnggah(null)
+    }
+  }
+
+  async function hapusFoto(slot: number) {
+    setError('')
+    setUnggah(slot)
+    try {
+      const { gallery } = await simpanFotoVendor(slot, '')
+      setGaleri(lengkapi(gallery))
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setUnggah(null)
     }
   }
 
@@ -173,23 +216,30 @@ export default function VendorOnboardingPage() {
             menjadi kesan pertama di etalase marketplace.
           </p>
 
-          {/* Belum ada penyimpanan file, jadi kotaknya tampil mati — supaya
-              tidak terlihat seperti unggahan yang berhasil lalu hilang. */}
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <div className="flex min-h-[240px] flex-col items-center justify-center rounded-lg border border-dashed border-line bg-white/60 text-center opacity-70">
-              <UploadCloudIcon className="h-7 w-7 text-ink/40" />
-              <p className="mt-3 text-[13px] font-semibold text-navy-900">Foto Utama (Hero Image)</p>
-              <p className="mt-1 text-[12px] text-muted">Unggah foto belum tersedia</p>
-            </div>
+            <KotakFoto
+              slot={0}
+              judul="Foto Utama (Hero Image)"
+              tinggi="min-h-[240px]"
+              Ikon={UploadCloudIcon}
+              isi={galeri[0]}
+              sibuk={unggah === 0}
+              onPilih={pilihFoto}
+              onHapus={hapusFoto}
+            />
             <div className="grid gap-4">
-              {['Foto 2', 'Foto 3'].map((f) => (
-                <div
-                  key={f}
-                  className="flex min-h-[112px] flex-col items-center justify-center rounded-lg border border-dashed border-line bg-white/60 text-center opacity-70"
-                >
-                  <PhotoIcon className="h-5 w-5 text-ink/40" />
-                  <p className="mt-2 text-[12px] text-muted">{f}</p>
-                </div>
+              {[1, 2].map((slot) => (
+                <KotakFoto
+                  key={slot}
+                  slot={slot}
+                  judul={`Foto ${slot + 1}`}
+                  tinggi="min-h-[112px]"
+                  Ikon={PhotoIcon}
+                  isi={galeri[slot]}
+                  sibuk={unggah === slot}
+                  onPilih={pilihFoto}
+                  onHapus={hapusFoto}
+                />
               ))}
             </div>
           </div>
@@ -217,5 +267,89 @@ export default function VendorOnboardingPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+/** Galeri dari server boleh lebih pendek dari 3 kalau slot belakang belum
+ *  pernah diisi — dipanjangkan supaya galeri[2] tidak undefined. */
+const lengkapi = (g: string[]) => [0, 1, 2].map((i) => g[i] ?? '')
+
+/** Satu kotak unggah. Kosong: area putus-putus yang bisa diklik. Terisi:
+ *  pratinjau fotonya sendiri dengan tombol ganti & hapus. */
+function KotakFoto({
+  slot,
+  judul,
+  tinggi,
+  Ikon,
+  isi,
+  sibuk,
+  onPilih,
+  onHapus,
+}: {
+  slot: number
+  judul: string
+  tinggi: string
+  Ikon: ({ className }: { className?: string }) => React.ReactElement
+  isi: string
+  sibuk: boolean
+  onPilih: (slot: number, e: React.ChangeEvent<HTMLInputElement>) => void
+  onHapus: (slot: number) => void
+}) {
+  const id = `foto-${slot}`
+
+  if (isi) {
+    return (
+      <div className={`group relative overflow-hidden rounded-lg border border-line ${tinggi}`}>
+        <img src={isi} alt={judul} className="h-full w-full object-cover" />
+        <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/70 to-transparent px-3 py-2.5">
+          <span className="truncate text-[12px] font-medium text-white">{judul}</span>
+          <span className="flex shrink-0 gap-2">
+            <label
+              htmlFor={id}
+              className="cursor-pointer rounded bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-navy-900"
+            >
+              Ganti
+            </label>
+            {/* type="button": tombol telanjang di dalam <form> otomatis jadi
+                submit, dan menghapus foto akan ikut mengirim seluruh profil. */}
+            <button
+              type="button"
+              onClick={() => onHapus(slot)}
+              disabled={sibuk}
+              className="rounded bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-maroon disabled:opacity-60"
+            >
+              Hapus
+            </button>
+          </span>
+        </div>
+        <input
+          id={id}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          onChange={(e) => onPilih(slot, e)}
+          className="hidden"
+        />
+      </div>
+    )
+  }
+
+  return (
+    <label
+      htmlFor={id}
+      className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-line bg-white/60 text-center transition-colors hover:border-navy-900 hover:bg-white ${tinggi}`}
+    >
+      <Ikon className="h-7 w-7 text-ink/40" />
+      <p className="mt-3 text-[13px] font-semibold text-navy-900">{judul}</p>
+      <p className="mt-1 text-[12px] text-muted">
+        {sibuk ? 'Mengunggah…' : 'Klik untuk pilih gambar'}
+      </p>
+      <input
+        id={id}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        onChange={(e) => onPilih(slot, e)}
+        className="hidden"
+      />
+    </label>
   )
 }

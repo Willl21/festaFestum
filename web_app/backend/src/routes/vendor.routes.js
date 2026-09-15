@@ -1,7 +1,7 @@
 const express = require('express');
 const {
   createVendor, listVendors, getMyVendor, getVendorDetail, updateVendor,
-  upsertMyDocument, listMyDocuments,
+  upsertMyDocument, listMyDocuments, setMyPhoto,
 } = require('../controllers/vendor.controller');
 const { createService, listServices } = require('../controllers/service.controller');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
@@ -16,6 +16,7 @@ router.get('/', listVendors);
 router.get('/me', requireAuth, requireRole('vendor_owner'), getMyVendor);
 router.get('/me/documents', requireAuth, requireRole('vendor_owner'), listMyDocuments);
 router.put('/me/documents/:docType', requireAuth, requireRole('vendor_owner'), upsertMyDocument);
+router.put('/me/photos/:slot', requireAuth, requireRole('vendor_owner'), setMyPhoto);
 
 router.get('/:vendorId', getVendorDetail);
 router.get('/:vendorId/services', listServices);
