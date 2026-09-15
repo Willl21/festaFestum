@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { cekAkses } from './PenjagaAkses'
-import { clearAuth, getUser } from '../lib/api'
+import { clearAuth, usePengguna } from '../lib/api'
 import Img from './Img'
 import {
   GridIcon, CalendarIcon, ClockIcon, FolderIcon, WalletIcon,
@@ -30,7 +30,7 @@ export default function VendorLayout() {
   const tolak = cekAkses('vendor_owner', '/vendor/masuk')
   if (tolak) return tolak
 
-  const user = getUser()
+  const user = usePengguna()
 
   function keluar() {
     clearAuth()
@@ -42,7 +42,7 @@ export default function VendorLayout() {
       <aside className="sticky top-0 hidden h-screen w-[258px] shrink-0 flex-col border-r border-line bg-white lg:flex">
         <div className="px-6 pt-8 pb-6 text-center">
           <Img
-            src="/img/vendor-avatar.jpg"
+            src={user?.avatar_url || '/img/vendor-avatar.jpg'}
             alt="Foto profil vendor"
             className="mx-auto h-[74px] w-[74px] rounded-lg object-cover"
           />

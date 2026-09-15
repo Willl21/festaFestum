@@ -1,12 +1,11 @@
 import { NavLink, Link, useNavigate } from 'react-router-dom'
-import { clearAuth, getUser } from '../lib/api'
+import { clearAuth, usePengguna } from '../lib/api'
 
 export default function Navbar() {
   const navigate = useNavigate()
-  // ponytail: dibaca sekali saat render, tanpa context/state global. Cukup
-  // karena halaman auth duduk di luar SiteLayout — masuk & keluar sama-sama
-  // me-mount ulang navbar ini. Butuh auth context kalau nanti ada login modal.
-  const user = getUser()
+  // Halaman profil duduk di dalam SiteLayout, jadi navbar TIDAK ter-mount ulang
+  // setelah nama atau foto disimpan — usePengguna() yang bikin ikut berubah.
+  const user = usePengguna()
 
   // "Pesanan Saya" hanya untuk yang sudah masuk; tamu tidak punya pesanan.
   const links = [
@@ -53,9 +52,17 @@ export default function Navbar() {
               className="flex items-center gap-2.5"
               title={user.email}
             >
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-navy-900 text-[14px] font-medium text-white">
-                {user.name.trim().charAt(0).toUpperCase()}
-              </span>
+              {user.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt=""
+                  className="h-9 w-9 rounded-full object-cover"
+                />
+              ) : (
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-navy-900 text-[14px] font-medium text-white">
+                  {user.name.trim().charAt(0).toUpperCase()}
+                </span>
+              )}
               <span className="hidden max-w-[140px] truncate text-[15px] text-ink md:block">
                 {user.name}
               </span>

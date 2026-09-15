@@ -4,11 +4,12 @@ import TukarHalus from '../components/TukarHalus'
 import { UserCircleIcon, SearchIcon } from '../components/icons'
 import { namaKota } from '../data/categories'
 import { rupiahBulat } from '../lib/format'
-import { get } from '../lib/api'
+import { get, kirim } from '../lib/api'
 
 /** Registri akun — daftar seluruh pengguna, vendor, dan admin.
  *
- *  Halaman ini SENGAJA hanya membaca. Mockup punya tombol sanksi, penangguhan
+ *  Selain tombol verifikasi akun, halaman ini SENGAJA hanya membaca. Mockup
+ *  punya tombol sanksi, penangguhan
  *  akun, dan reset 2FA; ketiganya butuh kolom status akun yang belum ada di
  *  tabel users, dan menonaktifkan akun orang adalah aksi yang tidak bisa
  *  dibatalkan dari UI. Ditunda sampai diminta, bukan dipasang sebagai tombol
@@ -27,6 +28,7 @@ type Akun = {
   business_name: string | null
   city: string | null
   is_verified: boolean | null
+  akun_terverifikasi: boolean
   rating_avg: string | null
   rating_count: number | null
   nilai_transaksi: string
@@ -51,6 +53,7 @@ export default function AdminAkunPage() {
   const [ringkasan, setRingkasan] = useState<Ringkasan | null>(null)
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
+  const [sibuk, setSibuk] = useState('')
 
   const muat = useCallback(async () => {
     setMemuat(true)
@@ -67,6 +70,27 @@ export default function AdminAkunPage() {
       setMemuat(false)
     }
   }, [tab, cari])
+
+  // Verifikasi akun: badge "Pengguna Terverifikasi" di halaman profil pengguna
+  // berasal dari keputusan di sini.
+  async function ubahVerifikasi(a: Akun) {
+    setSibuk(a.user_id)
+    setGalat('')
+    try {
+      const { user } = await kirim<{ user: { is_verified: boolean } }>(
+        `/admin/users/${a.user_id}/verification`,
+        'PATCH',
+        { action: a.akun_terverifikasi ? 'revoke' : 'approve' }
+      )
+      setDaftar((d) =>
+        d.map((x) => (x.user_id === a.user_id ? { ...x, akun_terverifikasi: user.is_verified } : x))
+      )
+    } catch (e) {
+      setGalat((e as Error).message)
+    } finally {
+      setSibuk('')
+    }
+  }
 
   // Pencarian ditunda sebentar supaya tidak menembak backend tiap ketukan.
   useEffect(() => {
@@ -135,6 +159,7 @@ export default function AdminAkunPage() {
                       <th className="px-5 py-3 font-semibold">Wilayah</th>
                       <th className="px-5 py-3 font-semibold">Terdaftar</th>
                       <th className="px-5 py-3 text-right font-semibold">Nilai Transaksi</th>
+                      <th className="px-5 py-3 text-right font-semibold">Verifikasi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -178,6 +203,24 @@ export default function AdminAkunPage() {
                           </p>
                           <p className="mt-1 text-[12px] text-muted">{a.jumlah_pesanan} pesanan</p>
                         </td>
+                        <td className="px-5 py-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => ubahVerifikasi(a)}
+                            disabled={sibuk === a.user_id}
+                            className={`rounded px-3 py-1.5 text-[12px] font-semibold transition-opacity hover:opacity-85 disabled:opacity-50 ${
+                              a.akun_terverifikasi
+                                ? 'bg-lavender text-navy-900'
+                                : 'bg-navy-900 text-white'
+                            }`}
+                          >
+                            {sibuk === a.user_id
+                              ? '…'
+                              : a.akun_terverifikasi
+                                ? 'Terverifikasi ✔'
+                                : 'Verifikasi'}
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -187,8 +230,8 @@ export default function AdminAkunPage() {
 
             <p className="flex gap-3 border-t border-line bg-cream px-5 py-4 text-[12px] leading-relaxed text-muted">
               <UserCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
-              Halaman ini hanya membaca. Sanksi, penangguhan akun, dan reset 2FA yang ada di mockup
-              belum dibuat — tabel users belum punya kolom statusnya.
+              Selain verifikasi akun, halaman ini hanya membaca. Sanksi, penangguhan akun, dan
+              reset 2FA yang ada di mockup belum dibuat — tabel users belum punya kolom statusnya.
             </p>
           </section>
         </>

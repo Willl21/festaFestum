@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from 'react'
+
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api/v1'
 
 const TOKEN_KEY = 'ff_token'
@@ -19,13 +21,47 @@ export function getUser(): AuthResponse['user'] | null {
 export function clearAuth() {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(USER_KEY)
+  window.dispatchEvent(new Event(USER_EVENT))
+}
+
+/** Identitas di navbar dulu cuma ditulis saat login, jadi ganti nama atau foto
+ *  di halaman profil baru kelihatan setelah keluar-masuk. Tiga helper di bawah
+ *  bikin navbar ikut berubah seketika — dan lewat event `storage`, tab lain
+ *  yang terbuka ikut juga. */
+const USER_EVENT = 'ff-user'
+
+export function simpanUser(user: AuthResponse['user']) {
+  localStorage.setItem(USER_KEY, JSON.stringify(user))
+  window.dispatchEvent(new Event(USER_EVENT))
+}
+
+export function langgananUser(ubah: () => void) {
+  window.addEventListener(USER_EVENT, ubah)
+  window.addEventListener('storage', ubah)
+  return () => {
+    window.removeEventListener(USER_EVENT, ubah)
+    window.removeEventListener('storage', ubah)
+  }
+}
+
+// Sengaja mengembalikan string mentah, bukan hasil JSON.parse: useSyncExternalStore
+// membandingkan snapshot dengan Object.is, dan objek baru tiap panggilan bikin
+// render tak berujung.
+export const cuplikanUser = () => localStorage.getItem(USER_KEY)
+
+/** Dipakai SEMUA tempat yang menampilkan identitas (navbar, sidebar vendor,
+ *  sidebar admin). Jangan panggil getUser() langsung di komponen: hasilnya
+ *  dibaca sekali dan tidak ikut berubah waktu profil disimpan. */
+export function usePengguna() {
+  useSyncExternalStore(langgananUser, cuplikanUser)
+  return getUser()
 }
 
 // ponytail: token di localStorage — cukup untuk demo lomba, tapi terbaca script
 // kalau ada XSS. Upgrade-nya: backend set httpOnly cookie + cors credentials.
 export function saveAuth(auth: AuthResponse) {
   localStorage.setItem(TOKEN_KEY, auth.token)
-  localStorage.setItem(USER_KEY, JSON.stringify(auth.user))
+  simpanUser(auth.user)
 }
 
 /** POST JSON ke backend. Melempar Error berisi pesan dari server supaya
@@ -74,7 +110,13 @@ export async function get<T>(path: string, query: Record<string, string | undefi
 
 export type AuthResponse = {
   token: string
-  user: { user_id: string; name: string; email: string; role: string }
+  user: {
+    user_id: string
+    name: string
+    email: string
+    role: string
+    avatar_url?: string | null
+  }
 }
 
 /** Satu baris dari GET /vendors. Namanya mengikuti kolom DB apa adanya,

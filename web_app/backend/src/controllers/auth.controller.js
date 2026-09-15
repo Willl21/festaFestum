@@ -33,7 +33,7 @@ async function register(req, res, next) {
     const result = await pool.query(
       `INSERT INTO users (name, email, phone, password_hash, role)
        VALUES ($1, $2, $3, $4, $5)
-       RETURNING user_id, name, email, phone, role, created_at`,
+       RETURNING user_id, name, email, phone, role, avatar_url, created_at`,
       [name, email, phone, passwordHash, finalRole]
     );
 
@@ -56,7 +56,7 @@ async function login(req, res, next) {
     }
 
     const result = await pool.query(
-      `SELECT user_id, name, email, phone, password_hash, role
+      `SELECT user_id, name, email, phone, password_hash, role, avatar_url
        FROM users WHERE email = $1`,
       [email]
     );
@@ -84,7 +84,8 @@ async function login(req, res, next) {
 }
 
 const PROFILE_COLUMNS = `user_id, name, full_name, email, phone, birth_date, avatar_url,
-          shipping_address, shipping_note, notification_prefs, role, created_at`;
+          shipping_address, shipping_note, notification_prefs, role,
+          is_verified, verified_at, created_at`;
 
 // GET /api/v1/auth/me (protected)
 async function me(req, res, next) {
@@ -114,6 +115,28 @@ const EDITABLE_PROFILE_FIELDS = [
   'shipping_address', 'shipping_note', 'notification_prefs',
 ];
 
+// Foto profil disimpan sebagai data URL di kolom avatar_url, bukan file di
+// disk: tidak ada storage/CDN di proyek ini dan browser sudah mengecilkan
+// gambarnya ke 256px sebelum kirim. Batas di bawah menjaga baris users tetap
+// waras kalau ada yang menembak endpoint ini langsung.
+// ponytail: data URL di DB. Pindah ke object storage kalau fotonya makin besar
+// atau baris users mulai berat dibaca.
+// Plafon sebenarnya datang dari express.json() yang default 100 KB dan
+// membalas 413 sebelum kode ini jalan — angka di bawah sengaja di bawahnya
+// supaya penolakannya berupa pesan yang bisa dibaca user, bukan 413 telanjang.
+// Foto 256px JPEG hasil kecilkanFoto() cuma ~20 KB, jadi lapang.
+const AVATAR_MAX_CHARS = 80_000; // ~60 KB setelah base64
+
+function avatarBermasalah(value) {
+  if (typeof value !== 'string') return 'avatar_url harus berupa teks';
+  if (value.length > AVATAR_MAX_CHARS) return 'Foto profil terlalu besar, maksimal ~60 KB';
+  if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value) &&
+      !/^https?:\/\//.test(value)) {
+    return 'Foto profil harus gambar PNG/JPEG/WebP';
+  }
+  return null;
+}
+
 async function updateMe(req, res, next) {
   try {
     const sets = [];
@@ -122,6 +145,11 @@ async function updateMe(req, res, next) {
     for (const field of EDITABLE_PROFILE_FIELDS) {
       if (!(field in req.body)) continue;
       let value = req.body[field];
+
+      if (field === 'avatar_url' && value !== '' && value !== null) {
+        const salah = avatarBermasalah(value);
+        if (salah) return res.status(400).json({ message: salah });
+      }
 
       if (field === 'notification_prefs') {
         if (value === null || typeof value !== 'object' || Array.isArray(value)) {

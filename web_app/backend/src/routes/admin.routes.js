@@ -1,7 +1,7 @@
 const express = require('express');
 const {
   listVendorsForReview, vendorReviewStats, reviewVendor,
-  listPayouts, escrowSummary, decidePayout, listBookings, listUsers,
+  listPayouts, escrowSummary, decidePayout, listBookings, listUsers, verifyUser,
 } = require('../controllers/admin.controller');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
 
@@ -21,5 +21,6 @@ router.patch('/payouts/:payoutId', decidePayout);
 
 router.get('/bookings', listBookings);
 router.get('/users', listUsers);
+router.patch('/users/:userId/verification', verifyUser);
 
 module.exports = router;

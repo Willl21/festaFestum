@@ -1,8 +1,19 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { inputClass } from '../components/AuthLayout'
-import { LockIcon, MapPinIcon, ShieldIcon, UserCircleIcon } from '../components/icons'
-import { get, getToken, kirim } from '../lib/api'
+import {
+  ArrowRight,
+  BankIcon,
+  BellIcon,
+  CalendarIcon,
+  LockIcon,
+  MapPinIcon,
+  CheckCircleIcon,
+  PhotoIcon,
+  ShieldIcon,
+  UserCircleIcon,
+} from '../components/icons'
+import { get, getToken, kirim, simpanUser } from '../lib/api'
 
 /** Pengaturan profil pelanggan. Semua field di sini persis kolom yang
  *  diizinkan backend di PATCH /auth/me — tidak ada yang cuma hidup di state.
@@ -21,6 +32,9 @@ type Profil = {
   birth_date: string | null
   shipping_address: string | null
   shipping_note: string | null
+  avatar_url: string | null
+  is_verified: boolean
+  verified_at: string | null
   notification_prefs: Record<string, boolean> | null
   role: string
   created_at: string
@@ -32,6 +46,46 @@ const notifikasi = [
   { key: 'chat_vendor', judul: 'Chat Langsung dari Vendor Resmi', catatan: 'Pesan instan via WhatsApp dari fotografer & wedding organizer.' },
   { key: 'promo_ai', judul: 'Promo & Rekomendasi Vendor AI', catatan: 'Penawaran kurasi musiman dari vendor wedding & corporate.' },
 ]
+
+/** Menu sidebar mengikuti mockup. Yang `href`-nya null belum punya halaman
+ *  maupun kolom DB (2FA, rekening pribadi, privasi) — ditampilkan mati
+ *  bertanda "Segera" supaya tidak jadi tautan bohong saat demo. */
+const menu = [
+  { label: 'Informasi Pribadi & Biodata', icon: UserCircleIcon, href: '#biodata' },
+  { label: 'Keamanan Akun & Kata Sandi', icon: LockIcon, href: null },
+  { label: 'Rekening Bank & Kartu', icon: BankIcon, href: null },
+  { label: 'Pengaturan Notifikasi', icon: BellIcon, href: '#notifikasi' },
+  { label: 'Alamat Pengiriman Tersimpan', icon: MapPinIcon, href: '#alamat' },
+  { label: 'Privasi & Kebijakan Data', icon: ShieldIcon, href: null },
+]
+
+/** Foto dikecilkan di browser jadi kotak 256px sebelum dikirim — yang masuk DB
+ *  data URL, bukan file (tidak ada storage di proyek ini, lihat migrasi 006).
+ *  Tanpa pengecilan ini, foto kamera 4 MB menembus batas 300 KB di backend. */
+const SISI_AVATAR = 256
+
+function kecilkanFoto(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onerror = () => reject(new Error('Berkas itu bukan gambar yang bisa dibaca.'))
+    img.onload = () => {
+      const sisi = Math.min(img.width, img.height)
+      const kanvas = document.createElement('canvas')
+      kanvas.width = kanvas.height = SISI_AVATAR
+      const ctx = kanvas.getContext('2d')
+      if (!ctx) return reject(new Error('Browser tidak mendukung pemotongan gambar.'))
+      // Dipotong tengah supaya tidak gepeng di bingkai bulat.
+      ctx.drawImage(
+        img,
+        (img.width - sisi) / 2, (img.height - sisi) / 2, sisi, sisi,
+        0, 0, SISI_AVATAR, SISI_AVATAR,
+      )
+      URL.revokeObjectURL(img.src)
+      resolve(kanvas.toDataURL('image/jpeg', 0.82))
+    }
+    img.src = URL.createObjectURL(file)
+  })
+}
 
 const bulanId = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -46,6 +100,8 @@ export default function ProfilPage() {
   const [error, setError] = useState('')
   const [pesan, setPesan] = useState('')
   const [loading, setLoading] = useState(false)
+  const [aktif, setAktif] = useState('#biodata')
+  const [avatar, setAvatar] = useState<string | null>(null)
 
   useEffect(() => {
     if (!masuk) return
@@ -53,9 +109,23 @@ export default function ProfilPage() {
       .then(({ user }) => {
         setProfil(user)
         setPrefs(user.notification_prefs ?? {})
+        setAvatar(user.avatar_url)
       })
       .catch((err) => setError((err as Error).message))
   }, [masuk])
+
+  async function pilihFoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // supaya memilih berkas yang sama lagi tetap memicu onChange
+    if (!file) return
+    setError('')
+    try {
+      setAvatar(await kecilkanFoto(file))
+      setPesan('Foto siap — tekan Simpan Perubahan.')
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -73,8 +143,17 @@ export default function ProfilPage() {
         shipping_address: form.get('shipping_address'),
         shipping_note: form.get('shipping_note'),
         notification_prefs: prefs,
+        avatar_url: avatar ?? '',
       })
       setProfil(user)
+      // Navbar membaca identitasnya dari localStorage, bukan dari GET /auth/me.
+      simpanUser({
+        user_id: user.user_id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        avatar_url: user.avatar_url,
+      })
       setPesan('Perubahan tersimpan.')
     } catch (err) {
       setError((err as Error).message)
@@ -122,23 +201,98 @@ export default function ProfilPage() {
       </p>
 
       <form onSubmit={handleSubmit} className="mt-6 grid gap-8 lg:grid-cols-[280px_1fr]">
-        <aside className="h-fit rounded-lg border border-line bg-white p-6 text-center">
-          <div className="mx-auto flex h-[92px] w-[92px] items-center justify-center rounded-full bg-lavender font-display text-[34px] font-semibold text-navy-900">
-            {inisial}
+        <aside className="h-fit space-y-4">
+          <div className="rounded-lg border border-line bg-white p-6 text-center">
+            <div className="relative mx-auto h-[92px] w-[92px]">
+              {avatar ? (
+                <img
+                  src={avatar}
+                  alt={`Foto profil ${profil.name}`}
+                  className="h-full w-full rounded-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center rounded-full bg-lavender font-display text-[34px] font-semibold text-navy-900">
+                  {inisial}
+                </div>
+              )}
+              <label
+                htmlFor="foto"
+                title="Ganti foto profil"
+                className="absolute right-0 bottom-0 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 border-white bg-navy-900 text-white"
+              >
+                <PhotoIcon className="h-3.5 w-3.5" />
+                <span className="sr-only">Ganti foto profil</span>
+              </label>
+              <input
+                id="foto"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={pilihFoto}
+                className="hidden"
+              />
+            </div>
+            <p className="mt-4 font-display text-[20px] font-semibold text-navy-900">
+              {profil.full_name || profil.name}
+            </p>
+            <p className="mt-1 text-[13px] text-muted">{profil.email}</p>
+
+            {profil.is_verified ? (
+              <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-navy-900 px-3 py-1.5 text-[11px] font-semibold tracking-wide text-white uppercase">
+                <CheckCircleIcon className="h-3.5 w-3.5 text-amber" />
+                Pengguna Terverifikasi
+              </p>
+            ) : (
+              <p
+                title="Verifikasi dilakukan admin Festa Festum"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-[11px] font-semibold tracking-wide text-ink/45 uppercase"
+              >
+                Belum Terverifikasi
+              </p>
+            )}
+
+            <p className="mt-5 flex items-center justify-between border-t border-line pt-4 text-[12px] tracking-wide text-muted uppercase">
+              <span className="flex items-center gap-2">
+                <CalendarIcon className="h-4 w-4" />
+                Bergabung
+              </span>
+              <span className="font-semibold text-navy-900 normal-case">
+                {bulanId[bergabung.getMonth()]} {bergabung.getFullYear()}
+              </span>
+            </p>
           </div>
-          <p className="mt-4 font-display text-[20px] font-semibold text-navy-900">
-            {profil.full_name || profil.name}
-          </p>
-          <p className="mt-1 text-[13px] text-muted">{profil.email}</p>
 
-          <p className="mt-5 border-t border-line pt-4 text-[13px] text-muted">
-            Bergabung{' '}
-            <span className="font-semibold text-navy-900">
-              {bulanId[bergabung.getMonth()]} {bergabung.getFullYear()}
-            </span>
-          </p>
+          <nav className="rounded-lg border border-line bg-white p-2">
+            {menu.map((m) =>
+              m.href ? (
+                <a
+                  key={m.label}
+                  href={m.href}
+                  onClick={() => setAktif(m.href!)}
+                  className={`flex items-center gap-3 rounded px-4 py-3 text-[14px] ${
+                    aktif === m.href
+                      ? 'bg-navy-900 font-semibold text-white'
+                      : 'text-ink/80 hover:bg-cream'
+                  }`}
+                >
+                  <m.icon className={`h-4 w-4 shrink-0 ${aktif === m.href ? 'text-amber' : 'text-ink/50'}`} />
+                  <span className="flex-1 text-left">{m.label}</span>
+                  <ArrowRight className="h-4 w-4 shrink-0 opacity-60" />
+                </a>
+              ) : (
+                <span
+                  key={m.label}
+                  title="Belum tersedia"
+                  className="flex cursor-not-allowed items-center gap-3 rounded px-4 py-3 text-[14px] text-ink/35"
+                >
+                  <m.icon className="h-4 w-4 shrink-0 text-ink/25" />
+                  <span className="flex-1 text-left">{m.label}</span>
+                  <span className="text-[11px] tracking-wide uppercase">Segera</span>
+                </span>
+              ),
+            )}
+          </nav>
 
-          <div className="mt-6 flex gap-3 rounded border border-lavender bg-lavender/40 p-4 text-left">
+          <div className="flex gap-3 rounded-lg border border-lavender bg-lavender/40 p-4 text-left">
             <ShieldIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
             <div>
               <p className="text-[13px] font-semibold text-navy-900">Jaminan Layanan Resmi</p>
@@ -150,7 +304,7 @@ export default function ProfilPage() {
         </aside>
 
         <div className="space-y-6">
-          <section className="rounded-lg border border-line bg-white p-7">
+          <section id="biodata" className="scroll-mt-6 rounded-lg border border-line bg-white p-7">
             <h1 className="font-display text-[26px] font-semibold text-navy-900">
               Informasi Pribadi &amp; Biodata
             </h1>
@@ -236,7 +390,7 @@ export default function ProfilPage() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-line bg-white p-7">
+          <section id="alamat" className="scroll-mt-6 rounded-lg border border-line bg-white p-7">
             <h2 className="flex items-center gap-2 text-[17px] font-semibold text-navy-900">
               <MapPinIcon className="h-5 w-5 text-amber" />
               Alamat Pengiriman &amp; Fitting
@@ -270,7 +424,7 @@ export default function ProfilPage() {
             />
           </section>
 
-          <section className="rounded-lg border border-line bg-white p-7">
+          <section id="notifikasi" className="scroll-mt-6 rounded-lg border border-line bg-white p-7">
             <h2 className="text-[17px] font-semibold text-navy-900">
               Preferensi Notifikasi &amp; Peringatan Acara
             </h2>

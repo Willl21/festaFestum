@@ -307,6 +307,7 @@ async function listUsers(req, res, next) {
 
     const { rows } = await pool.query(
       `SELECT u.user_id, u.name, u.full_name, u.email, u.phone, u.role, u.created_at,
+              u.is_verified AS akun_terverifikasi,
               v.vendor_id, v.business_name, v.city, v.is_verified,
               v.rating_avg, v.rating_count,
               COALESCE((
@@ -343,8 +344,41 @@ async function listUsers(req, res, next) {
   }
 }
 
+// PATCH /api/v1/admin/users/:userId/verification  { action: 'approve' | 'revoke' }
+// Badge "Pengguna Terverifikasi" di halaman profil berasal dari sini. Sengaja
+// keputusan admin, bukan OTP: kirim email/SMS butuh layanan pihak ketiga yang
+// di luar lingkup lomba.
+async function verifyUser(req, res, next) {
+  try {
+    const { action } = req.body;
+    if (action !== 'approve' && action !== 'revoke') {
+      return res.status(400).json({ message: "action harus 'approve' atau 'revoke'" });
+    }
+
+    const approve = action === 'approve';
+    const { rows } = await pool.query(
+      `UPDATE users
+          SET is_verified = $1,
+              verified_at = $2,
+              verified_by = $3,
+              updated_at  = now()
+        WHERE user_id = $4
+        RETURNING user_id, name, email, is_verified, verified_at`,
+      [approve, approve ? new Date() : null, approve ? req.user.user_id : null, req.params.userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Akun tidak ditemukan' });
+    }
+
+    res.json({ user: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   listVendorsForReview, vendorReviewStats, reviewVendor,
   listPayouts, escrowSummary, decidePayout,
-  listBookings, listUsers,
+  listBookings, listUsers, verifyUser,
 };
