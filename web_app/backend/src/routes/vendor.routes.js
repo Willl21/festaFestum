@@ -1,7 +1,7 @@
 const express = require('express');
 const {
   createVendor, listVendors, getMyVendor, getVendorDetail, updateVendor,
-  upsertMyDocument, listMyDocuments, setMyPhoto,
+  upsertMyDocument, listMyDocuments, setMyPhoto, getVendorPhoto,
 } = require('../controllers/vendor.controller');
 const { createService, listServices } = require('../controllers/service.controller');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
@@ -20,6 +20,8 @@ router.put('/me/photos/:slot', requireAuth, requireRole('vendor_owner'), setMyPh
 
 router.get('/:vendorId', getVendorDetail);
 router.get('/:vendorId/services', listServices);
+// Publik: dipasang langsung sebagai <img src>, jadi tidak boleh butuh token.
+router.get('/:vendorId/photo/:slot', getVendorPhoto);
 
 // Protected
 router.post('/', requireAuth, requireRole('vendor_owner'), createVendor);

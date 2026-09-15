@@ -3,7 +3,10 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { inputClass } from '../components/AuthLayout'
 import { ArrowRight, FolderIcon, PhotoIcon, UploadCloudIcon } from '../components/icons'
 import { categories } from '../data/categories'
-import { getMyVendor, kirim, simpanFotoVendor, tambahLayanan, type ApiVendor } from '../lib/api'
+import {
+  getMyVendor, kirim, simpanFotoVendor, tambahLayanan, urlFotoVendor,
+  type ApiVendor,
+} from '../lib/api'
 import { PORTOFOLIO, kecilkanGambar } from '../lib/gambar'
 
 /** Langkah 3 onboarding vendor: lengkapi profil bisnis.
@@ -12,11 +15,14 @@ import { PORTOFOLIO, kecilkanGambar } from '../lib/gambar'
  *  - Mockup mengunci lokasi ke "Jabodetabek", padahal kolom `city` di DB
  *    adalah enum per wilayah dan dipakai untuk filter pencarian. Vendor
  *    tanpa kota tidak akan muncul di discovery, jadi di sini jadi pilihan.
- *  - Foto portofolio disimpan sebagai data URL di kolom vendors.gallery
- *    (migrasi 008), bukan berkas di storage. Dikecilkan dulu di browser ke
- *    900x600 supaya muat.
- *    ponytail: data URL di DB. Upgrade-nya Supabase Storage + simpan URL-nya
- *    di kolom yang sama. */
+ *  - Foto portofolio masuk ke tabel portfolio_images yang sudah ada sejak
+ *    skema awal, satu baris per slot (sort_order 0 = hero). Dikecilkan dulu
+ *    di browser ke 900x600 supaya muat.
+ *
+ *    Yang ditampilkan di sini BUKAN data URL-nya, melainkan
+ *    GET /vendors/:id/photo/:slot. Menahan tiga data URL di state membuat
+ *    halaman ini membawa ratusan KB gambar yang baru saja dikirim sendiri.
+ *    ponytail: data URL di kolom TEXT. Upgrade-nya Supabase Storage. */
 
 const kota = [
   'jakarta_pusat', 'jakarta_utara', 'jakarta_barat', 'jakarta_selatan', 'jakarta_timur',
@@ -41,10 +47,12 @@ export default function VendorOnboardingPage() {
 
   const [vendorId, setVendorId] = useState(state.vendorId ?? '')
   const [error, setError] = useState('')
-  // Galeri ditahan di state supaya pratinjaunya langsung tampil; yang tersimpan
-  // di server baru menyusul setelah tiap unggahan selesai.
-  const [galeri, setGaleri] = useState<string[]>(['', '', ''])
+  // Slot mana yang sudah terisi — penanda saja, gambarnya diambil lewat URL.
+  const [terisi, setTerisi] = useState<boolean[]>([false, false, false])
   const [unggah, setUnggah] = useState<number | null>(null)
+  // Dinaikkan tiap kali foto berubah supaya <img> mengambil ulang: alamatnya
+  // tetap sama, jadi tanpa ini browser menyajikan foto lama dari cache.
+  const [versi, setVersi] = useState(0)
   const [loading, setLoading] = useState(false)
 
   // Kalau halaman ini dibuka ulang (refresh / masuk lagi), id vendornya
@@ -54,9 +62,9 @@ export default function VendorOnboardingPage() {
     getMyVendor()
       .then(({ vendor }) => {
         setVendorId(vendor.vendor_id)
-        // Foto yang sudah terunggah ikut dibaca, supaya vendor yang kembali ke
+        // Slot yang sudah terisi ikut dibaca, supaya vendor yang kembali ke
         // halaman ini melihat portofolionya, bukan tiga kotak kosong.
-        if (vendor.gallery) setGaleri(lengkapi(vendor.gallery))
+        if (vendor.photos) setTerisi(vendor.photos)
       })
       .catch((err) => setError((err as Error).message))
   }, [vendorId])
@@ -105,8 +113,9 @@ export default function VendorOnboardingPage() {
     setUnggah(slot)
     try {
       const kecil = await kecilkanGambar(file, ...PORTOFOLIO)
-      const { gallery } = await simpanFotoVendor(slot, kecil)
-      setGaleri(lengkapi(gallery))
+      const { photos } = await simpanFotoVendor(slot, kecil)
+      setTerisi(photos)
+      setVersi((v) => v + 1)
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -118,8 +127,9 @@ export default function VendorOnboardingPage() {
     setError('')
     setUnggah(slot)
     try {
-      const { gallery } = await simpanFotoVendor(slot, '')
-      setGaleri(lengkapi(gallery))
+      const { photos } = await simpanFotoVendor(slot, '')
+      setTerisi(photos)
+      setVersi((v) => v + 1)
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -222,7 +232,7 @@ export default function VendorOnboardingPage() {
               judul="Foto Utama (Hero Image)"
               tinggi="min-h-[240px]"
               Ikon={UploadCloudIcon}
-              isi={galeri[0]}
+              src={terisi[0] && vendorId ? urlFotoVendor(vendorId, 0, versi) : ''}
               sibuk={unggah === 0}
               onPilih={pilihFoto}
               onHapus={hapusFoto}
@@ -235,7 +245,7 @@ export default function VendorOnboardingPage() {
                   judul={`Foto ${slot + 1}`}
                   tinggi="min-h-[112px]"
                   Ikon={PhotoIcon}
-                  isi={galeri[slot]}
+                  src={terisi[slot] && vendorId ? urlFotoVendor(vendorId, slot, versi) : ''}
                   sibuk={unggah === slot}
                   onPilih={pilihFoto}
                   onHapus={hapusFoto}
@@ -270,10 +280,6 @@ export default function VendorOnboardingPage() {
   )
 }
 
-/** Galeri dari server boleh lebih pendek dari 3 kalau slot belakang belum
- *  pernah diisi — dipanjangkan supaya galeri[2] tidak undefined. */
-const lengkapi = (g: string[]) => [0, 1, 2].map((i) => g[i] ?? '')
-
 /** Satu kotak unggah. Kosong: area putus-putus yang bisa diklik. Terisi:
  *  pratinjau fotonya sendiri dengan tombol ganti & hapus. */
 function KotakFoto({
@@ -281,7 +287,7 @@ function KotakFoto({
   judul,
   tinggi,
   Ikon,
-  isi,
+  src,
   sibuk,
   onPilih,
   onHapus,
@@ -290,17 +296,17 @@ function KotakFoto({
   judul: string
   tinggi: string
   Ikon: ({ className }: { className?: string }) => React.ReactElement
-  isi: string
+  src: string
   sibuk: boolean
   onPilih: (slot: number, e: React.ChangeEvent<HTMLInputElement>) => void
   onHapus: (slot: number) => void
 }) {
   const id = `foto-${slot}`
 
-  if (isi) {
+  if (src) {
     return (
       <div className={`group relative overflow-hidden rounded-lg border border-line ${tinggi}`}>
-        <img src={isi} alt={judul} className="h-full w-full object-cover" />
+        <img src={src} alt={judul} className="h-full w-full object-cover" />
         <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/70 to-transparent px-3 py-2.5">
           <span className="truncate text-[12px] font-medium text-white">{judul}</span>
           <span className="flex shrink-0 gap-2">

@@ -131,10 +131,11 @@ export type ApiVendor = {
   rating_count: number
   categories: string[]
   price_start_from: string | null
-  /** Foto portofolio, data URL. Indeks 0 = hero. Slot kosong berisi string
-   *  kosong, bukan dilewati — lihat setMyPhoto di backend. Hanya ikut terbawa
-   *  di GET /vendors/me; listing dan detail publik belum mengirimkannya. */
-  gallery?: string[]
+  /** Penanda vendor punya foto hero. Gambarnya TIDAK ikut di sini — ambil
+   *  lewat urlFotoVendor(). Hanya ada di respons listing. */
+  has_photo?: boolean
+  /** Tiga slot foto portofolio, true kalau terisi. Hanya di GET /vendors/me. */
+  photos?: boolean[]
 }
 
 /** Perhatikan: response listing memakai kunci `data`, bukan `vendors`. */
@@ -337,9 +338,19 @@ export const getVendorBalance = () => get<{ balance: VendorBalance }>('/bookings
 export const getMyVendor = () => get<{ vendor: ApiVendor }>('/vendors/me')
 
 /** Satu foto per panggilan — backend menolak body yang memuat tiga gambar
- *  sekaligus. Kirim `image: ''` untuk mengosongkan slot. */
+ *  sekaligus. Kirim `image: ''` untuk mengosongkan slot. Yang dikembalikan
+ *  penanda slot terisi, bukan gambarnya. */
 export const simpanFotoVendor = (slot: number, image: string) =>
-  kirim<{ gallery: string[] }>(`/vendors/me/photos/${slot}`, 'PUT', { image })
+  kirim<{ photos: boolean[] }>(`/vendors/me/photos/${slot}`, 'PUT', { image })
+
+/** Alamat gambar portofolio, dipasang langsung sebagai <img src>. Endpoint-nya
+ *  publik dan membalas 404 kalau slotnya kosong — komponen Img sudah jatuh ke
+ *  emoji kategori saat gambarnya gagal dimuat.
+ *
+ *  `v` memaksa browser mengambil ulang setelah foto diganti: URL-nya tetap
+ *  sama, jadi tanpa penanda ini cache HTTP menyajikan foto lama. */
+export const urlFotoVendor = (vendorId: string, slot = 0, v?: string | number) =>
+  `${BASE}/vendors/${vendorId}/photo/${slot}${v ? `?v=${v}` : ''}`
 
 export const listMySchedules = (from: string, to: string) =>
   get<{ data: ApiSchedule[] }>('/schedules/me', { from, to })

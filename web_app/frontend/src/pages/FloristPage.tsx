@@ -6,7 +6,7 @@ import KategoriSkeleton from '../components/KategoriSkeleton'
 import TukarHalus from '../components/TukarHalus'
 import AiBanner from '../components/AiBanner'
 import Reveal from '../components/Reveal'
-import { listVendors } from '../lib/api'
+import { listVendors, urlFotoVendor } from '../lib/api'
 import { categories, namaKota } from '../data/categories'
 
 const kategori = categories.florist
@@ -46,6 +46,10 @@ export default function FloristPage() {
             rating: Number(v.rating_avg),
             ratingCount: v.rating_count,
             priceFrom: Number(v.price_start_from ?? 0),
+            // has_photo cuma penanda; gambarnya diambil dari endpoint terpisah
+            // supaya JSON listing tidak membawa data URL tiap vendor. Kalau
+            // kosong, Img jatuh ke emoji kategori di bawah ini.
+            image: v.has_photo ? urlFotoVendor(v.vendor_id) : undefined,
             emoji: kategori.emoji,
             tint: kategori.tint,
           }))

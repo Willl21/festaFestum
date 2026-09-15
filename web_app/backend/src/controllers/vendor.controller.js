@@ -156,7 +156,13 @@ async function listVendors(req, res, next) {
            ), '{}'
          ) AS categories,
          (SELECT MIN(s.price) FROM services s
-          WHERE s.vendor_id = v.vendor_id AND s.is_active = TRUE) AS price_start_from
+          WHERE s.vendor_id = v.vendor_id AND s.is_active = TRUE) AS price_start_from,
+         -- Cuma penanda ada/tidak. Gambarnya diambil terpisah lewat
+         -- GET /vendors/:id/photo/0 supaya JSON listing tetap ringan.
+         EXISTS (
+           SELECT 1 FROM portfolio_images pi
+           WHERE pi.vendor_id = v.vendor_id AND pi.sort_order = 0
+         ) AS has_photo
        FROM vendors v
        ${whereClause}
        ORDER BY v.rating_avg DESC, v.rating_count DESC
@@ -195,7 +201,12 @@ async function getMyVendor(req, res, next) {
       return res.status(404).json({ message: 'Anda belum memiliki profil vendor' });
     }
 
-    res.json({ vendor: result.rows[0] });
+    // Slot foto ikut dikirim (penanda ada/tidak, bukan gambarnya) supaya
+    // halaman onboarding yang dibuka ulang tahu slot mana yang sudah terisi.
+    const vendor = result.rows[0];
+    vendor.photos = await slotFoto(vendor.vendor_id);
+
+    res.json({ vendor });
   } catch (err) {
     next(err);
   }
@@ -354,19 +365,19 @@ async function listMyDocuments(req, res, next) {
   }
 }
 
-// Jumlah foto portofolio. Slot-nya tetap: indeks 0 selalu hero, jadi kartu
+// Jumlah slot foto portofolio di onboarding. sort_order 0 selalu hero, jadi
 // etalase tahu foto mana yang dipakai tanpa perlu kolom penanda.
 const SLOT_FOTO = 3;
 
 // ~150 KB setelah base64. Jauh di atas foto profil (80 KB) karena ini gambar
-// hero selebar layar, bukan avatar bulat 256px. Tetap di bawah plafon
+// hero selebar kartu, bukan avatar bulat 256px. Tetap di bawah plafon
 // express.json() 1 MB di app.js.
 const FOTO_MAX_CHARS = 200_000;
 
 // PUT /api/v1/vendors/me/photos/:slot
 // Satu foto per request, meniru PUT /me/documents/:docType. Mengirim tiga
-// gambar sekaligus akan menembus batas ukuran body, dan kalau satu foto
-// ditolak, dua lainnya ikut gagal padahal tidak salah apa-apa.
+// gambar sekaligus akan menembus batas ukuran body, dan kalau satu ditolak,
+// dua lainnya ikut gagal padahal tidak salah apa-apa.
 async function setMyPhoto(req, res, next) {
   try {
     const slot = Number(req.params.slot);
@@ -375,9 +386,9 @@ async function setMyPhoto(req, res, next) {
     }
 
     const { image } = req.body;
+    const menghapus = image === '';
 
-    // String kosong = hapus foto di slot ini.
-    if (image !== '') {
+    if (!menghapus) {
       const salah = gambarBermasalah(image, FOTO_MAX_CHARS, 'Foto portofolio');
       if (salah) return res.status(400).json({ message: salah });
     }
@@ -387,35 +398,77 @@ async function setMyPhoto(req, res, next) {
       return res.status(404).json({ message: 'Anda belum memiliki profil vendor' });
     }
 
-    // Baca–ubah–tulis, bukan satu UPDATE pintar: menulis ke gallery[5] saat
-    // panjangnya baru 1 membuat Postgres menyisipkan NULL di lubang tengahnya,
-    // dan galeri jadi berisi NULL yang harus dijaga di setiap pembacanya.
-    // Dipanjangkan di sini dengan string kosong supaya slot kosong punya
-    // bentuk yang sama dengan slot yang dihapus.
-    // ponytail: baca lalu tulis tanpa penguncian. Dua unggahan yang benar-benar
-    // bersamaan bisa saling menimpa — frontend mengirimnya berurutan. Pakai
-    // satu UPDATE atomik kalau nanti bisa diunggah paralel.
-    const sekarang = await pool.query(
-      'SELECT gallery FROM vendors WHERE vendor_id = $1 AND owner_user_id = $2',
-      [vendorId, req.user.user_id]
-    );
-
-    if (sekarang.rows.length === 0) {
-      return res.status(404).json({ message: 'Vendor tidak ditemukan atau bukan milik Anda' });
+    if (menghapus) {
+      await pool.query(
+        'DELETE FROM portfolio_images WHERE vendor_id = $1 AND sort_order = $2',
+        [vendorId, slot]
+      );
+    } else {
+      // ON CONFLICT bersandar pada indeks unik (vendor_id, sort_order) dari
+      // migrasi 008. Tanpa itu, unggah ulang slot yang sama akan menumpuk baris
+      // baru alih-alih mengganti.
+      await pool.query(
+        `INSERT INTO portfolio_images (vendor_id, image_url, sort_order)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (vendor_id, sort_order) DO UPDATE
+           SET image_url = EXCLUDED.image_url`,
+        [vendorId, image, slot]
+      );
     }
 
-    const galeri = [...sekarang.rows[0].gallery];
-    while (galeri.length <= slot) galeri.push('');
-    galeri[slot] = image;
+    res.json({ photos: await slotFoto(vendorId) });
+  } catch (err) {
+    next(err);
+  }
+}
 
-    const isi = await pool.query(
-      `UPDATE vendors SET gallery = $1, updated_at = now()
-        WHERE vendor_id = $2 AND owner_user_id = $3
-        RETURNING gallery`,
-      [galeri, vendorId, req.user.user_id]
+/** Daftar slot sepanjang SLOT_FOTO, berisi true kalau slot itu ada isinya.
+ *  Yang dikirim balik BUKAN gambarnya: tiga data URL dalam satu respons
+ *  membengkakkan jawaban sampai ratusan KB padahal browser baru saja mengirim
+ *  gambar itu sendiri. Gambarnya diambil lewat GET /vendors/:id/photo/:slot. */
+async function slotFoto(vendorId) {
+  const r = await pool.query(
+    'SELECT sort_order FROM portfolio_images WHERE vendor_id = $1',
+    [vendorId]
+  );
+  const terisi = new Set(r.rows.map((x) => x.sort_order));
+  return Array.from({ length: SLOT_FOTO }, (_, i) => terisi.has(i));
+}
+
+// GET /api/v1/vendors/:vendorId/photo/:slot  (publik)
+// Mengirim gambarnya sebagai berkas, bukan JSON. Kalau data URL-nya ditempel
+// di respons listing, satu halaman berisi 12 vendor jadi ~2 MB JSON yang tidak
+// bisa di-cache browser. Sebagai <img src>, tiap foto diambil paralel, masuk
+// cache HTTP, dan yang belum ada cukup membalas 404 — komponen Img sudah jatuh
+// ke emoji kategori kalau gambarnya gagal dimuat.
+async function getVendorPhoto(req, res, next) {
+  try {
+    const { vendorId } = req.params;
+    const slot = Number(req.params.slot);
+    if (!Number.isInteger(slot) || slot < 0 || slot >= SLOT_FOTO) {
+      return res.status(404).end();
+    }
+
+    const r = await pool.query(
+      'SELECT image_url FROM portfolio_images WHERE vendor_id = $1 AND sort_order = $2',
+      [vendorId, slot]
+    );
+    if (r.rows.length === 0) return res.status(404).end();
+
+    const cocok = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(
+      r.rows[0].image_url
     );
 
-    res.json({ gallery: isi.rows[0].gallery });
+    // Foto hasil seed bisa berupa URL http biasa, bukan data URL — diteruskan
+    // sebagai redirect daripada dipaksa jadi berkas.
+    if (!cocok) return res.redirect(302, r.rows[0].image_url);
+
+    const bytes = Buffer.from(cocok[2], 'base64');
+    res.set('Content-Type', cocok[1]);
+    // Foto vendor jarang berubah, dan URL-nya tetap sama saat diganti — jadi
+    // cache-nya wajib bisa divalidasi ulang, bukan dipegang buta seharian.
+    res.set('Cache-Control', 'public, max-age=300, must-revalidate');
+    res.send(bytes);
   } catch (err) {
     next(err);
   }
@@ -423,6 +476,7 @@ async function setMyPhoto(req, res, next) {
 
 module.exports = {
   setMyPhoto,
+  getVendorPhoto,
   createVendor, listVendors, getMyVendor, getVendorDetail, updateVendor,
   upsertMyDocument, listMyDocuments,
 };
