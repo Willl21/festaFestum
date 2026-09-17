@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { cekAkses } from './PenjagaAkses'
-import { clearAuth, usePengguna } from '../lib/api'
+import { useEffect, useState } from 'react'
+import { clearAuth, getMyVendor, usePengguna, type ApiVendor } from '../lib/api'
 import Img from './Img'
 import {
   GridIcon, CalendarIcon, ClockIcon, FolderIcon, WalletIcon,
@@ -27,10 +28,23 @@ const menu = [
 
 export default function VendorLayout() {
   const navigate = useNavigate()
+  // SEMUA hook dipanggil sebelum cabang penolakan di bawah. Dulu usePengguna()
+  // ada DI BAWAH early return, jadi saat keluar (clearAuth memicu render ulang
+  // lewat event ff-user) jumlah hook-nya berkurang dan React melempar
+  // "Rendered fewer hooks than expected". AdminLayout sudah urut begini.
+  const user = usePengguna()
+  const [vendor, setVendor] = useState<ApiVendor | null>(null)
+
+  useEffect(() => {
+    // Nama bisnis & status verifikasi tidak ada di objek user — keduanya milik
+    // tabel vendors. Satu panggilan per pasang layout, bukan per halaman.
+    getMyVendor()
+      .then((r) => setVendor(r.vendor))
+      .catch(() => {}) // vendor baru yang profilnya belum jadi: biarkan kosong
+  }, [])
+
   const tolak = cekAkses('vendor_owner', '/vendor/masuk')
   if (tolak) return tolak
-
-  const user = usePengguna()
 
   function keluar() {
     clearAuth()
@@ -46,8 +60,15 @@ export default function VendorLayout() {
             alt="Foto profil vendor"
             className="mx-auto h-[74px] w-[74px] rounded-lg object-cover"
           />
-          <p className="mt-4 font-display text-[22px] font-semibold">Festa Vendor</p>
-          <p className="text-[12px] text-muted">Verified Enterprise</p>
+          <p className="mt-4 font-display text-[22px] font-semibold">
+            {vendor?.business_name ?? user?.name ?? 'Vendor'}
+          </p>
+          {/* Badge terverifikasi cuma muncul kalau memang terverifikasi.
+              Sebelumnya "Verified Enterprise" tertulis untuk semua vendor,
+              termasuk yang belum lolos tinjauan admin. */}
+          <p className="text-[12px] text-muted">
+            {vendor?.is_verified ? 'Vendor Terverifikasi' : 'Menunggu verifikasi admin'}
+          </p>
         </div>
 
         <nav className="space-y-1 px-3">

@@ -1,19 +1,22 @@
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { ArrowRight } from './icons'
 
-/** Kembali ke halaman sebelumnya. Kalau detail dibuka langsung dari URL
- *  (tidak ada riwayat), jatuh ke halaman kategori yang diberikan. */
-export default function BackButton({ fallback }: { fallback: string }) {
-  const navigate = useNavigate()
-
+/** Kembali ke halaman daftar kategori.
+ *
+ *  Sengaja TUJUAN TETAP, bukan navigate(-1). Riwayat browser tidak selalu
+ *  berarti "satu langkah mundur di alur": halaman pesan punya tautan kembali
+ *  sendiri yang MENDORONG entri baru ke riwayat, jadi sesudah
+ *  detail -> pesan -> (tautan kembali) -> detail, navigate(-1) justru
+ *  melemparkan orang MAJU lagi ke halaman pesan. Tujuan tetap tidak pernah
+ *  salah, dan tetap benar waktu halaman ini dibuka langsung dari URL. */
+export default function BackButton({ ke }: { ke: string }) {
   return (
-    <button
-      type="button"
-      onClick={() => (window.history.length > 1 ? navigate(-1) : navigate(fallback))}
+    <Link
+      to={ke}
       className="inline-flex items-center gap-2 text-[14px] text-navy-900/80 transition-colors hover:text-navy-900"
     >
       <ArrowRight className="h-4 w-4 rotate-180" />
       Kembali
-    </button>
+    </Link>
   )
 }

@@ -87,6 +87,13 @@ function ok(label) {
   assert.strictEqual(booking.status, 201, `buat booking gagal: ${JSON.stringify(booking.body)}`);
   const bookingId = booking.body.booking.booking_id;
 
+  // Sejak migrasi 009 pesanan harus diterima vendornya dulu; charge menolak
+  // 409 selama statusnya masih 'menunggu'.
+  const diterima = await api(`/bookings/${bookingId}/konfirmasi`, {
+    method: 'PATCH', token: vendorToken, body: { action: 'terima' },
+  });
+  assert.strictEqual(diterima.status, 200, `vendor gagal menerima pesanan: ${JSON.stringify(diterima.body)}`);
+
   console.log('\nAlur pembayaran:');
 
   // --- 1. DP dihitung backend, bukan dikirim browser ----------------------

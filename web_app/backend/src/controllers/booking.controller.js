@@ -140,7 +140,18 @@ async function expireStaleBookings() {
   try {
     const { rows } = await pool.query(
       `WITH expired AS (
-         UPDATE bookings SET payment_status = 'expired', updated_at = now()
+         UPDATE bookings
+            SET payment_status = 'expired',
+                -- Vendor yang tidak menjawab sampai batas waktu = menolak.
+                -- Tanpa ini pesanannya kedaluwarsa tapi statusnya tetap
+                -- 'menunggu' selamanya, dan customer tidak pernah dapat jawaban.
+                confirm_status = CASE WHEN confirm_status = 'menunggu'
+                                      THEN 'ditolak'::booking_confirm_status
+                                      ELSE confirm_status END,
+                confirm_note = CASE WHEN confirm_status = 'menunggu'
+                                    THEN 'Vendor tidak merespons sampai batas waktu'
+                                    ELSE confirm_note END,
+                updated_at = now()
          WHERE payment_status = 'pending' AND soft_lock_expires_at < now()
          RETURNING schedule_id
        )
@@ -162,6 +173,7 @@ async function expireStaleBookings() {
 const BOOKING_SELECT = `
   SELECT b.booking_id, b.event_type, b.event_location_detail,
          b.total_price, b.dp_amount, b.payment_status,
+         b.confirm_status, b.confirm_note, b.confirmed_at,
          b.soft_lock_expires_at, b.created_at,
          s.service_id, s.service_name, s.category,
          v.vendor_id, v.business_name, v.city,
@@ -180,7 +192,12 @@ const BOOKING_SELECT = `
                    ) ORDER BY p.created_at)
               FROM payments p WHERE p.booking_id = b.booking_id),
            '[]'::json
-         ) AS payments
+         ) AS payments,
+         -- null kalau belum diulas. Dipakai Pesanan Saya untuk memilih antara
+         -- tombol "Beri Ulasan" dan bintang yang sudah terlanjur diberi.
+         (SELECT json_build_object('rating', rv.rating, 'comment', rv.comment,
+                                   'created_at', rv.created_at)
+            FROM reviews rv WHERE rv.booking_id = b.booking_id) AS review
     FROM bookings b
     JOIN services s         ON s.service_id  = b.service_id
     JOIN vendors  v         ON v.vendor_id   = s.vendor_id
@@ -245,7 +262,7 @@ async function vendorStats(req, res, next) {
     const { rows } = await pool.query(
       `WITH v AS (SELECT vendor_id FROM vendors WHERE owner_user_id = $1),
        b AS (
-         SELECT bk.booking_id, bk.payment_status, sch.event_date
+         SELECT bk.booking_id, bk.payment_status, bk.confirm_status, sch.event_date
            FROM bookings bk
            JOIN services s ON s.service_id = bk.service_id
            JOIN vendor_schedules sch ON sch.schedule_id = bk.schedule_id
@@ -266,11 +283,21 @@ async function vendorStats(req, res, next) {
               AND date_trunc('month', p.paid_at)
                   = date_trunc('month', now() - interval '1 month')
          ), 0) AS revenue_bulan_lalu,
-         (SELECT count(*) FROM b)::int AS total_pesanan,
-         (SELECT count(*) FROM b WHERE payment_status = 'pending')::int AS menunggu_dp,
+         -- Pesanan batal/kedaluwarsa BUKAN pesanan. Sebelum ini ikut terhitung,
+         -- jadi angka "total" dan "selesai" naik tiap kali ada yang gagal.
+         (SELECT count(*) FROM b
+           WHERE payment_status NOT IN ('cancelled', 'expired'))::int AS total_pesanan,
+         -- Dipisah dari menunggu_dp: yang satu menunggu VENDOR bertindak, yang
+         -- satu menunggu CUSTOMER membayar. Digabung, tugas vendor tersembunyi
+         -- di balik angka yang terbaca seperti salah customer.
+         (SELECT count(*) FROM b WHERE confirm_status = 'menunggu'
+             AND payment_status = 'pending')::int AS perlu_dijawab,
+         (SELECT count(*) FROM b WHERE payment_status = 'pending'
+             AND confirm_status = 'diterima')::int AS menunggu_dp,
          (SELECT count(*) FROM b WHERE payment_status = 'fully_paid')::int AS lunas,
          (SELECT count(*) FROM b
-           WHERE event_date BETWEEN now() - interval '7 days' AND now())::int AS selesai_minggu_ini,
+           WHERE event_date BETWEEN now() - interval '7 days' AND now()
+             AND payment_status NOT IN ('cancelled', 'expired'))::int AS selesai_minggu_ini,
          (SELECT count(*) FROM vendor_schedules
            WHERE vendor_id IN (SELECT vendor_id FROM v)
              AND status = 'available' AND event_date >= CURRENT_DATE)::int AS slot_tersedia`,
@@ -309,6 +336,165 @@ async function vendorBalance(req, res, next) {
   }
 }
 
+// Membebaskan slot sebuah booking yang batal. Dipakai jalur tolak DAN jalur
+// batal supaya dua-duanya melepas slot dengan syarat yang sama persis: hanya
+// slot yang masih 'held'. Slot 'booked' berarti uang sudah masuk dan
+// pembebasannya bukan urusan endpoint ini.
+async function bebaskanSlot(client, scheduleId) {
+  await client.query(
+    `UPDATE vendor_schedules SET status = 'available', updated_at = now()
+      WHERE schedule_id = $1 AND status = 'held'`,
+    [scheduleId]
+  );
+}
+
+// PATCH /api/v1/bookings/:bookingId/konfirmasi  (role: vendor_owner)
+// Body: { action: 'terima' | 'tolak', note? }
+//
+// Satu endpoint dua aksi, mengikuti pola yang sudah dipakai
+// PATCH /admin/users/:id/verification — bukan dua rute terpisah.
+async function konfirmasiBooking(req, res, next) {
+  const { action, note } = req.body;
+
+  if (!['terima', 'tolak'].includes(action)) {
+    return res.status(400).json({ message: 'action harus terima atau tolak' });
+  }
+  if (note != null && String(note).length > 500) {
+    return res.status(400).json({ message: 'Catatan maksimal 500 karakter' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Kepemilikan ikut di WHERE: vendor lain tidak menemukan baris ini sama
+    // sekali, jadi balasannya 404 dan ID pesanan yang valid tidak bocor.
+    const bk = await client.query(
+      `SELECT b.booking_id, b.schedule_id, b.confirm_status, b.payment_status
+         FROM bookings b
+         JOIN services s ON s.service_id = b.service_id
+         JOIN vendors  v ON v.vendor_id  = s.vendor_id
+        WHERE b.booking_id = $1 AND v.owner_user_id = $2
+        FOR UPDATE OF b`,
+      [req.params.bookingId, req.user.user_id]
+    );
+
+    if (bk.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Pesanan tidak ditemukan' });
+    }
+
+    const booking = bk.rows[0];
+
+    if (booking.confirm_status !== 'menunggu') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        message: `Pesanan ini sudah ${booking.confirm_status}`,
+      });
+    }
+
+    if (action === 'terima') {
+      // Batas bayar dihitung ulang dari saat DITERIMA, bukan dari saat pesanan
+      // dibuat. Kalau tidak, vendor yang menjawab di jam ke-23 menyisakan satu
+      // jam untuk customer membayar, lalu slotnya lepas sendiri.
+      await client.query(
+        `UPDATE bookings
+            SET confirm_status = 'diterima', confirmed_at = now(),
+                confirm_note = $2,
+                soft_lock_expires_at = now() + interval '24 hours',
+                updated_at = now()
+          WHERE booking_id = $1`,
+        [booking.booking_id, note || null]
+      );
+    } else {
+      // Menolak sesudah uang masuk berarti perlu refund, dan refund di luar
+      // lingkup proyek ini. Dijaga di sini walaupun charge sudah menolak
+      // pembayaran untuk pesanan yang belum diterima — dua pintu lebih murah
+      // daripada satu pintu yang ternyata bocor.
+      if (booking.payment_status !== 'pending') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          message: 'Pesanan yang sudah dibayar tidak bisa ditolak. Hubungi admin.',
+        });
+      }
+
+      await client.query(
+        `UPDATE bookings
+            SET confirm_status = 'ditolak', confirmed_at = now(),
+                payment_status = 'cancelled', confirm_note = $2,
+                updated_at = now()
+          WHERE booking_id = $1`,
+        [booking.booking_id, note || null]
+      );
+      await bebaskanSlot(client, booking.schedule_id);
+    }
+
+    await client.query('COMMIT');
+
+    const { rows } = await pool.query(`${BOOKING_SELECT} WHERE b.booking_id = $1`, [booking.booking_id]);
+    res.json({ booking: rows[0] });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(err);
+  } finally {
+    client.release();
+  }
+}
+
+// POST /api/v1/bookings/:bookingId/batal  (login) — dibatalkan CUSTOMER.
+//
+// Hanya selama belum ada uang yang masuk. Begitu DP terbayar, pembatalan
+// berarti pengembalian dana, dan refund tidak ada di lingkup proyek ini —
+// lebih baik menolak dengan jujur daripada membatalkan pesanan lalu
+// meninggalkan uang customer menggantung tanpa jalan pulang.
+async function batalBooking(req, res, next) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const bk = await client.query(
+      `SELECT booking_id, schedule_id, payment_status
+         FROM bookings
+        WHERE booking_id = $1 AND user_id = $2
+        FOR UPDATE`,
+      [req.params.bookingId, req.user.user_id]
+    );
+
+    if (bk.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Pesanan tidak ditemukan' });
+    }
+
+    const booking = bk.rows[0];
+
+    if (booking.payment_status !== 'pending') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        message: booking.payment_status === 'cancelled' || booking.payment_status === 'expired'
+          ? 'Pesanan ini sudah tidak aktif'
+          : 'Pesanan yang sudah dibayar tidak bisa dibatalkan sendiri. Hubungi admin.',
+      });
+    }
+
+    await client.query(
+      `UPDATE bookings SET payment_status = 'cancelled', updated_at = now()
+        WHERE booking_id = $1`,
+      [booking.booking_id]
+    );
+    await bebaskanSlot(client, booking.schedule_id);
+
+    await client.query('COMMIT');
+
+    const { rows } = await pool.query(`${BOOKING_SELECT} WHERE b.booking_id = $1`, [booking.booking_id]);
+    res.json({ booking: rows[0] });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(err);
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   createBooking,
   expireStaleBookings,
@@ -317,4 +503,6 @@ module.exports = {
   listVendorBookings,
   vendorStats,
   vendorBalance,
+  konfirmasiBooking,
+  batalBooking,
 };

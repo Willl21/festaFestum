@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import UlasanVendor from '../components/UlasanVendor'
 import Img from '../components/Img'
 import VendorLocation from '../components/VendorLocation'
 import BackButton from '../components/BackButton'
 import KalenderSlot from '../components/KalenderSlot'
 import DetailSkeleton from '../components/DetailSkeleton'
 import TukarHalus from '../components/TukarHalus'
-import { ArrowRight, serviceIcons } from '../components/icons'
+import { ArrowRight } from '../components/icons'
+import { serviceIcons } from '../components/serviceIcons'
 import { categories, namaKota } from '../data/categories'
 import { rupiah } from '../lib/format'
 import {
@@ -39,7 +41,7 @@ export default function FloristDetailPage() {
   const [mengecek, setMengecek] = useState(false)
 
   useEffect(() => {
-    Promise.all([getVendor(id), getVendorServices(id)])
+    Promise.all([getVendor(id), getVendorServices(id, kategori.apiCategory)])
       .then(([v, s]) => {
         setVendor(v.vendor)
         setLayanan(s.data.filter((x) => x.is_active))
@@ -83,7 +85,7 @@ export default function FloristDetailPage() {
         if (galat || !vendor) {
           return (
             <div className="mx-auto max-w-[1330px] px-6 py-20">
-              <BackButton fallback={`/${kategori.slug}`} />
+              <BackButton ke={`/${kategori.slug}`} />
               <p className="mt-6 text-[15px]">{galat || 'Vendor tidak ditemukan.'}</p>
             </div>
           )
@@ -91,7 +93,7 @@ export default function FloristDetailPage() {
 
         return (
         <div className="mx-auto max-w-[1330px] px-6 pt-12 pb-20 md:px-12">
-          <BackButton fallback={`/${kategori.slug}`} />
+          <BackButton ke={`/${kategori.slug}`} />
 
           <h1 className="mt-5 font-display text-[38px] font-semibold">{vendor.business_name}</h1>
           <span className="mt-3 inline-block rounded-full bg-pink-100 px-4 py-1.5 text-[13px] text-maroon">
@@ -215,6 +217,10 @@ export default function FloristDetailPage() {
 
           <div className="mt-16">
             <VendorLocation />
+          </div>
+
+          <div className="mt-16">
+            <UlasanVendor vendorId={id} />
           </div>
         </div>
         )

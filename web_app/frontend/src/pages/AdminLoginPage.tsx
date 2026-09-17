@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AuthLayout, { inputClass } from '../components/AuthLayout'
 import { EyeIcon, EyeOffIcon, ShieldIcon } from '../components/icons'
-import { post, saveAuth, clearAuth, type AuthResponse } from '../lib/api'
+import { post, saveAuth, clearAuth, pesanSesiHabis, type AuthResponse } from '../lib/api'
 
 /** Masuk ke Pusat Kendali admin.
  *
@@ -19,7 +19,9 @@ import { post, saveAuth, clearAuth, type AuthResponse } from '../lib/api'
 export default function AdminLoginPage() {
   const navigate = useNavigate()
   const [lihatSandi, setLihatSandi] = useState(false)
-  const [error, setError] = useState('')
+  // Nilai awalnya terisi kalau kita sendiri yang melempar orang ini ke sini
+  // karena sesinya kedaluwarsa (?sesi=habis).
+  const [error, setError] = useState(pesanSesiHabis())
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {

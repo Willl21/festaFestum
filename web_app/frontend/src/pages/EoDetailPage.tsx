@@ -1,30 +1,29 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import UlasanVendor from '../components/UlasanVendor'
 import Img from '../components/Img'
 import BackButton from '../components/BackButton'
 import DetailSkeleton from '../components/DetailSkeleton'
 import TukarHalus from '../components/TukarHalus'
-import { ArrowRight, MailIcon, MapPinIcon, PhoneIcon, StarIcon } from '../components/icons'
+import { ArrowRight, MailIcon, MapPinIcon, StarIcon } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
 import { rupiah } from '../lib/format'
-import { getVendor, getVendorServices, type ApiService, type ApiVendor } from '../lib/api'
+import {
+  getVendor, getVendorServices, urlFotoVendor,
+  type ApiService, type ApiVendor,
+} from '../lib/api'
 
 const kat = categories.eo
 
-/** Kontak & portofolio belum punya tabelnya di database — hiasan mockup yang
- *  dibiarkan statis. Nomor telepon vendor ada di tabel users tapi sengaja
- *  tidak diekspos lewat API publik. */
-const KONTAK = {
-  phone: '+62 812 3456 7890',
-  email: 'hello@epicureanevents.co',
-  office: 'Sudirman Central Business District, Jakarta',
-}
-const PORTOFOLIO = {
-  title: 'Gala & Acara Korporat',
-  subtitle: 'Pilihan karya terbaik kami dalam mewujudkan malam yang spektakuler.',
-  tag: 'Annual Tech Gala 2023',
-  caption: 'Simfoni Cahaya & Inovasi',
-}
+/* Nomor telepon, email, dan "Annual Tech Gala 2023" yang dulu ada di sini
+   DIHAPUS, bukan dirapikan. Isinya identitas bisnis lain (epicureanevents.co)
+   yang ikut tampil di halaman vendor mana pun — terbaca seperti ada dua vendor
+   di satu halaman, dan portofolionya mengaku-aku karya yang bukan miliknya.
+   Hiasan yang sekadar gaya boleh statis; hiasan yang menyamar jadi fakta soal
+   vendornya tidak.
+
+   Alamat diambil dari kolom vendors.address. Telepon & email memang tidak
+   diekspos API publik, jadi jalur kontaknya form konsultasi di bawah. */
 
 const eventTypes = ['Gala Dinner', 'Konferensi', 'Perayaan Pribadi']
 
@@ -33,14 +32,16 @@ export default function EoDetailPage() {
   const [eventType, setEventType] = useState(eventTypes[0])
 
   const [vendor, setVendor] = useState<ApiVendor | null>(null)
+  const [fotoSlot, setFotoSlot] = useState<number[]>([])
   const [layanan, setLayanan] = useState<ApiService[]>([])
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
 
   useEffect(() => {
-    Promise.all([getVendor(id), getVendorServices(id)])
+    Promise.all([getVendor(id), getVendorServices(id, kat.apiCategory)])
       .then(([r, s]) => {
         setVendor(r.vendor)
+        setFotoSlot(r.portfolio.map((p) => p.sort_order))
         setLayanan(s.data.filter((x) => x.is_active))
       })
       .catch((e) => setGalat(e.message))
@@ -53,7 +54,7 @@ export default function EoDetailPage() {
         if (galat || !vendor) {
           return (
             <div className="mx-auto max-w-[1330px] px-6 py-20">
-              <BackButton fallback={`/${kat.slug}`} />
+              <BackButton ke={`/${kat.slug}`} />
               <p className="mt-6 text-[15px]">{galat || 'Vendor tidak ditemukan.'}</p>
             </div>
           )
@@ -61,7 +62,7 @@ export default function EoDetailPage() {
 
         return (
         <div className="mx-auto max-w-[1330px] px-6 pt-12 pb-20 md:px-12">
-          <BackButton fallback={`/${kat.slug}`} />
+          <BackButton ke={`/${kat.slug}`} />
 
           {/* HERO: teks kiri, foto kanan dengan panel statistik. */}
           <section className="mt-5 grid items-center gap-10 lg:grid-cols-2">
@@ -148,38 +149,34 @@ export default function EoDetailPage() {
           <section className="mt-16">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <h2 className="font-display text-[26px] font-semibold">{PORTOFOLIO.title}</h2>
-                <p className="mt-1 text-[13px] text-ink/70">{PORTOFOLIO.subtitle}</p>
+                <h2 className="font-display text-[26px] font-semibold">Portofolio</h2>
+                <p className="mt-1 text-[13px] text-ink/70">
+                  {fotoSlot.length
+                    ? `Karya pilihan ${vendor.business_name}.`
+                    : 'Vendor ini belum mengunggah foto portofolio.'}
+                </p>
               </div>
-              <button type="button" className="flex items-center gap-2 text-[12px] font-semibold">
-                Lihat Semua Portofolio
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
+              {/* Tombol "Lihat Semua Portofolio" dibuang: cuma ada tiga slot
+                  foto per vendor, dan ketiganya sudah tampil di bawah ini. */}
             </div>
 
             <div className="mt-5 grid gap-3 md:grid-cols-3">
               <div className="relative md:col-span-2">
                 <Img
-                  alt={PORTOFOLIO.title}
+                  src={fotoSlot.includes(0) ? urlFotoVendor(id, 0) : undefined}
+                  alt={`Portofolio ${vendor.business_name}`}
                   emoji={kat.emoji}
                   tint={kat.tint}
                   className="h-[320px] w-full object-cover md:h-[620px]"
                 />
-                <div className="absolute bottom-5 left-5">
-                  <span className="bg-black/45 px-2 py-1 text-[10px] text-white backdrop-blur-sm">
-                    {PORTOFOLIO.tag}
-                  </span>
-                  <p className="mt-2 font-display text-[20px] font-semibold text-white">
-                    {PORTOFOLIO.caption}
-                  </p>
-                </div>
               </div>
 
               <div className="grid gap-3">
                 {[1, 2].map((n) => (
                   <Img
                     key={n}
-                    alt={`Portofolio ${n}`}
+                    src={fotoSlot.includes(n) ? urlFotoVendor(id, n) : undefined}
+                    alt={`Portofolio ${vendor.business_name} ${n}`}
                     emoji={kat.emoji}
                     tint={kat.tint}
                     className="h-[200px] w-full object-cover md:h-[304px]"
@@ -199,9 +196,17 @@ export default function EoDetailPage() {
               </p>
 
               <ul className="mt-8 space-y-5 text-[13px]">
-                <ContactRow icon={<PhoneIcon />} label="Telepon" value={KONTAK.phone} />
-                <ContactRow icon={<MailIcon />} label="Email" value={KONTAK.email} />
-                <ContactRow icon={<MapPinIcon className="h-4 w-4" />} label="Kantor Pusat" value={KONTAK.office} />
+                <ContactRow
+                  icon={<MapPinIcon className="h-4 w-4" />}
+                  label="Lokasi"
+                  value={[vendor.address, namaKota(vendor.city)].filter(Boolean).join(', ')
+                    || namaKota(vendor.city)}
+                />
+                <ContactRow
+                  icon={<MailIcon />}
+                  label="Kontak"
+                  value="Lewat form di samping — nomor vendor diberikan setelah pesanan diterima."
+                />
               </ul>
             </div>
 
@@ -255,6 +260,10 @@ export default function EoDetailPage() {
               </p>
             </form>
           </section>
+
+          <div className="mt-16">
+            <UlasanVendor vendorId={id} />
+          </div>
         </div>
         )
       }}

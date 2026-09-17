@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import AuthLayout, { inputClass } from '../components/AuthLayout'
 import { EyeIcon, EyeOffIcon, GoogleIcon } from '../components/icons'
-import { post, saveAuth, type AuthResponse } from '../lib/api'
+import { post, saveAuth, pesanSesiHabis, type AuthResponse } from '../lib/api'
 
 export default function LoginPage() {
   const navigate = useNavigate()
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState('')
+  // Nilai awalnya terisi kalau kita sendiri yang melempar orang ini ke sini
+  // karena sesinya kedaluwarsa (?sesi=habis).
+  const [error, setError] = useState(pesanSesiHabis())
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {

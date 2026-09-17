@@ -96,6 +96,11 @@ export default function VendorJadwalPage() {
     }
   }, [month])
 
+  // muat() tidak pernah memanggil setState secara sinkron: semuanya sesudah
+  // await, jadi satu kali muat = satu kali render, bukan render berantai yang
+  // dicegah aturan di bawah. Menyalin isi muat() ke dalam efek cuma untuk
+  // mendiamkan linter berarti dua salinan logika pengambilan data per halaman.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { muat() }, [muat])
 
   const openCount = Object.values(availability).reduce(

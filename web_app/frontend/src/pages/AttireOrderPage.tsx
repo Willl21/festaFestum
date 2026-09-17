@@ -56,7 +56,7 @@ export default function AttireOrderPage() {
   const [catatan, setCatatan] = useState('')
 
   useEffect(() => {
-    Promise.all([getVendor(id), getVendorServices(id)])
+    Promise.all([getVendor(id), getVendorServices(id, kat.apiCategory)])
       .then(([r, s]) => {
         const aktif = s.data.filter((x) => x.is_active)
         setVendor(r.vendor)

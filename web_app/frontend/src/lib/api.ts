@@ -64,6 +64,50 @@ export function saveAuth(auth: AuthResponse) {
   simpanUser(auth.user)
 }
 
+/** Endpoint yang membalas 401 karena INPUT salah, bukan sesi habis: sandi
+ *  keliru waktu masuk, dan sandi lama keliru waktu menggantinya. Kalau dua ini
+ *  ikut dilempar ke halaman masuk, pesan salahnya hilang dan orang yang cuma
+ *  salah ketik ikut dikeluarkan. */
+const BUKAN_SESI_HABIS = ['/auth/login', '/auth/password']
+
+const PESAN_SESI_HABIS = 'Sesi Anda sudah berakhir. Silakan masuk lagi.'
+
+/** Dibaca ketiga halaman masuk sebagai nilai awal pesan error, supaya orang
+ *  yang tiba-tiba mendarat di sini tahu kenapa. Penanda ?sesi=habis dipasang
+ *  oleh hasil() waktu melempar keluar. */
+export const pesanSesiHabis = () =>
+  new URLSearchParams(window.location.search).get('sesi') === 'habis' ? PESAN_SESI_HABIS : ''
+
+/** Tiap area punya halaman masuknya sendiri. Dipilih dari URL yang sedang
+ *  dibuka, bukan dari role di localStorage — sesi yang mati justru bikin
+ *  role-nya tidak bisa dipercaya. */
+function halamanMasuk() {
+  const p = window.location.pathname
+  if (p.startsWith('/admin')) return '/admin/masuk'
+  if (p.startsWith('/vendor')) return '/vendor/masuk'
+  return '/masuk'
+}
+
+/** Ekor bersama post/get/kirim. Satu hal yang ditambahkan di atas baca-respons
+ *  biasa: 401 di permintaan yang MEMBAWA token berarti tokennya sudah
+ *  kedaluwarsa (JWT_EXPIRES_IN 1 hari). Sesinya dibersihkan lalu pengguna
+ *  dilempar ke halaman masuk yang sesuai. Ditaruh di sini, bukan di tiap
+ *  halaman, karena semua permintaan lewat tiga fungsi ini. */
+async function hasil<T>(res: Response, path: string): Promise<T> {
+  const data = await res.json().catch(() => ({}))
+
+  if (res.status === 401 && getToken() && !BUKAN_SESI_HABIS.includes(path)) {
+    clearAuth()
+    // replace, bukan assign: tombol Back jangan balik ke halaman yang sudah mati.
+    window.location.replace(halamanMasuk() + '?sesi=habis')
+    // Halaman sedang berpindah; lemparan ini cuma menghentikan pemanggilnya.
+    throw new Error(PESAN_SESI_HABIS)
+  }
+
+  if (!res.ok) throw new Error(data.message || 'Terjadi kesalahan, coba lagi.')
+  return data as T
+}
+
 /** POST JSON ke backend. Melempar Error berisi pesan dari server supaya
  *  form cukup menampilkan err.message apa adanya. */
 export async function post<T>(path: string, body: unknown): Promise<T> {
@@ -83,9 +127,7 @@ export async function post<T>(path: string, body: unknown): Promise<T> {
     throw new Error('Tidak bisa menghubungi server. Cek koneksi Anda.')
   }
 
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.message || 'Terjadi kesalahan, coba lagi.')
-  return data as T
+  return hasil<T>(res, path)
 }
 
 /** GET JSON dari backend. Query kosong/undefined dibuang supaya URL-nya bersih. */
@@ -103,9 +145,7 @@ export async function get<T>(path: string, query: Record<string, string | undefi
     throw new Error('Tidak bisa menghubungi server. Cek koneksi Anda.')
   }
 
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.message || 'Terjadi kesalahan, coba lagi.')
-  return data as T
+  return hasil<T>(res, path)
 }
 
 export type AuthResponse = {
@@ -125,6 +165,8 @@ export type ApiVendor = {
   vendor_id: string
   business_name: string
   city: string | null
+  /** Hanya ada di GET /vendors/:id, bukan di listing. */
+  address?: string | null
   description: string | null
   is_verified: boolean
   rating_avg: string
@@ -170,13 +212,26 @@ export type ApiService = {
   price: string
   minimum_notice_days: number
   is_active: boolean
+  /** Penanda layanan ini punya foto. Gambarnya TIDAK ikut di sini — ambil
+   *  lewat urlFotoLayanan(), sama seperti pola foto vendor. */
+  has_photo?: boolean
 }
 
-export const getVendor = (id: string) => get<{ vendor: ApiVendor }>(`/vendors/${id}`)
+/** `portfolio` membawa nomor SLOT, bukan gambarnya — pasang lewat
+ *  urlFotoVendor(id, sort_order). Data URL tidak pernah ikut di respons. */
+export type SlotPortofolio = { image_id: string; sort_order: number; caption: string | null }
+
+export const getVendor = (id: string) =>
+  get<{ vendor: ApiVendor; portfolio: SlotPortofolio[] }>(`/vendors/${id}`)
 /** Perhatikan: endpoint ini membalas kunci `data`, bukan `services` —
- *  sama seperti GET /vendors. Konsisten dengan listing lain di backend. */
-export const getVendorServices = (id: string) =>
-  get<{ data: ApiService[] }>(`/vendors/${id}/services`)
+ *  sama seperti GET /vendors. Konsisten dengan listing lain di backend.
+ *
+ *  `category` WAJIB diisi halaman yang terikat satu kategori (semua halaman
+ *  detail dan halaman pesan). Satu vendor boleh menjual lintas kategori, jadi
+ *  tanpa filter ini halaman Event Organizer ikut menampilkan paket floristnya
+ *  — terbaca seperti data dobel, dan paket yang salah yang terpilih duluan. */
+export const getVendorServices = (id: string, category?: string) =>
+  get<{ data: ApiService[] }>(`/vendors/${id}/services`, { category })
 
 // --- Ketersediaan & pemesanan --------------------------------------------
 
@@ -221,6 +276,14 @@ export type ApiBooking = {
   total_price: string
   dp_amount: string
   payment_status: 'pending' | 'dp_paid' | 'fully_paid' | 'cancelled' | 'expired'
+  /** Jawaban vendor atas pesanan ini. Terpisah dari payment_status: pesanan
+   *  bisa diterima tapi belum dibayar, dan pembayaran ditolak backend selama
+   *  statusnya belum `diterima`. */
+  confirm_status: 'menunggu' | 'diterima' | 'ditolak'
+  confirm_note: string | null
+  confirmed_at: string | null
+  /** null selama pesanan ini belum diulas. */
+  review: { rating: number; comment: string | null; created_at: string } | null
   created_at: string
   service_id: string
   service_name: string
@@ -239,6 +302,16 @@ export const buatBooking = (body: {
   service_id: string; event_date: string; time_slot: string
   event_type: string; event_location_detail: string
 }) => post<{ booking: ApiBooking }>('/bookings', body)
+
+/** Vendor menjawab pesanan yang masuk. `note` opsional — dipakai untuk
+ *  menjelaskan alasan menolak. */
+export const konfirmasiBooking = (id: string, action: 'terima' | 'tolak', note?: string) =>
+  kirim<{ booking: ApiBooking }>(`/bookings/${id}/konfirmasi`, 'PATCH', { action, note })
+
+/** Dibatalkan customer, dan HANYA selama belum ada uang masuk — backend
+ *  menolak sisanya karena refund di luar lingkup proyek ini. */
+export const batalBooking = (id: string) =>
+  post<{ booking: ApiBooking }>(`/bookings/${id}/batal`, {})
 
 export const listMyBookings = () => get<{ data: ApiBooking[] }>('/bookings')
 export const getBooking = (id: string) => get<{ booking: ApiBooking }>(`/bookings/${id}`)
@@ -302,7 +375,11 @@ export const simulasiBayar = (paymentId: string) =>
 export type VendorStats = {
   revenue_bulan_ini: string
   revenue_bulan_lalu: string
+  /** Sudah TIDAK menghitung pesanan batal/kedaluwarsa. */
   total_pesanan: number
+  /** Menunggu VENDOR menjawab. Beda dari menunggu_dp, yang menunggu CUSTOMER
+   *  membayar sesudah pesanannya diterima. */
+  perlu_dijawab: number
   menunggu_dp: number
   lunas: number
   selesai_minggu_ini: number
@@ -336,6 +413,34 @@ export const listVendorBookings = () => get<{ data: ApiBooking[] }>('/bookings/v
 export const getVendorStats = () => get<{ stats: VendorStats }>('/bookings/vendor/stats')
 export const getVendorBalance = () => get<{ balance: VendorBalance }>('/bookings/vendor/balance')
 export const getMyVendor = () => get<{ vendor: ApiVendor }>('/vendors/me')
+
+/** Daftar layanan untuk halaman VENDOR — ikut membawa yang disembunyikan.
+ *  Berbeda dari getVendorServices() yang publik dan sengaja menyaringnya,
+ *  karena kalau pemiliknya juga tidak melihatnya, menyembunyikan sebuah
+ *  layanan sama saja dengan menghapusnya. */
+export const getMyServices = () => get<{ data: ApiService[] }>('/vendors/me/services')
+
+/** Ubah layanan yang sudah ada. Field yang tidak dikirim dibiarkan apa adanya
+ *  (backend memakai COALESCE), jadi kirim saja yang berubah.
+ *
+ *  Khusus `image`: tidak dikirim = foto dibiarkan, string kosong = fotonya
+ *  dihapus. Dua hal itu tidak bisa dibedakan kalau dipukul rata jadi null. */
+export const ubahLayanan = (serviceId: string, body: Record<string, unknown>) =>
+  kirim<{ service: ApiService }>(`/services/${serviceId}`, 'PATCH', body)
+
+/** Sembunyikan / tampilkan lagi sebuah layanan. Nebeng PATCH yang sama supaya
+ *  tidak ada jalur kedua yang bisa melenceng perilakunya. */
+export const setAktifLayanan = (serviceId: string, is_active: boolean) =>
+  ubahLayanan(serviceId, { is_active })
+
+/** Alamat foto layanan, dipasang langsung sebagai <img src>. Publik, dan
+ *  membalas 404 kalau belum ada fotonya — komponen Img sudah jatuh ke emoji
+ *  kategori lewat onError.
+ *
+ *  `v` memaksa browser mengambil ulang sesudah fotonya diganti: URL-nya tetap
+ *  sama, jadi tanpa penanda ini cache HTTP menyajikan foto lama. */
+export const urlFotoLayanan = (serviceId: string, v?: string | number) =>
+  `${BASE}/services/${serviceId}/photo${v ? `?v=${v}` : ''}`
 
 /** Satu foto per panggilan — backend menolak body yang memuat tiga gambar
  *  sekaligus. Kirim `image: ''` untuk mengosongkan slot. Yang dikembalikan
@@ -377,7 +482,34 @@ export async function kirim<T>(path: string, method: 'PUT' | 'PATCH' | 'DELETE',
   } catch {
     throw new Error('Tidak bisa menghubungi server. Cek koneksi Anda.')
   }
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.message || 'Terjadi kesalahan, coba lagi.')
-  return data as T
+  return hasil<T>(res, path)
 }
+
+// --- Ulasan ---------------------------------------------------------------
+
+export type ApiUlasan = {
+  review_id: string
+  rating: number
+  comment: string | null
+  created_at: string
+  user_name: string
+  category: string
+}
+
+export type RingkasanUlasan = {
+  rata_rata: string
+  jumlah: number
+  b5: number; b4: number; b3: number; b2: number; b1: number
+}
+
+/** Ulasan menempel pada PESANAN, bukan pada vendor — itu yang membuktikan
+ *  pengulasnya benar-benar pernah memakai jasanya. Backend menolak kalau
+ *  pesanannya belum lunas atau acaranya belum lewat. */
+export const kirimUlasan = (bookingId: string, rating: number, comment?: string) =>
+  post<{ review: { review_id: string; rating: number; comment: string | null; created_at: string } }>(
+    `/bookings/${bookingId}/ulasan`, { rating, comment }
+  )
+
+/** Publik: tamu yang belum masuk tetap bisa membaca ulasan di halaman detail. */
+export const listUlasanVendor = (vendorId: string) =>
+  get<{ data: ApiUlasan[]; ringkasan: RingkasanUlasan }>(`/vendors/${vendorId}/ulasan`)

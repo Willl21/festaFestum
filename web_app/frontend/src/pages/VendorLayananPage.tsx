@@ -4,14 +4,15 @@ import TukarHalus from '../components/TukarHalus'
 import { VendorPageHeader } from '../components/VendorLayout'
 import Img from '../components/Img'
 import {
-  ChevronDown, ClockIcon, EyeIcon, PhotoIcon, PlusIcon, UploadCloudIcon,
+  ChevronDown, ClockIcon, EyeIcon, EyeOffIcon, PlusIcon, UploadCloudIcon,
 } from '../components/icons'
 import { rupiahBulat } from '../lib/format'
 import { categories as katalogKategori } from '../data/categories'
 import {
-  getMyVendor, getVendorServices, tambahLayanan, kirim,
-  type ApiService,
+  getMyVendor, getMyServices, tambahLayanan, ubahLayanan, setAktifLayanan,
+  simpanFotoVendor, urlFotoLayanan, urlFotoVendor, type ApiService,
 } from '../lib/api'
+import { kecilkanGambar, PORTOFOLIO } from '../lib/gambar'
 
 /** Katalog layanan + galeri portofolio milik vendor.
  *
@@ -51,13 +52,9 @@ const EMOJI: Record<string, { emoji: string; tint: string }> = {
 }
 
 
-const portfolio = [
-  { src: '/img/eo-gala-1.jpg', alt: 'Ruang perjamuan penuh tamu' },
-  { src: '/img/eo-gala-2.jpg', alt: 'Detail meja perjamuan' },
-  { src: '/img/eo-gala-3.jpg', alt: 'Panggung acara korporat' },
-]
-
-const PORTFOLIO_LIMIT = 12
+/** Tiga slot tetap, sama dengan yang dipakai langkah 3 onboarding dan
+ *  indeks unik (vendor_id, sort_order) di migrasi 008. */
+const SLOT_FOTO = 3
 
 const categoryLabel = (value: string) =>
   categories.find((c) => c.value === value)?.label ?? value
@@ -68,31 +65,86 @@ export default function VendorLayananPage() {
   const [defaultNotice, setDefaultNotice] = useState(14)
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
-  const dialogRef = useRef<HTMLDialogElement>(null)
+  // Layanan yang formnya sedang terbuka: 'baru' untuk tambah, objeknya untuk
+  // ubah, null kalau tertutup. Satu form dipakai dua-duanya — field-nya sama
+  // persis, cuma nilai awal dan tujuan simpannya yang beda.
+  const [formUntuk, setFormUntuk] = useState<ApiService | 'baru' | null>(null)
+  // Dinaikkan tiap foto berubah. URL foto tetap sama setelah diganti, jadi
+  // tanpa penanda ini browser menyajikan gambar lama dari cache.
+  const [versiFoto, setVersiFoto] = useState(0)
+  const [fotoVendor, setFotoVendor] = useState<boolean[]>(Array(SLOT_FOTO).fill(false))
+  const [unggahSlot, setUnggahSlot] = useState<number | null>(null)
+
+  async function pilihFotoVendor(slot: number, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // supaya memilih berkas yang sama lagi tetap memicu onChange
+    if (!file) return
+
+    setGalat('')
+    setUnggahSlot(slot)
+    try {
+      const { photos } = await simpanFotoVendor(slot, await kecilkanGambar(file, ...PORTOFOLIO))
+      setFotoVendor(photos)
+      setVersiFoto((v) => v + 1)
+    } catch (err) {
+      setGalat((err as Error).message)
+    } finally {
+      setUnggahSlot(null)
+    }
+  }
+
+  async function hapusFotoVendor(slot: number) {
+    setGalat('')
+    setUnggahSlot(slot)
+    try {
+      const { photos } = await simpanFotoVendor(slot, '')
+      setFotoVendor(photos)
+      setVersiFoto((v) => v + 1)
+    } catch (err) {
+      setGalat((err as Error).message)
+    } finally {
+      setUnggahSlot(null)
+    }
+  }
 
   useEffect(() => {
     getMyVendor()
       .then(async (r) => {
         setVendorId(r.vendor.vendor_id)
-        const s = await getVendorServices(r.vendor.vendor_id)
-        setServices(s.data.filter((x) => x.is_active))
+        setFotoVendor(r.vendor.photos ?? Array(SLOT_FOTO).fill(false))
+        // Sengaja TIDAK disaring: layanan yang disembunyikan tetap harus
+        // terlihat oleh pemiliknya, lengkap dengan tombol menampilkannya lagi.
+        const s = await getMyServices()
+        setServices(s.data)
       })
       .catch((e) => setGalat(e.message))
       .finally(() => setMemuat(false))
   }, [])
 
-  async function tambah(baru: BaruLayanan) {
-    const r = await tambahLayanan(vendorId, baru)
-    setServices((prev) => [...prev, r.service])
+  async function simpan(isi: BaruLayanan) {
+    if (formUntuk === 'baru') {
+      const r = await tambahLayanan(vendorId, isi)
+      setServices((prev) => [...prev, r.service])
+    } else if (formUntuk) {
+      const r = await ubahLayanan(formUntuk.service_id, isi)
+      setServices((prev) =>
+        prev.map((x) => (x.service_id === r.service.service_id ? r.service : x))
+      )
+    }
+    setVersiFoto((v) => v + 1)
   }
 
-  // Hapus = soft delete di backend (is_active = false), karena booking lama
-  // masih mereferensikan baris layanan itu.
-  async function hapus(id: string) {
+  // Menyembunyikan layanan = is_active false di backend, BUKAN DELETE: booking
+  // lama masih mereferensikan baris itu. Dulu kartunya ikut hilang dari daftar
+  // begitu disembunyikan, sehingga tidak ada lagi jalan menghidupkannya —
+  // sekarang dia tetap tampil, meredup, dengan tombol yang sama untuk balik.
+  async function ubahTampil(s: ApiService) {
     setGalat('')
     try {
-      await kirim(`/services/${id}`, 'DELETE')
-      setServices((prev) => prev.filter((x) => x.service_id !== id))
+      const r = await setAktifLayanan(s.service_id, !s.is_active)
+      setServices((prev) =>
+        prev.map((x) => (x.service_id === s.service_id ? r.service : x))
+      )
     } catch (e) {
       setGalat((e as Error).message)
     }
@@ -108,7 +160,7 @@ export default function VendorLayananPage() {
             action={
               <button
                 type="button"
-                onClick={() => dialogRef.current?.showModal()}
+                onClick={() => setFormUntuk('baru')}
                 className="flex items-center gap-2 rounded-md bg-navy-900 px-5 py-3 text-[13px] font-semibold text-white"
               >
                 <PlusIcon /> Tambah Layanan Baru
@@ -129,7 +181,8 @@ export default function VendorLayananPage() {
                 Konfigurasi Operasional
               </h2>
               <p className="mt-3 text-[14px] text-ink/70">
-                Tentukan metrik dasar untuk penerimaan pesanan baru.
+                Nilai bawaan untuk layanan baru. Tiap layanan tetap menyimpan angkanya
+                sendiri — ubah lewat tombol Ubah di kartunya.
               </p>
 
               <div className="mt-6">
@@ -148,33 +201,17 @@ export default function VendorLayananPage() {
                   <span className="text-[14px] text-ink/80">Hari kalender</span>
                 </div>
                 <p className="mt-2 text-[12px] text-muted">
-                  Sistem secara otomatis akan memblokir tanggal dalam rentang ini.
+                  Tanggal dalam rentang ini otomatis mati di kalender pemesanan.
                 </p>
               </div>
 
-              <div className="mt-6 border-t border-line pt-5">
-                <label htmlFor="kapasitas" className="block text-[12px] font-semibold text-ink/75">
-                  Kapasitas Simultan
-                </label>
-                <div className="relative">
-                  <select
-                    id="kapasitas"
-                    defaultValue="3"
-                    className="mt-2 h-11 w-full appearance-none rounded-sm border border-line bg-white px-3 pr-9 text-[14px] outline-none focus:border-navy-900"
-                  >
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <option key={n} value={n}>
-                        {n} Event Bersamaan
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-3 bottom-3.5 h-4 w-4 text-ink/50" />
-                </div>
-              </div>
-
-              <button type="button" className="mt-6 text-[13px] font-semibold text-amber">
-                Simpan Pengaturan
-              </button>
+              {/* "Kapasitas Simultan" dan tombol "Simpan Pengaturan" dibuang.
+                  Kapasitas tidak punya kolom di DB sama sekali — ketersediaan
+                  di sini ditentukan per slot jadwal, bukan per jumlah event
+                  bersamaan — jadi apa pun yang dipilih tidak berpengaruh.
+                  Tombol simpannya pun tidak pernah punya handler; angka di atas
+                  langsung terpakai sebagai nilai awal form layanan baru, tidak
+                  ada yang perlu disimpan. */}
             </section>
 
             <section>
@@ -186,9 +223,15 @@ export default function VendorLayananPage() {
                 {services.map((s) => {
                   const gaya = EMOJI[s.category]
                   return (
-                    <article key={s.service_id} className="overflow-hidden rounded-lg border border-line bg-white">
+                    <article
+                      key={s.service_id}
+                      className={`overflow-hidden rounded-lg border bg-white ${
+                        s.is_active ? 'border-line' : 'border-dashed border-muted/50 opacity-60'
+                      }`}
+                    >
                       <div className="relative">
                         <Img
+                          src={s.has_photo ? urlFotoLayanan(s.service_id, versiFoto) : undefined}
                           alt={s.service_name}
                           emoji={gaya?.emoji}
                           tint={gaya?.tint}
@@ -197,6 +240,11 @@ export default function VendorLayananPage() {
                         <span className="absolute top-3 left-3 rounded bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-ink">
                           {categoryLabel(s.category)}
                         </span>
+                        {!s.is_active && (
+                          <span className="absolute top-3 right-3 rounded bg-ink/85 px-2.5 py-1 text-[11px] font-semibold text-white">
+                            DISEMBUNYIKAN
+                          </span>
+                        )}
                       </div>
                       <div className="p-5">
                         <h3 className="font-display text-[21px] leading-tight font-semibold">
@@ -215,15 +263,32 @@ export default function VendorLayananPage() {
                               {rupiahBulat(Number(s.price))}
                             </p>
                           </div>
+                          <div className="flex items-center gap-3">
                           <button
                             type="button"
-                            onClick={() => hapus(s.service_id)}
-                            aria-label={`Nonaktifkan ${s.service_name}`}
-                            title="Nonaktifkan layanan (booking lama tetap aman)"
-                            className="text-ink/50 hover:text-maroon"
+                            onClick={() => setFormUntuk(s)}
+                            className="rounded-md border border-line px-3 py-1.5 text-[12px] font-medium hover:border-ink"
                           >
-                            <EyeIcon />
+                            Ubah
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => ubahTampil(s)}
+                            aria-label={
+                              s.is_active
+                                ? `Sembunyikan ${s.service_name}`
+                                : `Tampilkan lagi ${s.service_name}`
+                            }
+                            title={
+                              s.is_active
+                                ? 'Sembunyikan dari halaman vendor (booking lama tetap aman)'
+                                : 'Tampilkan lagi ke pelanggan'
+                            }
+                            className="text-ink/50 hover:text-navy-900"
+                          >
+                            {s.is_active ? <EyeIcon /> : <EyeOffIcon />}
+                          </button>
+                          </div>
                         </div>
                       </div>
                     </article>
@@ -242,52 +307,80 @@ export default function VendorLayananPage() {
           <section className="mt-11">
             <h2 className="font-display text-[26px] font-semibold">Galeri Portofolio Utama</h2>
             <p className="mt-1 text-[15px] text-ink/70">
-              Unggah representasi visual terbaik dari karya Anda. Klien premium merespons visual
-              berkualitas tinggi.
+              Tiga foto yang tampil di kartu vendor dan halaman detail Anda. Slot pertama jadi
+              foto utama.
             </p>
 
+            {/* Dulu bagian ini memajang tiga foto contoh dari /public/img dan
+                input file tanpa handler — terlihat seperti galeri yang sudah
+                terisi, padahal tidak ada apa pun yang tersimpan. Tabel
+                portfolio_images dan PUT /vendors/me/photos/:slot sudah ada
+                sejak onboarding, jadi yang kurang cuma penyambungannya. */}
             <div className="mt-6 rounded-lg border border-line bg-white p-6">
-              <label className="flex cursor-pointer flex-col items-center rounded-md border-2 border-dashed border-line px-6 py-12 text-center transition-colors hover:border-navy-900/40">
-                <span className="rounded-lg bg-lavender/50 p-4 text-navy-900">
-                  <UploadCloudIcon />
-                </span>
-                <span className="mt-4 font-display text-[21px] font-semibold">Tarik &amp; Lepas Media</span>
-                <span className="mt-1 text-[13px] text-ink/70">
-                  atau klik untuk menelusuri file (JPG, PNG. Max 10MB)
-                </span>
-                <span className="mt-4 rounded-md border border-line px-4 py-2 text-[13px] font-medium">
-                  Pilih File
-                </span>
-                <input type="file" accept="image/jpeg,image/png" multiple className="sr-only" />
-              </label>
+              <div className="grid gap-4 sm:grid-cols-3">
+                {[0, 1, 2].map((slot) => (
+                  <div key={slot}>
+                    <div className="relative overflow-hidden rounded-md border border-line bg-lavender/25">
+                      <Img
+                        src={fotoVendor[slot] ? urlFotoVendor(vendorId, slot, versiFoto) : undefined}
+                        alt={`Portofolio slot ${slot + 1}`}
+                        className="h-[150px] w-full object-cover"
+                      />
+                      {slot === 0 && (
+                        <span className="absolute top-2 left-2 rounded bg-navy-900/85 px-2 py-0.5 text-[10px] font-semibold text-white">
+                          FOTO UTAMA
+                        </span>
+                      )}
+                    </div>
 
-              <p className="mt-7 text-[12px] font-semibold tracking-[0.04em] text-ink/70">
-                Media Tersimpan ({portfolio.length}/{PORTFOLIO_LIMIT})
-              </p>
-              <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
-                {portfolio.map((p) => (
-                  <Img
-                    key={p.src}
-                    src={p.src}
-                    alt={p.alt}
-                    className="h-[130px] w-full rounded-md object-cover"
-                  />
+                    <div className="mt-2 flex items-center gap-3">
+                      <label className="inline-flex cursor-pointer items-center gap-2 text-[13px] font-medium text-navy-900 hover:underline">
+                        <UploadCloudIcon />
+                        {unggahSlot === slot
+                          ? 'Mengunggah…'
+                          : fotoVendor[slot]
+                            ? 'Ganti'
+                            : 'Unggah'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="sr-only"
+                          disabled={unggahSlot !== null || !vendorId}
+                          onChange={(e) => pilihFotoVendor(slot, e)}
+                        />
+                      </label>
+                      {fotoVendor[slot] && (
+                        <button
+                          type="button"
+                          disabled={unggahSlot !== null}
+                          onClick={() => hapusFotoVendor(slot)}
+                          className="text-[13px] font-medium text-maroon hover:underline disabled:opacity-50"
+                        >
+                          Hapus
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 ))}
-                <button
-                  type="button"
-                  className="flex h-[130px] w-full items-center justify-center rounded-md border-2 border-dashed border-line text-ink/40 hover:border-navy-900/40 hover:text-ink/70"
-                  aria-label="Tambah media portofolio"
-                >
-                  <PhotoIcon className="h-7 w-7" />
-                </button>
               </div>
+
+              <p className="mt-5 text-[12px] text-muted">
+                Dipotong otomatis jadi 900×600. Slot yang kosong akan tampil sebagai emoji
+                kategori di halaman pelanggan.
+              </p>
             </div>
           </section>
 
-          <AddServiceDialog
-            ref={dialogRef}
+          {/* key memaksa form dipasang ulang tiap ganti sasaran, supaya nilai
+              awal tiap field benar-benar segar tanpa menyetel ulang satu-satu. */}
+          <ServiceDialog
+            key={formUntuk === 'baru' ? 'baru' : formUntuk?.service_id ?? 'tutup'}
+            awal={formUntuk === 'baru' ? null : formUntuk}
+            buka={formUntuk !== null}
             defaultNotice={defaultNotice}
-            onAdd={tambah}
+            versiFoto={versiFoto}
+            onTutup={() => setFormUntuk(null)}
+            onSimpan={simpan}
           />
         </>
       )}
@@ -295,30 +388,69 @@ export default function VendorLayananPage() {
   )
 }
 
-/** Form tambah layanan.
+/** Form layanan — dipakai untuk TAMBAH maupun UBAH.
+ *
+ *  Satu form untuk dua hal karena field-nya memang sama persis; yang beda cuma
+ *  nilai awal dan endpoint tujuannya. Dua komponen terpisah berarti dua tempat
+ *  yang harus diperbaiki tiap kali ada field baru.
  *
  *  Pakai <dialog> bawaan browser, bukan modal buatan sendiri: fokus terkunci
  *  di dalam form, Esc menutup, dan latarnya otomatis inert — semua gratis.
- *
- *  Field-nya sengaja persis kolom yang diminta POST /vendors/:id/services,
- *  jadi penyambungannya nanti tinggal mengganti setServices dengan fetch.
  */
-function AddServiceDialog({
-  ref,
+function ServiceDialog({
+  awal,
+  buka,
   defaultNotice,
-  onAdd,
+  versiFoto,
+  onTutup,
+  onSimpan,
 }: {
-  ref: React.RefObject<HTMLDialogElement | null>
+  /** null = tambah layanan baru. */
+  awal: ApiService | null
+  buka: boolean
   defaultNotice: number
-  onAdd: (service: BaruLayanan) => Promise<void>
+  versiFoto: number
+  onTutup: () => void
+  onSimpan: (isi: BaruLayanan) => Promise<void>
 }) {
+  const ref = useRef<HTMLDialogElement>(null)
   const [error, setError] = useState('')
   const [mengirim, setMengirim] = useState(false)
 
+  // undefined = fotonya tidak disentuh, '' = minta dihapus, string = foto baru.
+  const [foto, setFoto] = useState<string | undefined>(undefined)
+  const [memproses, setMemproses] = useState(false)
+
+  // Dibuka dari induknya lewat prop, bukan lewat ref yang dioper turun: dengan
+  // key remount di induk, elemen <dialog>-nya baru tiap kali sasarannya ganti.
+  useEffect(() => {
+    if (buka) ref.current?.showModal()
+  }, [buka])
+
+  async function pilihFoto(file: File | undefined) {
+    if (!file) return
+    setError('')
+    setMemproses(true)
+    try {
+      setFoto(await kecilkanGambar(file, ...PORTOFOLIO))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setMemproses(false)
+    }
+  }
+
+  /** Yang tampil di kotak pratinjau, urut dari yang paling baru dipilih. */
+  const pratinjau =
+    foto !== undefined
+      ? foto || null
+      : awal?.has_photo
+        ? urlFotoLayanan(awal.service_id, versiFoto)
+        : null
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    const form = e.currentTarget
-    const data = new FormData(form)
+    const data = new FormData(e.currentTarget)
 
     const name = String(data.get('service_name') || '').trim()
     const category = String(data.get('category') || '')
@@ -335,15 +467,17 @@ function AddServiceDialog({
 
     setMengirim(true)
     try {
-      await onAdd({
+      await onSimpan({
         service_name: name,
         category,
         description: String(data.get('description') || '').trim(),
         price,
         minimum_notice_days: noticeDays,
+        // Dibiarkan hilang dari body kalau fotonya tidak disentuh — backend
+        // membedakan "tidak dikirim" (biarkan) dari "" (hapus).
+        ...(foto !== undefined ? { image: foto } : {}),
       })
       setError('')
-      form.reset()
       ref.current?.close()
     } catch (err) {
       // Dialog sengaja tidak ditutup kalau gagal — isinya masih dibutuhkan.
@@ -356,17 +490,63 @@ function AddServiceDialog({
   return (
     <dialog
       ref={ref}
-      onClose={() => setError('')}
+      onClose={onTutup}
       className="m-auto w-[min(560px,92vw)] rounded-lg border border-line bg-white p-0 backdrop:bg-navy-900/40"
     >
-      <form onSubmit={handleSubmit} className="p-7">
-        <h2 className="font-display text-[26px] font-semibold">Tambah Layanan Baru</h2>
+      <form onSubmit={handleSubmit} className="max-h-[86vh] overflow-y-auto p-7">
+        <h2 className="font-display text-[26px] font-semibold">
+          {awal ? 'Ubah Layanan' : 'Tambah Layanan Baru'}
+        </h2>
         <p className="mt-1 text-[14px] text-ink/70">
-          Layanan yang ditambahkan langsung tampil di halaman kategori yang sesuai.
+          {awal
+            ? 'Perubahan langsung berlaku di halaman kategori dan detail vendor.'
+            : 'Layanan yang ditambahkan langsung tampil di halaman kategori yang sesuai.'}
         </p>
 
         <div className="mt-6 space-y-5">
-          <Field id="service_name" label="NAMA LAYANAN" placeholder="Contoh: Paket Wedding Intimate" />
+          <div>
+            <span className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
+              FOTO LAYANAN
+            </span>
+            <div className="mt-2 flex items-center gap-4">
+              <div className="h-[86px] w-[130px] shrink-0 overflow-hidden rounded-sm border border-line bg-lavender/25">
+                {pratinjau && (
+                  <img src={pratinjau} alt="" className="h-full w-full object-cover" />
+                )}
+              </div>
+              <div>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-line px-4 py-2 text-[13px] font-medium hover:border-ink">
+                  <UploadCloudIcon />
+                  {memproses ? 'Memproses…' : pratinjau ? 'Ganti Foto' : 'Pilih Foto'}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={(e) => pilihFoto(e.target.files?.[0])}
+                  />
+                </label>
+                {pratinjau && (
+                  <button
+                    type="button"
+                    onClick={() => setFoto('')}
+                    className="ml-3 text-[13px] font-medium text-maroon hover:underline"
+                  >
+                    Hapus
+                  </button>
+                )}
+                <p className="mt-1.5 text-[12px] text-muted">
+                  Dipotong otomatis jadi 900×600. Kosong = pakai emoji kategori.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <Field
+            id="service_name"
+            label="NAMA LAYANAN"
+            placeholder="Contoh: Paket Wedding Intimate"
+            defaultValue={awal?.service_name}
+          />
 
           <div>
             <label htmlFor="category" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
@@ -377,7 +557,7 @@ function AddServiceDialog({
                 id="category"
                 name="category"
                 required
-                defaultValue=""
+                defaultValue={awal?.category ?? ''}
                 className="mt-2 h-11 w-full appearance-none rounded-sm border border-line bg-white px-3 pr-9 text-[14px] outline-none focus:border-navy-900"
               >
                 <option value="" disabled>
@@ -398,13 +578,20 @@ function AddServiceDialog({
           </div>
 
           <div className="grid gap-5 sm:grid-cols-2">
-            <Field id="price" label="HARGA (RP)" type="number" min={0} placeholder="15000000" />
+            <Field
+              id="price"
+              label="HARGA (RP)"
+              type="number"
+              min={0}
+              placeholder="15000000"
+              defaultValue={awal ? Number(awal.price) : undefined}
+            />
             <Field
               id="minimum_notice_days"
               label="WAKTU PERSIAPAN (HARI)"
               type="number"
               min={0}
-              defaultValue={defaultNotice}
+              defaultValue={awal?.minimum_notice_days ?? defaultNotice}
             />
           </div>
 
@@ -416,6 +603,7 @@ function AddServiceDialog({
               id="description"
               name="description"
               rows={4}
+              defaultValue={awal?.description ?? ''}
               placeholder="Jelaskan cakupan layanan, durasi, dan apa saja yang klien dapatkan."
               className="mt-2 w-full rounded-sm border border-line bg-white px-3 py-2.5 text-[14px] outline-none placeholder:text-ink/35 focus:border-navy-900"
             />
@@ -438,10 +626,10 @@ function AddServiceDialog({
           </button>
           <button
             type="submit"
-            disabled={mengirim}
+            disabled={mengirim || memproses}
             className="rounded-md bg-navy-900 px-5 py-2.5 text-[13px] font-semibold text-white disabled:opacity-60"
           >
-            {mengirim ? 'Menyimpan…' : 'Simpan Layanan'}
+            {mengirim ? 'Menyimpan…' : awal ? 'Simpan Perubahan' : 'Simpan Layanan'}
           </button>
         </div>
       </form>
@@ -462,7 +650,7 @@ function Field({
   type?: string
   placeholder?: string
   min?: number
-  defaultValue?: number
+  defaultValue?: string | number
 }) {
   return (
     <div>

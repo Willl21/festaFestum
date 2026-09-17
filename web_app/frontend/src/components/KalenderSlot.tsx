@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { DayPicker } from 'react-day-picker'
 import { id as localeId } from 'react-day-picker/locale'
 import { ChevronDown } from './icons'
@@ -42,6 +42,11 @@ export default function KalenderSlot({
   const [paling, setPaling] = useState<string>('')
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
+  // Lompat otomatis ke bulan pertama yang bisa dipesan cuma boleh SEKALI.
+  // Tanpa penjaga ini, tiap kali orangnya menggeser ke bulan yang memang
+  // kosong, kalendernya menarik dia balik dan bulan itu jadi tidak bisa
+  // dilihat sama sekali.
+  const sudahLompat = useRef(false)
 
   // Satu request per bulan yang dilihat. Rentangnya sengaja melebar satu
   // minggu ke dua arah supaya baris pertama dan terakhir grid — yang berisi
@@ -57,6 +62,20 @@ export default function KalenderSlot({
         setSlots(r.data)
         setPaling(r.earliest_date)
         setGalat('')
+
+        // Layanan dengan minimum_notice_days panjang (mis. EO 14 hari) bikin
+        // SELURUH bulan berjalan mati. Kalendernya terbuka abu-abu semua dan
+        // terbaca seperti "vendor ini tidak bisa dipesan", padahal cukup
+        // menggeser satu bulan. Jadi bukaannya yang dipindahkan ke bulan
+        // pertama yang benar-benar punya tanggal terbuka.
+        const awal = new Date(r.earliest_date + 'T00:00:00')
+        const bedaBulan =
+          awal.getFullYear() * 12 + awal.getMonth()
+          - (bulan.getFullYear() * 12 + bulan.getMonth())
+        if (!sudahLompat.current && bedaBulan > 0) {
+          sudahLompat.current = true
+          setBulan(awal)
+        }
       })
       .catch((e) => !batal && setGalat((e as Error).message))
       .finally(() => !batal && setMemuat(false))
@@ -132,7 +151,9 @@ export default function KalenderSlot({
         {galat ? (
           <p className="mt-3 text-[13px] text-maroon">{galat}</p>
         ) : (
-          <div className="mt-3 grid grid-cols-2 gap-3">
+          // Tiga kolom sejak shift siang dihidupkan; dipersempit jadi satu
+          // kolom di layar sempit supaya labelnya tidak terpotong.
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
             {shifts.map((s) => {
               const bisa = bebasHariIni.has(s.value)
               const aktif = shift === s.value

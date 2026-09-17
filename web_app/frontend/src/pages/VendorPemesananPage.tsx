@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom'
 import { VendorPageHeader, StatusPill } from '../components/VendorLayout'
 import { shifts } from '../data/shifts'
 import { rupiahBulat } from '../lib/format'
-import { listVendorBookings, type ApiBooking } from '../lib/api'
+import { listVendorBookings, konfirmasiBooking, type ApiBooking } from '../lib/api'
 
 /** Jenis acara di DB pakai snake_case; ini tampilannya. */
 const JENIS: Record<string, string> = {
@@ -16,23 +16,52 @@ const JENIS: Record<string, string> = {
   corporate_seminar: 'Seminar / Korporat',
 }
 
-const tabs = ['Semua', 'Mendatang', 'Selesai', 'Dibatalkan'] as const
+const tabs = ['Semua', 'Menunggu', 'Mendatang', 'Selesai', 'Dibatalkan'] as const
 
 /** Status sisi vendor sengaja lebih kasar daripada sisi customer: vendor
  *  peduli "acaranya sudah lewat atau belum", bukan tahap pembayarannya —
  *  nominal yang sudah masuk ditampilkan terpisah di kolom total. */
 function statusPesanan(b: ApiBooking): Exclude<(typeof tabs)[number], 'Semua'> {
   if (b.payment_status === 'cancelled' || b.payment_status === 'expired') return 'Dibatalkan'
+  // Didahulukan di atas tanggal acara: pesanan yang belum dijawab adalah
+  // satu-satunya baris yang menuntut vendor melakukan sesuatu hari ini.
+  if (b.confirm_status === 'menunggu') return 'Menunggu'
   return new Date(b.event_date) < new Date(new Date().toDateString()) ? 'Selesai' : 'Mendatang'
 }
 
-const tone = { Mendatang: 'info', Selesai: 'muted', Dibatalkan: 'warn' } as const
+const tone = { Menunggu: 'warn', Mendatang: 'info', Selesai: 'muted', Dibatalkan: 'warn' } as const
 
 export default function VendorPemesananPage() {
   const [tab, setTab] = useState<(typeof tabs)[number]>('Semua')
   const [bookings, setBookings] = useState<ApiBooking[]>([])
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
+  // booking_id yang tombolnya sedang diproses, supaya klik ganda tidak
+  // mengirim dua jawaban untuk pesanan yang sama.
+  const [sibuk, setSibuk] = useState('')
+
+  async function jawab(b: ApiBooking, action: 'terima' | 'tolak') {
+    // ponytail: window.prompt untuk alasan menolak. Jelek dilihat tapi nol
+    // markup; ganti dengan dialog sendiri kalau tampilannya dipakai demo.
+    const alasan =
+      action === 'tolak'
+        ? window.prompt('Alasan menolak (boleh dikosongkan):') ?? ''
+        : ''
+    setSibuk(b.booking_id)
+    setGalat('')
+    try {
+      const r = await konfirmasiBooking(b.booking_id, action, alasan || undefined)
+      // Ganti barisnya di tempat, jangan ambil ulang seluruh daftar: tabelnya
+      // panjang dan posisi scroll vendor ikut lompat kalau di-render ulang.
+      setBookings((lama) =>
+        lama.map((x) => (x.booking_id === b.booking_id ? r.booking : x))
+      )
+    } catch (e) {
+      setGalat((e as Error).message)
+    } finally {
+      setSibuk('')
+    }
+  }
 
   useEffect(() => {
     listVendorBookings()
@@ -141,6 +170,33 @@ export default function VendorPemesananPage() {
                               Lihat invoice
                             </Link>
                           </details>
+
+                          {b.confirm_status === 'menunggu' && (
+                            <div className="mt-3 flex gap-2">
+                              <button
+                                type="button"
+                                disabled={sibuk === b.booking_id}
+                                onClick={() => jawab(b, 'terima')}
+                                className="rounded-md bg-navy-900 px-3 py-1.5 text-[12px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                              >
+                                {sibuk === b.booking_id ? 'Memproses…' : 'Terima'}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={sibuk === b.booking_id}
+                                onClick={() => jawab(b, 'tolak')}
+                                className="rounded-md border border-maroon px-3 py-1.5 text-[12px] font-semibold text-maroon transition-colors hover:bg-maroon/5 disabled:opacity-60"
+                              >
+                                Tolak
+                              </button>
+                            </div>
+                          )}
+
+                          {b.confirm_status === 'ditolak' && b.confirm_note && (
+                            <p className="mt-3 max-w-[280px] text-[12px] text-muted">
+                              Ditolak: {b.confirm_note}
+                            </p>
+                          )}
                         </td>
                       </tr>
                     )

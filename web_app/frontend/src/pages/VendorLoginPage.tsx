@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { inputClass } from '../components/AuthLayout'
 import { EyeIcon, EyeOffIcon, LockIcon, MailIcon, HelpIcon, NoteIcon } from '../components/icons'
-import { post, saveAuth, clearAuth, type AuthResponse } from '../lib/api'
+import { post, saveAuth, clearAuth, pesanSesiHabis, type AuthResponse } from '../lib/api'
 
 /** Masuk ke workspace vendor. Endpointnya sama persis dengan /masuk
  *  (POST /auth/login) — yang beda cuma pintunya: akun customer ditolak di
@@ -10,7 +10,9 @@ import { post, saveAuth, clearAuth, type AuthResponse } from '../lib/api'
 export default function VendorLoginPage() {
   const navigate = useNavigate()
   const [lihatSandi, setLihatSandi] = useState(false)
-  const [error, setError] = useState('')
+  // Nilai awalnya terisi kalau kita sendiri yang melempar orang ini ke sini
+  // karena sesinya kedaluwarsa (?sesi=habis).
+  const [error, setError] = useState(pesanSesiHabis())
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {

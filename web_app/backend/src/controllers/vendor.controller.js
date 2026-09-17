@@ -70,6 +70,9 @@ async function listVendors(req, res, next) {
 
     const conditions = [];
     const values = [];
+    // Indeks parameter kategori, dipakai ulang oleh price_start_from di SELECT.
+    // null kalau tidak ada filter kategori.
+    let pCat = null;
 
     if (city) {
       if (!VALID_CITIES.includes(city)) {
@@ -108,7 +111,8 @@ async function listVendors(req, res, next) {
 
       if (category) {
         values.push(category);
-        syarat.push(`s.category = $${values.length}`);
+        pCat = values.length;
+        syarat.push(`s.category = $${pCat}`);
       }
 
       if (event_date) {
@@ -155,8 +159,12 @@ async function listVendors(req, res, next) {
              WHERE s.vendor_id = v.vendor_id AND s.is_active = TRUE
            ), '{}'
          ) AS categories,
+         -- Ikut menghormati filter kategori: vendor lintas kategori kalau
+         -- tidak, memasang harga termurah dari kategori LAIN di kartunya —
+         -- mis. harga buket bunga muncul di halaman Event Organizer.
          (SELECT MIN(s.price) FROM services s
-          WHERE s.vendor_id = v.vendor_id AND s.is_active = TRUE) AS price_start_from,
+          WHERE s.vendor_id = v.vendor_id AND s.is_active = TRUE
+            ${pCat ? `AND s.category = $${pCat}` : ''}) AS price_start_from,
          -- Cuma penanda ada/tidak. Gambarnya diambil terpisah lewat
          -- GET /vendors/:id/photo/0 supaya JSON listing tetap ringan.
          EXISTS (
@@ -238,7 +246,12 @@ async function getVendorDetail(req, res, next) {
         [vendorId]
       ),
       pool.query(
-        `SELECT image_id, image_url, caption
+        // image_url TIDAK ikut: isinya data URL ~150 KB per foto, tiga foto per
+        // vendor, dan seluruhnya terkirim tiap kali halaman detail dibuka —
+        // ~450 KB JSON yang tidak bisa di-cache browser. Yang dikirim nomor
+        // slotnya; gambarnya diambil terpisah lewat GET /vendors/:id/photo/:slot
+        // yang membalas berkas asli plus Cache-Control.
+        `SELECT image_id, sort_order, caption
          FROM portfolio_images
          WHERE vendor_id = $1
          ORDER BY sort_order ASC`,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import UlasanVendor from '../components/UlasanVendor'
 import Img from '../components/Img'
 import VendorLocation from '../components/VendorLocation'
 import BackButton from '../components/BackButton'
@@ -39,7 +40,7 @@ export default function MuaDetailPage() {
   const [mengecek, setMengecek] = useState(false)
 
   useEffect(() => {
-    Promise.all([getVendor(id), getVendorServices(id)])
+    Promise.all([getVendor(id), getVendorServices(id, kategori.apiCategory)])
       .then(([v, s]) => {
         const aktif = s.data.filter((x) => x.is_active)
         setVendor(v.vendor)
@@ -83,7 +84,7 @@ export default function MuaDetailPage() {
         if (galat || !vendor) {
           return (
             <div className="mx-auto max-w-[1330px] px-6 py-20">
-              <BackButton fallback={`/${kategori.slug}`} />
+              <BackButton ke={`/${kategori.slug}`} />
               <p className="mt-6 text-[15px]">{galat || 'Vendor tidak ditemukan.'}</p>
             </div>
           )
@@ -91,7 +92,7 @@ export default function MuaDetailPage() {
 
         return (
         <div className="mx-auto max-w-[1330px] px-6 pt-12 pb-20 md:px-12">
-          <BackButton fallback={`/${kategori.slug}`} />
+          <BackButton ke={`/${kategori.slug}`} />
 
           <h1 className="mt-5 font-display text-[38px] font-semibold">{vendor.business_name}</h1>
           <span className="mt-3 inline-block rounded-full bg-pink-100 px-4 py-1.5 text-[13px] text-maroon">
@@ -229,6 +230,10 @@ export default function MuaDetailPage() {
 
           <div className="mt-16">
             <VendorLocation />
+          </div>
+
+          <div className="mt-16">
+            <UlasanVendor vendorId={id} />
           </div>
         </div>
         )

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import UlasanVendor from '../components/UlasanVendor'
 import Img from '../components/Img'
 import VendorLocation from '../components/VendorLocation'
 import BackButton from '../components/BackButton'
@@ -82,7 +83,7 @@ export default function AttireDetailPage() {
   const [mengecek, setMengecek] = useState(false)
 
   useEffect(() => {
-    Promise.all([getVendor(id), getVendorServices(id)])
+    Promise.all([getVendor(id), getVendorServices(id, kat.apiCategory)])
       .then(([r, s]) => {
         setVendor(r.vendor)
         setLayanan(s.data.filter((x) => x.is_active))
@@ -136,7 +137,7 @@ export default function AttireDetailPage() {
         if (galat || !vendor) {
           return (
             <div className="mx-auto max-w-[1330px] px-6 py-20">
-              <BackButton fallback={`/${kat.slug}`} />
+              <BackButton ke={`/${kat.slug}`} />
               <p className="mt-6 text-[15px]">{galat || 'Vendor tidak ditemukan.'}</p>
             </div>
           )
@@ -144,7 +145,7 @@ export default function AttireDetailPage() {
 
         return (
         <div className="mx-auto max-w-[1330px] px-6 pt-12 pb-20 md:px-12">
-          <BackButton fallback={`/${kat.slug}`} />
+          <BackButton ke={`/${kat.slug}`} />
 
           <h1 className="mt-5 font-display text-[38px] font-semibold">{vendor.business_name}</h1>
           <p className="mt-2 text-[14px] text-[#2e6b52]">
@@ -316,6 +317,10 @@ export default function AttireDetailPage() {
 
           <div className="mt-16">
             <VendorLocation />
+          </div>
+
+          <div className="mt-16">
+            <UlasanVendor vendorId={id} />
           </div>
         </div>
         )

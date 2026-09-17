@@ -105,7 +105,7 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
   const [catatan, setCatatan] = useState('')
 
   useEffect(() => {
-    Promise.all([getVendor(id), getVendorServices(id)])
+    Promise.all([getVendor(id), getVendorServices(id, kat.apiCategory)])
       .then(([r, s]) => {
         const aktif = s.data.filter((x) => x.is_active)
         setVendor(r.vendor)
@@ -114,7 +114,7 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
       })
       .catch((e) => setGalat(e.message))
       .finally(() => setMemuat(false))
-  }, [id, params])
+  }, [id, params, kat.apiCategory])
 
   const paket = layanan.find((s) => s.service_id === serviceId) ?? layanan[0]
   const harga = paket ? Number(paket.price) : 0

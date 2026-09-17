@@ -7,7 +7,7 @@ import { SearchIcon, ChevronDown } from '../components/icons'
 import { categories, namaKota, type CategoryKey } from '../data/categories'
 import { shifts } from '../data/shifts'
 import { rupiah } from '../lib/format'
-import { getToken, listMyBookings, type ApiBooking } from '../lib/api'
+import { getToken, listMyBookings, batalBooking, kirimUlasan, type ApiBooking } from '../lib/api'
 
 const KATEGORI: Record<string, CategoryKey> = {
   florist: 'florist',
@@ -21,7 +21,7 @@ type Tab = 'semua' | 'menunggu' | 'aktif' | 'selesai' | 'dibatalkan'
 
 const tabs: { id: Tab; label: string }[] = [
   { id: 'semua', label: 'SEMUA' },
-  { id: 'menunggu', label: 'MENUNGGU PEMBAYARAN' },
+  { id: 'menunggu', label: 'MENUNGGU' },
   { id: 'aktif', label: 'AKTIF' },
   { id: 'selesai', label: 'SELESAI' },
   { id: 'dibatalkan', label: 'DIBATALKAN' },
@@ -39,8 +39,15 @@ function statusPesanan(b: ApiBooking): { tab: Exclude<Tab, 'semua'>; badge: stri
   if (b.payment_status === 'expired') {
     return { tab: 'dibatalkan', badge: 'KEDALUWARSA — SLOT DILEPAS', tone: 'bg-muted/15 text-muted' }
   }
+  // Ditolak vendor berhenti di sini: pesanannya memang batal, tapi alasannya
+  // beda dari batal sendiri dan customer perlu tahu bedanya.
+  if (b.confirm_status === 'ditolak') {
+    return { tab: 'dibatalkan', badge: 'DITOLAK VENDOR', tone: 'bg-maroon/15 text-maroon' }
+  }
   if (b.payment_status === 'pending') {
-    return { tab: 'menunggu', badge: 'MENUNGGU PEMBAYARAN DP', tone: 'bg-amber/15 text-amber' }
+    return b.confirm_status === 'menunggu'
+      ? { tab: 'menunggu', badge: 'MENUNGGU KONFIRMASI VENDOR', tone: 'bg-lavender text-navy-900' }
+      : { tab: 'menunggu', badge: 'DITERIMA — MENUNGGU PEMBAYARAN DP', tone: 'bg-amber/15 text-amber' }
   }
   if (b.payment_status === 'dp_paid') {
     return lewat
@@ -57,11 +64,54 @@ const tanggalPanjang = (s: string) =>
 
 export default function PesananSayaPage() {
   const [pesanan, setPesanan] = useState<ApiBooking[]>([])
-  const [memuat, setMemuat] = useState(true)
+  // Tamu tidak pernah memuat apa pun, jadi berangkat dari false — bukan true
+  // lalu dimatikan lagi di dalam efek. Selain menghemat satu render, itu
+  // menghapus satu-satunya setState sinkron di badan efek halaman ini.
+  const [memuat, setMemuat] = useState(() => !!getToken())
   const [galat, setGalat] = useState('')
   const [tab, setTab] = useState<Tab>('semua')
   const [query, setQuery] = useState('')
   const [filterKategori, setFilterKategori] = useState('semua')
+  const [sibuk, setSibuk] = useState('')
+  // booking_id yang form ulasannya sedang terbuka. Satu form untuk seluruh
+  // daftar, bukan satu state per kartu.
+  const [ulasanUntuk, setUlasanUntuk] = useState('')
+  const [nilai, setNilai] = useState(5)
+  const [komentar, setKomentar] = useState('')
+
+  async function batalkan(p: ApiBooking) {
+    if (!window.confirm('Batalkan pesanan ini? Slotnya akan dilepas untuk orang lain.')) return
+    setSibuk(p.booking_id)
+    setGalat('')
+    try {
+      const r = await batalBooking(p.booking_id)
+      setPesanan((lama) => lama.map((x) => (x.booking_id === p.booking_id ? r.booking : x)))
+    } catch (e) {
+      setGalat((e as Error).message)
+    } finally {
+      setSibuk('')
+    }
+  }
+
+  async function simpanUlasan(p: ApiBooking) {
+    setSibuk(p.booking_id)
+    setGalat('')
+    try {
+      const r = await kirimUlasan(p.booking_id, nilai, komentar.trim() || undefined)
+      // Tempel hasilnya ke kartu yang bersangkutan supaya tombolnya langsung
+      // berganti jadi bintang, tanpa mengambil ulang seluruh daftar.
+      setPesanan((lama) =>
+        lama.map((x) => (x.booking_id === p.booking_id ? { ...x, review: r.review } : x))
+      )
+      setUlasanUntuk('')
+      setKomentar('')
+      setNilai(5)
+    } catch (e) {
+      setGalat((e as Error).message)
+    } finally {
+      setSibuk('')
+    }
+  }
 
   // Navbar menyembunyikan menu ini untuk tamu, tapi URL-nya tetap bisa dibuka
   // langsung (atau token kedaluwarsa di tengah sesi) — jadi halamannya punya
@@ -69,7 +119,7 @@ export default function PesananSayaPage() {
   const masuk = !!getToken()
 
   useEffect(() => {
-    if (!masuk) return setMemuat(false)
+    if (!masuk) return
     listMyBookings()
       .then((r) => setPesanan(r.data))
       .catch((e) => setGalat(e.message))
@@ -291,8 +341,12 @@ export default function PesananSayaPage() {
 
                   <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-6 py-3.5">
                     <span className="text-[11px] text-muted">
-                      {p.payment_status === 'pending'
+                      {p.payment_status === 'pending' && p.confirm_status === 'menunggu'
+                        && 'Slot ditahan sementara. Vendor punya 24 jam untuk menjawab.'}
+                      {p.payment_status === 'pending' && p.confirm_status === 'diterima'
                         && 'Slot ditahan sampai DP masuk — selesaikan pembayaran agar tidak dilepas.'}
+                      {p.confirm_status === 'ditolak' && p.confirm_note
+                        && `Alasan vendor: ${p.confirm_note}`}
                     </span>
                     <div className="flex flex-wrap gap-2.5">
                       <Link
@@ -328,7 +382,10 @@ export default function PesananSayaPage() {
                         </Link>
                       )}
 
-                      {!tertunda && !lunasDp && p.payment_status === 'pending' && (
+                      {/* Backend menolak pembayaran selama vendor belum setuju,
+                          jadi tombolnya pun jangan ditawarkan lebih dulu. */}
+                      {!tertunda && !lunasDp && p.payment_status === 'pending'
+                        && p.confirm_status === 'diterima' && (
                         <Link
                           to={`/checkout/${p.booking_id}`}
                           className="rounded-sm bg-amber px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] text-navy-900 transition-opacity hover:opacity-90"
@@ -336,8 +393,86 @@ export default function PesananSayaPage() {
                           BAYAR DP ({rupiah(dp)})
                         </Link>
                       )}
+
+                      {/* Hanya selama belum ada uang masuk — sesudah itu backend
+                          menolak, karena refund di luar lingkup proyek ini. */}
+                      {p.payment_status === 'pending' && (
+                        <button
+                          type="button"
+                          disabled={sibuk === p.booking_id}
+                          onClick={() => batalkan(p)}
+                          className="rounded-sm border border-line px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] text-maroon transition-colors hover:border-maroon disabled:opacity-60"
+                        >
+                          {sibuk === p.booking_id ? 'MEMPROSES…' : 'BATALKAN'}
+                        </button>
+                      )}
+
+                      {p.review && (
+                        <span className="rounded-sm bg-lavender/40 px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em]">
+                          ULASAN ANDA {'★'.repeat(p.review.rating)}
+                          <span className="text-muted">{'★'.repeat(5 - p.review.rating)}</span>
+                        </span>
+                      )}
+
+                      {/* Syaratnya sama persis dengan yang dijaga backend:
+                          lunas dan acaranya sudah lewat. */}
+                      {!p.review && lunasPenuh
+                        && new Date(p.event_date) < new Date(new Date().toDateString()) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setUlasanUntuk((v) => (v === p.booking_id ? '' : p.booking_id))
+                          }
+                          className="rounded-sm bg-navy-900 px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] text-white transition-opacity hover:opacity-90"
+                        >
+                          {ulasanUntuk === p.booking_id ? 'TUTUP' : 'BERI ULASAN'}
+                        </button>
+                      )}
                     </div>
                   </footer>
+
+                  {ulasanUntuk === p.booking_id && (
+                    <div className="border-t border-line px-6 py-5">
+                      <p className="text-[11px] font-semibold tracking-[0.04em] text-ink/70">
+                        BAGAIMANA PENGALAMAN ANDA DENGAN {p.business_name.toUpperCase()}?
+                      </p>
+
+                      <div className="mt-3 flex gap-1">
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setNilai(n)}
+                            aria-label={`Beri ${n} bintang`}
+                            aria-pressed={nilai === n}
+                            className={`text-[26px] leading-none transition-colors ${
+                              n <= nilai ? 'text-amber' : 'text-line'
+                            }`}
+                          >
+                            ★
+                          </button>
+                        ))}
+                      </div>
+
+                      <textarea
+                        value={komentar}
+                        onChange={(e) => setKomentar(e.target.value)}
+                        rows={3}
+                        maxLength={1000}
+                        placeholder="Ceritakan pengalaman Anda (boleh dikosongkan)"
+                        className="mt-3 w-full rounded-sm border border-line px-3 py-2 text-[14px] outline-none focus:border-navy-900"
+                      />
+
+                      <button
+                        type="button"
+                        disabled={sibuk === p.booking_id}
+                        onClick={() => simpanUlasan(p)}
+                        className="mt-3 h-10 rounded-sm bg-navy-900 px-6 text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                      >
+                        {sibuk === p.booking_id ? 'Mengirim…' : 'Kirim Ulasan'}
+                      </button>
+                    </div>
+                  )}
                 </article>
               )
             })}

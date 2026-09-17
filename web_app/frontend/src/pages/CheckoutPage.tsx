@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import FormSkeleton from '../components/FormSkeleton'
 import TukarHalus from '../components/TukarHalus'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import Img from '../components/Img'
 import FlowLayout from '../components/FlowLayout'
 import { LockIcon, ShieldIcon } from '../components/icons'
@@ -66,6 +66,33 @@ export default function CheckoutPage() {
             <p className="mx-auto max-w-[1330px] px-6 py-20 text-[15px]">
               {galat || 'Pesanan tidak ditemukan.'}
             </p>
+          )
+        }
+
+        // Checkout dialamatkan lewat booking_id di URL, jadi halaman ini bisa
+        // dibuka langsung — termasuk untuk pesanan yang vendornya belum
+        // menjawab. Backend sudah menolak charge-nya; ini supaya orangnya
+        // dapat penjelasan, bukan error 409 dari tombol Bayar.
+        if (booking.confirm_status !== 'diterima') {
+          const ditolak = booking.confirm_status === 'ditolak'
+          return (
+            <div className="mx-auto max-w-[560px] px-6 py-20 text-center">
+              <h1 className="font-display text-[28px] font-semibold">
+                {ditolak ? 'Pesanan ini ditolak vendor' : 'Menunggu konfirmasi vendor'}
+              </h1>
+              <p className="mt-3 text-[15px] leading-relaxed text-ink/75">
+                {ditolak
+                  ? booking.confirm_note
+                    || 'Vendor tidak bisa menerima pesanan ini. Slotnya sudah dilepas kembali.'
+                  : 'Pembayaran dibuka setelah vendor menerima pesanan Anda. Slot acara tetap ditahan selama menunggu.'}
+              </p>
+              <Link
+                to="/pesanan"
+                className="mt-7 inline-flex h-11 items-center rounded bg-navy-900 px-8 text-[15px] font-medium text-white transition-opacity hover:opacity-90"
+              >
+                Lihat Pesanan Saya
+              </Link>
+            </div>
           )
         }
 

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import PanelSkeleton from '../components/PanelSkeleton'
 import TukarHalus from '../components/TukarHalus'
 import { VendorPageHeader, StatusPill } from '../components/VendorLayout'
 import {
-  ArrowRight, DownloadIcon, FilterIcon, InfoIcon, LockIcon, WalletIcon,
+  ArrowRight, InfoIcon, LockIcon, WalletIcon,
 } from '../components/icons'
 import { rupiahBulat } from '../lib/format'
 import {
@@ -92,6 +93,11 @@ export default function VendorKeuanganPage() {
     }
   }, [])
 
+  // muat() tidak pernah memanggil setState secara sinkron: semuanya sesudah
+  // await, jadi satu kali muat = satu kali render, bukan render berantai yang
+  // dicegah aturan di bawah. Menyalin isi muat() ke dalam efek cuma untuk
+  // mendiamkan linter berarti dua salinan logika pengambilan data per halaman.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { muat() }, [muat])
 
   async function ajukanPenarikan(e: React.FormEvent<HTMLFormElement>) {
@@ -255,13 +261,20 @@ export default function VendorKeuanganPage() {
                   <LockIcon /> Tertahan di Escrow
                 </p>
                 <p className="mt-4 font-display text-[30px] font-semibold">{rupiahBulat(balance.inEscrow)}</p>
+                {/* Aturannya diambil dari lib/saldo.js, bukan dikarang di sini.
+                    Dulu tertulis "setelah klien mengonfirmasi penyelesaian" —
+                    mekanisme itu tidak ada di sistem ini, dan salah menjelaskan
+                    aturan uang lebih berbahaya daripada tombol yang mati. */}
                 <p className="mt-2 text-[13px] text-ink/70">
-                  Dana dari {balance.escrowOrders} pemesanan aktif. Akan dirilis setelah klien
-                  mengonfirmasi penyelesaian.
+                  Dana dari {balance.escrowOrders} pemesanan aktif. Dilepas otomatis setelah
+                  tanggal acaranya lewat, dipotong biaya platform.
                 </p>
-                <button type="button" className="mt-5 flex items-center gap-2 text-[13px] font-semibold">
+                <Link
+                  to="/vendor/pemesanan"
+                  className="mt-5 flex items-center gap-2 text-[13px] font-semibold"
+                >
                   Lihat Detail Pemesanan <ArrowRight className="h-4 w-4" />
-                </button>
+                </Link>
               </section>
 
               <section className="rounded-lg border border-line bg-lavender/25 p-6">
@@ -273,29 +286,20 @@ export default function VendorKeuanganPage() {
                   Biaya layanan platform sebesar <b>{saldo.platform_fee_rate * 100}%</b> dipotong secara otomatis
                   saat dana dipindahkan dari Escrow ke Saldo Tersedia Anda.
                 </p>
-                <button type="button" className="mt-4 text-[13px] font-medium underline underline-offset-4">
-                  Baca Kebijakan Payout
-                </button>
+                {/* Tombol "Baca Kebijakan Payout" dibuang: halamannya tidak
+                    ada, dan aturannya sudah tertulis utuh di paragraf atas. */}
+                <p className="mt-2 text-[13px] text-ink/75">
+                  Penarikan perlu persetujuan admin sebelum dana ditransfer ke rekening Anda.
+                </p>
               </section>
             </div>
 
             <section className="mt-11">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <h2 className="font-display text-[26px] font-semibold">Riwayat Payout & Escrow</h2>
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 rounded-md border border-line bg-white px-4 py-2 text-[13px] font-medium"
-                  >
-                    <FilterIcon /> Filter
-                  </button>
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 rounded-md border border-line bg-white px-4 py-2 text-[13px] font-medium"
-                  >
-                    <DownloadIcon /> Export PDF
-                  </button>
-                </div>
+                {/* Filter & Export PDF dibuang: dua-duanya tidak punya
+                    endpoint, dan riwayat payout di sini jumlahnya puluhan,
+                    bukan ribuan — menyaringnya belum jadi masalah nyata. */}
               </div>
 
               <div className="mt-5 overflow-hidden rounded-lg border border-line bg-white">
@@ -331,12 +335,9 @@ export default function VendorKeuanganPage() {
                   </table>
                 </div>
 
-                <button
-                  type="button"
-                  className="w-full border-t border-line py-4 text-[13px] font-medium text-ink/80 hover:bg-lavender/15"
-                >
-                  Muat Lebih Banyak
-                </button>
+                {/* Tanpa "Muat Lebih Banyak": GET /payouts membalas seluruh
+                    riwayat sekali jalan, jadi tidak ada yang tersisa untuk
+                    dimuat. Tombolnya cuma menjanjikan data yang tidak ada. */}
               </div>
             </section>
           </>

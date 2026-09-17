@@ -6,17 +6,27 @@ import { VendorPageHeader, StatusPill } from '../components/VendorLayout'
 import { ArrowRight, CalendarIcon, ClockIcon, TrendUpIcon, WalletIcon } from '../components/icons'
 import { rupiahBulat } from '../lib/format'
 import {
-  getVendorStats, listVendorBookings,
+  getVendorStats, listVendorBookings, usePengguna,
   type ApiBooking, type VendorStats,
 } from '../lib/api'
 
-/** payment_status DB -> label yang dipakai mockup. */
-const LABEL_STATUS: Record<string, { teks: string; tone: 'warn' | 'info' | 'muted' }> = {
-  pending: { teks: 'Menunggu DP', tone: 'warn' },
-  dp_paid: { teks: 'Dikonfirmasi', tone: 'info' },
-  fully_paid: { teks: 'Lunas', tone: 'info' },
-  cancelled: { teks: 'Dibatalkan', tone: 'muted' },
-  expired: { teks: 'Kedaluwarsa', tone: 'muted' },
+/** Status yang dilihat vendor = gabungan dua kolom, bukan payment_status saja.
+ *
+ *  Sebuah pesanan yang belum dijawab vendornya dulu tampil "Menunggu DP" —
+ *  seolah customernya yang lambat, padahal gilirannya ada di vendor. Dan
+ *  'dp_paid' dulu dilabeli "Dikonfirmasi", yang sekarang bentrok artinya
+ *  dengan konfirmasi vendor. */
+function labelStatus(b: ApiBooking): { teks: string; tone: 'warn' | 'info' | 'muted' } {
+  if (b.payment_status === 'cancelled') {
+    return b.confirm_status === 'ditolak'
+      ? { teks: 'Anda tolak', tone: 'muted' }
+      : { teks: 'Dibatalkan', tone: 'muted' }
+  }
+  if (b.payment_status === 'expired') return { teks: 'Kedaluwarsa', tone: 'muted' }
+  if (b.confirm_status === 'menunggu') return { teks: 'Perlu dijawab', tone: 'warn' }
+  if (b.payment_status === 'pending') return { teks: 'Menunggu DP', tone: 'warn' }
+  if (b.payment_status === 'dp_paid') return { teks: 'DP lunas', tone: 'info' }
+  return { teks: 'Lunas', tone: 'info' }
 }
 
 const inisial = (nama: string) =>
@@ -28,6 +38,7 @@ export default function VendorDashboardPage() {
   const [pesanan, setPesanan] = useState<ApiBooking[]>([])
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
+  const user = usePengguna()
 
   useEffect(() => {
     Promise.all([getVendorStats(), listVendorBookings()])
@@ -63,7 +74,7 @@ export default function VendorDashboardPage() {
         return (
           <>
             <VendorPageHeader
-              title="Selamat datang kembali, Vendor"
+              title={`Selamat datang kembali, ${user?.name ?? 'Vendor'}`}
               description="Berikut adalah ringkasan performa Anda hari ini."
             />
 
@@ -85,12 +96,15 @@ export default function VendorDashboardPage() {
                   yang menuntut tindakan, bukan sekadar angka. */}
               <section className="rounded-lg bg-navy-900 p-6 text-white">
                 <div className="flex items-start justify-between gap-3">
-                  <p className="text-[14px] text-white/85">Permintaan Tertunda</p>
+                  <p className="text-[14px] text-white/85">Perlu Anda Jawab</p>
                   <span className="rounded-md bg-amber/20 p-2 text-amber">
                     <ClockIcon className="h-5 w-5" />
                   </span>
                 </div>
-                <p className="mt-4 font-display text-[30px] font-semibold">{stats.menunggu_dp}</p>
+                <p className="mt-4 font-display text-[30px] font-semibold">{stats.perlu_dijawab}</p>
+                <p className="mt-1 text-[13px] text-white/70">
+                  {stats.menunggu_dp} sudah diterima, menunggu DP customer
+                </p>
                 <Link
                   to="/vendor/pemesanan"
                   className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-md bg-amber text-[13px] font-semibold text-navy-900"
@@ -120,7 +134,7 @@ export default function VendorDashboardPage() {
                   </thead>
                   <tbody>
                     {terbaru.map((o) => {
-                      const st = LABEL_STATUS[o.payment_status] ?? { teks: o.payment_status, tone: 'muted' as const }
+                      const st = labelStatus(o)
                       return (
                         <tr key={o.booking_id} className="border-t border-line">
                           <td className="px-6 py-4">

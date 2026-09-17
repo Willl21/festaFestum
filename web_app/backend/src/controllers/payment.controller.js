@@ -125,7 +125,7 @@ async function charge(req, res, next) {
     // tidak ditemukan sama sekali, jadi balasannya 404 dan ID valid tidak bocor.
     // FOR UPDATE mencegah dua klik "Bayar" bersamaan bikin dua VA.
     const bk = await client.query(
-      `SELECT booking_id, total_price, dp_amount, payment_status
+      `SELECT booking_id, total_price, dp_amount, payment_status, confirm_status
          FROM bookings
         WHERE booking_id = $1 AND user_id = $2
         FOR UPDATE`,
@@ -138,6 +138,18 @@ async function charge(req, res, next) {
     }
 
     const booking = bk.rows[0];
+
+    // Pesanan baru boleh dibayar setelah vendornya setuju. Dijaga di sini,
+    // bukan cuma dengan menyembunyikan tombolnya di frontend: URL halaman
+    // checkout memakai booking_id dan bisa dibuka langsung.
+    if (booking.confirm_status !== 'diterima') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        message: booking.confirm_status === 'ditolak'
+          ? 'Pesanan ini ditolak vendor, jadi tidak bisa dibayar'
+          : 'Vendor belum menerima pesanan ini',
+      });
+    }
 
     // Jumlah SELALU dihitung ulang dari DB. Angka dari browser tidak dipercaya.
     let amount;
