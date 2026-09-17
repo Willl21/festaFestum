@@ -239,7 +239,7 @@ async function getVendorDetail(req, res, next) {
     const [servicesResult, imagesResult] = await Promise.all([
       pool.query(
         `SELECT service_id, service_name, category, description, price,
-                minimum_notice_days
+                minimum_notice_days, details
          FROM services
          WHERE vendor_id = $1 AND is_active = TRUE
          ORDER BY price ASC`,

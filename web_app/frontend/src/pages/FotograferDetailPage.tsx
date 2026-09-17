@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import UlasanVendor from '../components/UlasanVendor'
 import Img from '../components/Img'
+import RincianLayanan from '../components/RincianLayanan'
 import BackButton from '../components/BackButton'
 import KalenderSlot from '../components/KalenderSlot'
 import DetailSkeleton from '../components/DetailSkeleton'
@@ -164,6 +165,8 @@ export default function FotograferDetailPage() {
                         Pesan minimal {p.minimum_notice_days} hari sebelum acara
                       </li>
                     </ul>
+
+                    <RincianLayanan service={p} className="mt-4 border-t border-line pt-4" />
 
                     <button
                       type="button"

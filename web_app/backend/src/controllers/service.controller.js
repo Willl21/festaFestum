@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { periksaDetail } = require('../lib/layananDetail');
 const { gambarBermasalah } = require('../lib/gambar');
 
 const VALID_CATEGORIES = [
@@ -13,7 +14,7 @@ const FOTO_MAX_CHARS = 200_000;
 // halaman katalog bisa memuat belasan layanan. Yang dikirim cuma penandanya;
 // gambarnya diambil terpisah lewat GET /services/:serviceId/photo.
 const KOLOM_LAYANAN = `service_id, vendor_id, service_name, category, description,
-         price, minimum_notice_days, is_active, created_at,
+         price, minimum_notice_days, is_active, created_at, details,
          (image_url IS NOT NULL) AS has_photo`;
 
 /** null kalau tidak ada gambar yang dikirim, string kosong kalau diminta
@@ -35,10 +36,28 @@ async function assertVendorOwnership(vendorId, userId) {
 }
 
 // POST /api/v1/vendors/:vendorId/services  (pemilik vendor)
+// Satu vendor = satu kategori. Dibatasi di level aplikasi, mengikuti pola
+// "satu akun satu profil vendor" — schema-nya sengaja dibiarkan tetap
+// mendukung banyak kategori supaya aturan ini bisa dilonggarkan lagi tanpa
+// migrasi kalau nanti berubah pikiran.
+//
+// Layanan nonaktif ikut dihitung: menonaktifkan layanan bukan menghapusnya
+// (keputusan desain no. 6), dan pesanan lama masih menunjuk ke barisnya.
+async function kategoriLain(vendorId, category, kecualiServiceId = null) {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT category::text AS category
+       FROM services
+      WHERE vendor_id = $1 AND category <> $2::vendor_category
+        AND ($3::uuid IS NULL OR service_id <> $3::uuid)`,
+    [vendorId, category, kecualiServiceId]
+  );
+  return rows.map((r) => r.category);
+}
+
 async function createService(req, res, next) {
   try {
     const { vendorId } = req.params;
-    const { service_name, category, description, price, minimum_notice_days, image } = req.body;
+    const { service_name, category, description, price, minimum_notice_days, image, details } = req.body;
 
     if (!service_name || !category || price === undefined) {
       return res.status(400).json({ message: 'service_name, category, dan price wajib diisi' });
@@ -55,18 +74,32 @@ async function createService(req, res, next) {
     const foto = periksaFoto(image);
     if (foto.salah) return res.status(400).json({ message: foto.salah });
 
+    const rinci = periksaDetail(details, category);
+    if (rinci.salah) return res.status(400).json({ message: rinci.salah });
+
     const isOwner = await assertVendorOwnership(vendorId, req.user.user_id);
     if (!isOwner) {
       return res.status(404).json({ message: 'Vendor tidak ditemukan atau bukan milik Anda' });
     }
 
+    const lain = await kategoriLain(vendorId, category);
+    if (lain.length > 0) {
+      return res.status(409).json({
+        message: `Vendor ini sudah terdaftar di kategori ${lain.join(', ')}.`
+          + ' Satu vendor hanya boleh menjual satu kategori.',
+        kategori_terpakai: lain,
+      });
+    }
+
     const result = await pool.query(
       `INSERT INTO services
-         (vendor_id, service_name, category, description, price, minimum_notice_days, image_url)
-       VALUES ($1, $2, $3, $4, $5, COALESCE($6, 7), $7)
+         (vendor_id, service_name, category, description, price, minimum_notice_days,
+          image_url, details)
+       VALUES ($1, $2, $3, $4, $5, COALESCE($6, 7), $7, COALESCE($8::jsonb, '{}'::jsonb))
        RETURNING ${KOLOM_LAYANAN}`,
       [vendorId, service_name, category, description || null, price,
-       minimum_notice_days ?? null, foto.nilai || null]
+       minimum_notice_days ?? null, foto.nilai || null,
+       rinci.nilai ? JSON.stringify(rinci.nilai) : null]
     );
 
     res.status(201).json({ service: result.rows[0] });
@@ -86,7 +119,7 @@ async function listMyServices(req, res, next) {
   try {
     const result = await pool.query(
       `SELECT s.service_id, s.service_name, s.category, s.description, s.price,
-              s.minimum_notice_days, s.is_active, s.created_at,
+              s.minimum_notice_days, s.is_active, s.created_at, s.details,
               (s.image_url IS NOT NULL) AS has_photo
          FROM services s
         WHERE s.vendor_id IN (SELECT vendor_id FROM vendors WHERE owner_user_id = $1)
@@ -102,11 +135,12 @@ async function listMyServices(req, res, next) {
 
 // GET /api/v1/vendors/:vendorId/services?category=  (public)
 //
-// `category` opsional, tapi halaman detail vendor WAJIB mengirimnya: satu
-// vendor boleh menjual lintas kategori (keputusan desain no. 2), jadi tanpa
-// filter ini halaman Event Organizer ikut menampilkan paket floristnya —
-// terbaca seperti data dobel, dan paket yang salah yang terpilih duluan di
-// halaman pesan.
+// `category` opsional, tapi halaman detail vendor tetap WAJIB mengirimnya.
+// Sejak 17 Sep satu vendor cuma boleh satu kategori, jadi filter ini bukan
+// lagi pengaman utama — tapi data lama masih bisa lintas kategori (aturannya
+// di level aplikasi, bukan constraint DB), dan tanpa filter halaman Event
+// Organizer ikut menampilkan paket floristnya: terbaca seperti data dobel,
+// dan paket yang salah yang terpilih duluan di halaman pesan.
 async function listServices(req, res, next) {
   try {
     const { vendorId } = req.params;
@@ -118,7 +152,7 @@ async function listServices(req, res, next) {
 
     const result = await pool.query(
       `SELECT service_id, service_name, category, description, price,
-              minimum_notice_days, is_active, created_at,
+              minimum_notice_days, is_active, created_at, details,
               (image_url IS NOT NULL) AS has_photo
        FROM services
        WHERE vendor_id = $1 AND is_active = TRUE
@@ -137,7 +171,9 @@ async function listServices(req, res, next) {
 async function updateService(req, res, next) {
   try {
     const { serviceId } = req.params;
-    const { service_name, category, description, price, minimum_notice_days, is_active, image } = req.body;
+    const {
+      service_name, category, description, price, minimum_notice_days, is_active, image, details,
+    } = req.body;
 
     if (category && !VALID_CATEGORIES.includes(category)) {
       return res.status(400).json({ message: 'category tidak valid', allowed: VALID_CATEGORIES });
@@ -145,6 +181,53 @@ async function updateService(req, res, next) {
 
     const foto = periksaFoto(image);
     if (foto.salah) return res.status(400).json({ message: foto.salah });
+
+    // Pindah kategori juga tidak boleh bikin vendor jadi lintas kategori.
+    // Layanan yang sedang diubah dikecualikan dari pengecekan — kalau dia satu
+    // satunya layanan vendor itu, memindahkannya sah dan justru cara vendor
+    // berganti kategori.
+    // Field tambahan divalidasi terhadap kategori EFEKTIF layanan sesudah
+    // perubahan ini, bukan terhadap `category` di body — yang boleh saja tidak
+    // dikirim sama sekali.
+    let rinciJson = null;
+    if (category || details !== undefined) {
+      const milik = await pool.query(
+        `SELECT s.vendor_id, s.category::text AS category FROM services s
+           JOIN vendors v ON v.vendor_id = s.vendor_id
+          WHERE s.service_id = $1 AND v.owner_user_id = $2`,
+        [serviceId, req.user.user_id]
+      );
+      if (milik.rows.length === 0) {
+        return res.status(404).json({ message: 'Layanan tidak ditemukan atau bukan milik Anda' });
+      }
+
+      const { vendor_id: vendorId, category: kategoriLama } = milik.rows[0];
+
+      if (category) {
+        const lain = await kategoriLain(vendorId, category, serviceId);
+        if (lain.length > 0) {
+          return res.status(409).json({
+            message: `Vendor ini sudah terdaftar di kategori ${lain.join(', ')}.`
+              + ' Satu vendor hanya boleh menjual satu kategori.',
+            kategori_terpakai: lain,
+          });
+        }
+      }
+
+      const kategoriEfektif = category || kategoriLama;
+      const rinci = periksaDetail(details, kategoriEfektif);
+      if (rinci.salah) return res.status(400).json({ message: rinci.salah });
+
+      if (rinci.nilai) {
+        rinciJson = JSON.stringify(rinci.nilai);
+      } else if (category && category !== kategoriLama) {
+        // Pindah kategori tanpa mengirim details: isi lama pasti memakai kunci
+        // milik kategori lama (mis. `jenis_bunga` di layanan fotografer), jadi
+        // dikosongkan daripada ditinggal jadi data yang tidak bisa dibaca
+        // siapa pun.
+        rinciJson = '{}';
+      }
+    }
 
     // Kepemilikan diverifikasi lewat join ke vendors di dalam subquery.
     const result = await pool.query(
@@ -155,6 +238,7 @@ async function updateService(req, res, next) {
          price               = COALESCE($4, price),
          minimum_notice_days = COALESCE($5, minimum_notice_days),
          is_active           = COALESCE($6, is_active),
+         details             = COALESCE($10::jsonb, details),
          -- Tiga keadaan, bukan dua: tidak dikirim = biarkan, string kosong =
          -- hapus fotonya, selain itu = ganti. COALESCE saja tidak cukup karena
          -- dia tidak bisa membedakan "tidak diubah" dari "dikosongkan".
@@ -167,7 +251,7 @@ async function updateService(req, res, next) {
        RETURNING ${KOLOM_LAYANAN}`,
       [service_name || null, category || null, description || null,
        price ?? null, minimum_notice_days ?? null, is_active ?? null,
-       foto.nilai, serviceId, req.user.user_id]
+       foto.nilai, serviceId, req.user.user_id, rinciJson]
     );
 
     if (result.rows.length === 0) {

@@ -8,6 +8,7 @@ import {
 } from '../components/icons'
 import { rupiahBulat } from '../lib/format'
 import { categories as katalogKategori } from '../data/categories'
+import { FIELD_LAYANAN, type FieldLayanan } from '../data/layananFields'
 import {
   getMyVendor, getMyServices, tambahLayanan, ubahLayanan, setAktifLayanan,
   simpanFotoVendor, urlFotoLayanan, urlFotoVendor, type ApiService,
@@ -40,6 +41,10 @@ type BaruLayanan = {
   description: string
   price: number
   minimum_notice_days: number
+  /** Field tambahan per kategori. Selalu dikirim utuh: backend menimpa
+   *  seluruh objeknya, jadi field yang dikosongkan vendor memang harus
+   *  hilang. */
+  details: Record<string, string>
 }
 
 /** Emoji per kategori, dipakai sebagai pengganti foto layanan. */
@@ -58,6 +63,25 @@ const SLOT_FOTO = 3
 
 const categoryLabel = (value: string) =>
   categories.find((c) => c.value === value)?.label ?? value
+
+/** Kategori yang dipaksakan ke form, atau null kalau vendor masih bebas memilih.
+ *
+ *  Satu vendor = satu kategori (keputusan desain no. 2, diubah 17 Sep), dan
+ *  backend membalas 409 kalau dilanggar. Mengunci pilihannya di sini supaya
+ *  vendor tidak mengisi satu form penuh lalu ditolak di akhir.
+ *
+ *  `services` di sini IKUT yang nonaktif — GET /vendors/me/services memang
+ *  mengembalikannya. Itu disengaja: layanan yang disembunyikan barisnya masih
+ *  ada dan tetap menentukan kategori vendor.
+ *
+ *  Pengecualiannya satu: mengubah layanan SATU-SATUNYA. Di situ mengganti
+ *  kategori justru satu-satunya cara vendor pindah kategori, dan backend
+ *  memang mengizinkannya. */
+function kunciKategori(services: ApiService[], baru: boolean): string | null {
+  if (services.length === 0) return null
+  if (!baru && services.length === 1) return null
+  return services[0].category
+}
 
 export default function VendorLayananPage() {
   const [services, setServices] = useState<ApiService[]>([])
@@ -379,6 +403,7 @@ export default function VendorLayananPage() {
             buka={formUntuk !== null}
             defaultNotice={defaultNotice}
             versiFoto={versiFoto}
+            kunciKategori={kunciKategori(services, formUntuk === 'baru')}
             onTutup={() => setFormUntuk(null)}
             onSimpan={simpan}
           />
@@ -402,6 +427,7 @@ function ServiceDialog({
   buka,
   defaultNotice,
   versiFoto,
+  kunciKategori: kunci,
   onTutup,
   onSimpan,
 }: {
@@ -410,12 +436,19 @@ function ServiceDialog({
   buka: boolean
   defaultNotice: number
   versiFoto: number
+  /** Kategori yang dipaksakan, atau null kalau vendor bebas memilih. */
+  kunciKategori: string | null
   onTutup: () => void
   onSimpan: (isi: BaruLayanan) => Promise<void>
 }) {
   const ref = useRef<HTMLDialogElement>(null)
   const [error, setError] = useState('')
   const [mengirim, setMengirim] = useState(false)
+
+  // Kategori dijadikan state (bukan uncontrolled seperti field lain) karena
+  // dialah yang menentukan field tambahan mana yang tampil di bawah.
+  const [kategori, setKategori] = useState(awal?.category ?? kunci ?? '')
+  const fieldTambahan = FIELD_LAYANAN[kategori] ?? []
 
   // undefined = fotonya tidak disentuh, '' = minta dihapus, string = foto baru.
   const [foto, setFoto] = useState<string | undefined>(undefined)
@@ -467,12 +500,21 @@ function ServiceDialog({
 
     setMengirim(true)
     try {
+      // Prefiks d_ supaya kunci seperti `durasi` tidak pernah bertabrakan
+      // dengan nama field bawaan di FormData yang sama.
+      const details: Record<string, string> = {}
+      for (const f of FIELD_LAYANAN[category] ?? []) {
+        const isi = String(data.get(`d_${f.nama}`) || '').trim()
+        if (isi) details[f.nama] = isi
+      }
+
       await onSimpan({
         service_name: name,
         category,
         description: String(data.get('description') || '').trim(),
         price,
         minimum_notice_days: noticeDays,
+        details,
         // Dibiarkan hilang dari body kalau fotonya tidak disentuh — backend
         // membedakan "tidak dikirim" (biarkan) dari "" (hapus).
         ...(foto !== undefined ? { image: foto } : {}),
@@ -549,32 +591,62 @@ function ServiceDialog({
           />
 
           <div>
-            <label htmlFor="category" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
+            <label
+              htmlFor="category"
+              className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70"
+            >
               KATEGORI
             </label>
-            <div className="relative">
-              <select
-                id="category"
-                name="category"
-                required
-                defaultValue={awal?.category ?? ''}
-                className="mt-2 h-11 w-full appearance-none rounded-sm border border-line bg-white px-3 pr-9 text-[14px] outline-none focus:border-navy-900"
-              >
-                <option value="" disabled>
-                  Pilih kategori…
-                </option>
-                {categories.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 bottom-3.5 h-4 w-4 text-ink/50" />
-            </div>
-            <p className="mt-1.5 text-[12px] text-muted">
-              Satu vendor boleh menjual lintas kategori — kategori melekat pada layanan, bukan pada
-              profil Anda.
-            </p>
+
+            {kunci ? (
+              // Dikunci, bukan <select disabled>: select yang mati tetap
+              // terlihat seperti sesuatu yang seharusnya bisa dipilih. Nilainya
+              // tetap ikut terkirim lewat input tersembunyi.
+              <>
+                <p
+                  id="category"
+                  className="mt-2 flex h-11 items-center rounded-sm border border-line bg-lavender/25 px-3 text-[14px] text-ink/80"
+                >
+                  {categoryLabel(kunci)}
+                </p>
+                <input type="hidden" name="category" value={kunci} />
+                <p className="mt-1.5 text-[12px] text-muted">
+                  Satu vendor hanya boleh menjual satu kategori, jadi kategori ini mengikuti
+                  layanan Anda yang sudah ada.{' '}
+                  {awal
+                    ? 'Untuk pindah kategori, sisakan satu layanan saja lalu ubah kategorinya.'
+                    : 'Untuk pindah kategori, hapus dulu layanan lain sampai tersisa satu.'}
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="relative">
+                  <select
+                    id="category"
+                    name="category"
+                    required
+                    value={kategori}
+                    onChange={(e) => setKategori(e.target.value)}
+                    className="mt-2 h-11 w-full appearance-none rounded-sm border border-line bg-white px-3 pr-9 text-[14px] outline-none focus:border-navy-900"
+                  >
+                    <option value="" disabled>
+                      Pilih kategori…
+                    </option>
+                    {categories.map((c) => (
+                      <option key={c.value} value={c.value}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 bottom-3.5 h-4 w-4 text-ink/50" />
+                </div>
+                <p className="mt-1.5 text-[12px] text-muted">
+                  {awal
+                    ? 'Ini layanan satu-satunya, jadi mengganti kategorinya sekaligus memindahkan kategori vendor Anda.'
+                    : 'Layanan pertama Anda menentukan kategori vendor. Layanan berikutnya akan mengikuti.'}
+                </p>
+              </>
+            )}
           </div>
 
           <div className="grid gap-5 sm:grid-cols-2">
@@ -608,6 +680,30 @@ function ServiceDialog({
               className="mt-2 w-full rounded-sm border border-line bg-white px-3 py-2.5 text-[14px] outline-none placeholder:text-ink/35 focus:border-navy-900"
             />
           </div>
+
+          {/* Keterangan khusus per kategori. Semuanya opsional — vendor yang
+              baru mulai tidak perlu mengisi tujuh kotak sekaligus, tapi yang
+              mengisinya langsung tampil di halaman detail. */}
+          {kategori && (
+            <div className="border-t border-line pt-5">
+              <p className="text-[11px] font-semibold tracking-[0.06em] text-ink/70">
+                KETERANGAN {categoryLabel(kategori).toUpperCase()}
+              </p>
+              <p className="mt-1 text-[12px] text-muted">
+                Semua opsional. Yang diisi akan tampil di halaman detail layanan Anda.
+              </p>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {fieldTambahan.map((f) => (
+                  <FieldTambahan
+                    key={f.nama}
+                    field={f}
+                    defaultValue={awal?.details?.[f.nama] ?? ''}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {error && (
@@ -634,6 +730,69 @@ function ServiceDialog({
         </div>
       </form>
     </dialog>
+  )
+}
+
+/** Satu kotak keterangan tambahan. Bentuknya ditentukan spesifikasi di
+ *  data/layananFields.ts: pilihan tetap jadi <select>, teks panjang jadi
+ *  <textarea> selebar dua kolom, sisanya <input> biasa. Tidak ada yang
+ *  `required` — itu memang aturannya. */
+function FieldTambahan({
+  field,
+  defaultValue,
+}: {
+  field: FieldLayanan
+  defaultValue: string
+}) {
+  const id = `d_${field.nama}`
+  const kelas =
+    'mt-2 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none'
+    + ' placeholder:text-ink/35 focus:border-navy-900'
+
+  return (
+    <div className={field.panjang ? 'sm:col-span-2' : undefined}>
+      <label htmlFor={id} className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
+        {field.label.toUpperCase()}
+      </label>
+
+      {field.pilihan ? (
+        <div className="relative">
+          <select
+            id={id}
+            name={id}
+            defaultValue={defaultValue}
+            className={`${kelas} h-11 appearance-none pr-9`}
+          >
+            <option value="">Tidak disebutkan</option>
+            {field.pilihan.map((o) => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 bottom-3.5 h-4 w-4 text-ink/50" />
+        </div>
+      ) : field.panjang ? (
+        <textarea
+          id={id}
+          name={id}
+          rows={2}
+          maxLength={600}
+          defaultValue={defaultValue}
+          placeholder={field.placeholder}
+          className={`${kelas} py-2.5`}
+        />
+      ) : (
+        <input
+          id={id}
+          name={id}
+          type="text"
+          inputMode={field.angka ? 'numeric' : undefined}
+          maxLength={200}
+          defaultValue={defaultValue}
+          placeholder={field.placeholder}
+          className={`${kelas} h-11`}
+        />
+      )}
+    </div>
   )
 }
 

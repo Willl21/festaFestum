@@ -215,6 +215,10 @@ export type ApiService = {
   /** Penanda layanan ini punya foto. Gambarnya TIDAK ikut di sini — ambil
    *  lewat urlFotoLayanan(), sama seperti pola foto vendor. */
   has_photo?: boolean
+  /** Field tambahan per kategori (migrasi 012). Selalu objek, `{}` untuk
+   *  layanan yang belum mengisinya. Kuncinya didefinisikan di
+   *  data/layananFields.ts — pakai rincianLayanan() untuk menampilkannya. */
+  details?: Record<string, string>
 }
 
 /** `portfolio` membawa nomor SLOT, bukan gambarnya — pasang lewat

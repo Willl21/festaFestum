@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import UlasanVendor from '../components/UlasanVendor'
 import Img from '../components/Img'
+import RincianLayanan from '../components/RincianLayanan'
 import VendorLocation from '../components/VendorLocation'
 import BackButton from '../components/BackButton'
 import KalenderSlot from '../components/KalenderSlot'
@@ -290,6 +291,14 @@ export default function AttireDetailPage() {
                     <KalenderTanggal tanggal={tglFitting} onPilih={setTglFitting} />
                   </div>
                 </>
+              )}
+
+              {/* Halaman ini tidak punya daftar paket seperti empat halaman
+                  detail lain — cuma layanan pertama yang dipakai — jadi
+                  keterangan tambahannya ditaruh di panel ini, tepat sebelum
+                  harga. */}
+              {utama && (
+                <RincianLayanan service={utama} className="mt-6 border-t border-line pt-4" />
               )}
 
               <div className="mt-6 flex items-baseline justify-between border-t border-line pt-4">

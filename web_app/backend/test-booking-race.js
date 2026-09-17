@@ -1,9 +1,14 @@
 // Uji inti conflict-free booking: 10 user menembak slot yang sama bersamaan,
 // tepat satu harus berhasil. Jalankan dengan server hidup: node test-booking-race.js
 const assert = require('assert');
+const pool = require('./src/config/db');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 const CONCURRENCY = 10;
+
+// Email yang dibuat run ini, untuk disapu di akhir. Dulu tes ini meninggalkan
+// 11 akun + 1 vendor "Race Test …" tiap dijalankan.
+const DIBUAT = [];
 
 async function api(path, { method = 'GET', body, token } = {}) {
   const res = await fetch(`${BASE}${path}`, {
@@ -29,6 +34,7 @@ async function register(role) {
     },
   });
   assert.strictEqual(r.status, 201, `register ${role} gagal: ${JSON.stringify(r.body)}`);
+  DIBUAT.push(`t${tag}@mail.com`);
   return r.token || r.body.token;
 }
 
@@ -108,7 +114,24 @@ function futureDate(daysAhead = 90) {
   assert.strictEqual(after.body.available, false, 'slot harusnya tidak available setelah dibooking');
 
   console.log('OK: conflict-free booking terbukti — 1 sukses, sisanya ditolak 409');
-})().catch((err) => {
-  console.error('GAGAL:', err.message);
-  process.exit(1);
-});
+})()
+  .catch((err) => {
+    console.error('GAGAL:', err.message);
+    process.exitCode = 1;
+  })
+  // Dijalankan lolos maupun gagal. bookings harus mati lebih dulu karena
+  // ON DELETE RESTRICT ke users; vendor dan slotnya ikut CASCADE dari users.
+  .finally(async () => {
+    if (DIBUAT.length) {
+      await pool.query(
+        `DELETE FROM bookings
+          WHERE user_id IN (SELECT user_id FROM users WHERE email = ANY($1::text[]))`,
+        [DIBUAT]
+      );
+      const r = await pool.query(
+        'DELETE FROM users WHERE email = ANY($1::text[])', [DIBUAT]
+      );
+      console.log(`Data uji dibersihkan: ${r.rowCount} akun.`);
+    }
+    await pool.end();
+  });

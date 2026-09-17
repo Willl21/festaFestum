@@ -57,13 +57,23 @@ async function muncul(query) {
   const vendorId = vendor.body.vendor.vendor_id;
 
   // Satu vendor, DUA kategori — persis kasus yang mau diuji.
-  for (const [nama, kategori] of [['Paket Bunga', 'florist'], ['Paket Foto', 'photographer']]) {
-    const s = await api(`/vendors/${vendorId}/services`, {
-      method: 'POST', token,
-      body: { service_name: nama, category: kategori, price: 500000, minimum_notice_days: 7 },
-    });
-    assert.strictEqual(s.status, 201, `buat service gagal: ${JSON.stringify(s.body)}`);
-  }
+  const s = await api(`/vendors/${vendorId}/services`, {
+    method: 'POST', token,
+    body: { service_name: 'Paket Bunga', category: 'florist', price: 500000, minimum_notice_days: 7 },
+  });
+  assert.strictEqual(s.status, 201, `buat service gagal: ${JSON.stringify(s.body)}`);
+
+  // Kategori kedua disisipkan LANGSUNG KE DB, bukan lewat API: sejak aturan
+  // "satu vendor satu kategori" berlaku, POST /vendors/:id/services membalas
+  // 409 untuk kategori kedua. Aturannya di level aplikasi, jadi baris seperti
+  // ini masih mungkin ada dari data lama — dan justru itu yang harus tetap
+  // aman dari kebocoran filter. Menguji lewat API akan menguji penjaganya,
+  // bukan query discovery-nya.
+  await pool.query(
+    `INSERT INTO services (vendor_id, service_name, category, price, minimum_notice_days)
+     VALUES ($1, 'Paket Foto', 'photographer', 500000, 7)`,
+    [vendorId]
+  );
 
   const TGL = futureDate(20);
   await api('/schedules', {

@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const { hitungSaldo, vendorIdMilik } = require('../lib/saldo');
 const { acquireLock, lockHolder, releaseLock } = require('../config/redis');
+const { kunciSeharian, BOOKING_AKTIF } = require('../lib/kategori');
 
 const VALID_SLOTS = ['pagi', 'siang', 'malam'];
 const VALID_EVENT_TYPES = [
@@ -49,7 +50,7 @@ async function createBooking(req, res, next) {
   const client = await pool.connect();
   try {
     const svc = await client.query(
-      `SELECT vendor_id, price, minimum_notice_days,
+      `SELECT vendor_id, price, minimum_notice_days, category,
               ($2::date >= CURRENT_DATE + minimum_notice_days) AS notice_ok
        FROM services WHERE service_id = $1 AND is_active = TRUE`,
       [service_id, event_date]
@@ -59,7 +60,8 @@ async function createBooking(req, res, next) {
       return res.status(404).json({ message: 'Layanan tidak ditemukan atau sudah tidak aktif' });
     }
 
-    const { vendor_id, price, minimum_notice_days, notice_ok } = svc.rows[0];
+    const { vendor_id, price, minimum_notice_days, category, notice_ok } = svc.rows[0];
+    const seharian = kunciSeharian(category);
     vendorId = vendor_id;
 
     if (!notice_ok) {
@@ -84,6 +86,40 @@ async function createBooking(req, res, next) {
 
     await client.query('BEGIN');
 
+    // Kategori yang mengunci seharian mengunci SELURUH slot tanggal itu, urut
+    // menurut time_slot. Urutan yang sama untuk semua transaksi itu yang
+    // mencegah deadlock: tanpa ini, A yang memesan pagi dan B yang memesan
+    // siang saling menunggu slot yang sudah dipegang lawannya.
+    if (seharian) {
+      await client.query(
+        `SELECT schedule_id FROM vendor_schedules
+          WHERE vendor_id = $1 AND event_date = $2::date
+          ORDER BY time_slot
+          FOR UPDATE`,
+        [vendor_id, event_date]
+      );
+
+      // Dicek ke tabel bookings, bukan sekadar ke status slot. Status slot
+      // saja tidak cukup untuk pesanan yang lahir sebelum aturan ini ada, dan
+      // untuk slot yang baru dibuka vendor sesudah tanggalnya terpakai.
+      const dipakai = await client.query(
+        `SELECT 1
+           FROM bookings b
+           JOIN vendor_schedules vs ON vs.schedule_id = b.schedule_id
+          WHERE vs.vendor_id = $1 AND vs.event_date = $2::date
+            AND b.${BOOKING_AKTIF}
+          LIMIT 1`,
+        [vendor_id, event_date]
+      );
+
+      if (dipakai.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          message: 'Vendor ini sudah punya pesanan lain di tanggal tersebut',
+        });
+      }
+    }
+
     // FOR UPDATE mengunci baris slot: request kedua menunggu di sini sampai
     // yang pertama commit, lalu melihat status sudah bukan 'available'.
     const sch = await client.query(
@@ -107,6 +143,19 @@ async function createBooking(req, res, next) {
        WHERE schedule_id = $1`,
       [scheduleId]
     );
+
+    // Sisa shift di tanggal yang sama ditutup, supaya kalender dan
+    // /schedules/check ikut jujur tanpa perlu tahu soal kategori — keduanya
+    // sudah menolak apa pun yang bukan 'available'. 'blocked' dipilih karena
+    // status itu ada di enum sejak awal dan belum dipakai apa pun.
+    if (seharian) {
+      await client.query(
+        `UPDATE vendor_schedules SET status = 'blocked', updated_at = now()
+          WHERE vendor_id = $1 AND event_date = $2::date
+            AND schedule_id <> $3 AND status = 'available'`,
+        [vendor_id, event_date, scheduleId]
+      );
+    }
 
     const booking = await client.query(
       `INSERT INTO bookings
@@ -160,6 +209,11 @@ async function expireStaleBookings() {
          AND status = 'held'
        RETURNING schedule_id`
     );
+    // Shift lain yang ikut terkunci oleh pesanan eksklusif harus ikut dibuka.
+    // Baris yang kembali dari atas sedikit (pesanan yang baru kedaluwarsa di
+    // sapuan ini), jadi perulangannya murah.
+    for (const r of rows) await bukaKunciSeharian(pool, r.schedule_id);
+
     if (rows.length) console.log(`[expiry] ${rows.length} slot dibebaskan`);
   } catch (err) {
     console.error('[expiry] gagal:', err.message);
@@ -344,6 +398,33 @@ async function bebaskanSlot(client, scheduleId) {
   await client.query(
     `UPDATE vendor_schedules SET status = 'available', updated_at = now()
       WHERE schedule_id = $1 AND status = 'held'`,
+    [scheduleId]
+  );
+  await bukaKunciSeharian(client, scheduleId);
+}
+
+// Membuka shift yang ditutup oleh pesanan kategori eksklusif, setelah pesanan
+// itu batal/ditolak/kedaluwarsa.
+//
+// Syaratnya tanggal itu benar-benar sudah bersih: NOT EXISTS mencegah pesanan
+// kedua di tanggal yang sama (data lama sebelum aturan ini ada) kehilangan
+// kuncinya gara-gara pesanan pertama dibatalkan. Dipanggil untuk semua
+// kategori — kalau tidak ada yang 'blocked', query ini tidak mengubah apa pun.
+async function bukaKunciSeharian(client, scheduleId) {
+  await client.query(
+    `UPDATE vendor_schedules vs SET status = 'available', updated_at = now()
+       FROM vendor_schedules asal
+      WHERE asal.schedule_id = $1
+        AND vs.vendor_id = asal.vendor_id
+        AND vs.event_date = asal.event_date
+        AND vs.status = 'blocked'
+        AND NOT EXISTS (
+          SELECT 1 FROM bookings b
+            JOIN vendor_schedules lain ON lain.schedule_id = b.schedule_id
+           WHERE lain.vendor_id = asal.vendor_id
+             AND lain.event_date = asal.event_date
+             AND b.${BOOKING_AKTIF}
+        )`,
     [scheduleId]
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import UlasanVendor from '../components/UlasanVendor'
 import Img from '../components/Img'
+import RincianLayanan from '../components/RincianLayanan'
 import VendorLocation from '../components/VendorLocation'
 import BackButton from '../components/BackButton'
 import KalenderSlot from '../components/KalenderSlot'
@@ -12,15 +13,16 @@ import { serviceIcons } from '../components/serviceIcons'
 import { categories, namaKota } from '../data/categories'
 import { rupiah } from '../lib/format'
 import {
-  getVendor, getVendorServices, cekKetersediaan,
+  getVendor, getVendorServices, cekKetersediaan, urlFotoVendor,
   type ApiService, type ApiVendor,
 } from '../lib/api'
 
 const kategori = categories.florist
 
-/** Hiasan yang TIDAK ada di database: headline dan ikon layanan. Foto vendor
- *  juga belum ada, jadi galerinya memakai emoji kategori lewat <Img>. Sisanya
- *  — nama, kota, deskripsi, daftar layanan, harga — datang dari API. */
+/** Hiasan yang TIDAK ada di database: headline dan ikon layanan.
+ *  Galerinya memakai foto portofolio asli; slot yang kosong jatuh ke emoji
+ *  kategori lewat <Img>. Sisanya — nama, kota, deskripsi, daftar layanan,
+ *  harga — datang dari API. */
 const HEADLINE = 'The Art Of Floristry'
 const IKON = ['sparkle', 'table', 'heart', 'flower'] as const
 
@@ -32,6 +34,8 @@ export default function FloristDetailPage() {
   const [layanan, setLayanan] = useState<ApiService[]>([])
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
+  // Nomor slot yang benar-benar terisi; gambarnya diambil terpisah.
+  const [fotoSlot, setFotoSlot] = useState<number[]>([])
 
   // Tanggal & shift yang dipilih user, lalu hasil pengecekannya ke backend.
   const [tanggal, setTanggal] = useState('')
@@ -44,6 +48,7 @@ export default function FloristDetailPage() {
     Promise.all([getVendor(id), getVendorServices(id, kategori.apiCategory)])
       .then(([v, s]) => {
         setVendor(v.vendor)
+        setFotoSlot(v.portfolio.map((f) => f.sort_order))
         setLayanan(s.data.filter((x) => x.is_active))
       })
       .catch((e) => setGalat(e.message))
@@ -110,22 +115,28 @@ export default function FloristDetailPage() {
               &gt; {vendor.business_name}
             </p>
 
-            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Dulu lima kotak, padahal slot foto vendor cuma tiga — dua di
+                antaranya dijamin jatuh ke emoji apa pun isinya. */}
+            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
               <Img
-                alt={vendor.business_name}
+                src={fotoSlot.includes(0) ? urlFotoVendor(id, 0) : undefined}
+                alt={`Portofolio ${vendor.business_name}`}
                 emoji={kategori.emoji}
                 tint={kategori.tint}
                 className="h-[260px] w-full object-cover sm:col-span-2 lg:h-[520px]"
               />
-              {[1, 2, 3, 4].map((n) => (
-                <Img
-                  key={n}
-                  alt={`${vendor.business_name} ${n}`}
-                  emoji={kategori.emoji}
-                  tint={kategori.tint}
-                  className="h-[180px] w-full object-cover lg:h-[255px]"
-                />
-              ))}
+              <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
+                {[1, 2].map((n) => (
+                  <Img
+                    key={n}
+                    src={fotoSlot.includes(n) ? urlFotoVendor(id, n) : undefined}
+                    alt={`Portofolio ${vendor.business_name} ${n}`}
+                    emoji={kategori.emoji}
+                    tint={kategori.tint}
+                    className="h-[180px] w-full object-cover lg:h-[255px]"
+                  />
+                ))}
+              </div>
             </div>
           </section>
 
@@ -158,6 +169,7 @@ export default function FloristDetailPage() {
                           {s.description || `Minimal pesan ${s.minimum_notice_days} hari sebelum acara.`}
                         </p>
                         <p className="mt-1.5 text-[13px] font-semibold">{rupiah(Number(s.price))}</p>
+                        <RincianLayanan service={s} className="mt-2.5" />
                       </div>
                     </div>
                   )

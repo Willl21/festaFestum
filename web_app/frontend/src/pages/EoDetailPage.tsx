@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import UlasanVendor from '../components/UlasanVendor'
 import Img from '../components/Img'
+import RincianLayanan from '../components/RincianLayanan'
 import BackButton from '../components/BackButton'
 import DetailSkeleton from '../components/DetailSkeleton'
 import TukarHalus from '../components/TukarHalus'
@@ -127,6 +128,8 @@ export default function EoDetailPage() {
                   <ul className="mt-4 list-disc space-y-1.5 pl-5 text-[12px] leading-relaxed text-ink/85">
                     <li>Pesan minimal {p.minimum_notice_days} hari sebelum acara</li>
                   </ul>
+
+                  <RincianLayanan service={p} className="mt-4 border-t border-line pt-4" />
 
                   <div className="mt-auto border-t border-line pt-4">
                     <p className="mt-4 text-[12px] text-muted">Mulai dari</p>

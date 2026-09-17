@@ -62,9 +62,13 @@ const ok = (l) => { pass++; console.log(`  OK  ${l}`); };
   });
 
   const TGL = futureDate(10);
+  // Slot kedua sengaja di tanggal LAIN. Vendornya event_organizer, dan sejak
+  // aturan kunci-seharian berlaku, memesan TGL menutup semua shift lain di
+  // TGL juga — slot bebas yang dihitung stats harus datang dari tanggal lain.
+  const TGL_LAIN = futureDate(11);
   await api('/schedules', {
     method: 'POST', token: vendorToken,
-    body: { slots: [{ event_date: TGL, time_slot: 'pagi' }, { event_date: TGL, time_slot: 'malam' }] },
+    body: { slots: [{ event_date: TGL, time_slot: 'pagi' }, { event_date: TGL_LAIN, time_slot: 'malam' }] },
   });
 
   const booking = await api('/bookings', {

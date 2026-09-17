@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import UlasanVendor from '../components/UlasanVendor'
 import Img from '../components/Img'
+import RincianLayanan from '../components/RincianLayanan'
 import VendorLocation from '../components/VendorLocation'
 import BackButton from '../components/BackButton'
 import KalenderSlot from '../components/KalenderSlot'
@@ -148,6 +149,8 @@ export default function MuaDetailPage() {
                     <p className="mt-2 text-[12px] text-ink/75">
                       ✓ Pesan minimal {p.minimum_notice_days} hari sebelum acara
                     </p>
+
+                    <RincianLayanan service={p} className="mt-3 border-t border-line pt-3" />
 
                     <div className="mt-auto border-t border-line pt-3">
                       <p className="mt-4 text-[11px] text-muted">Mulai dari</p>

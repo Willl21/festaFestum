@@ -197,7 +197,16 @@ async function checkAvailability(req, res, next) {
       return res.json({ ...base, available: false, reason: 'Vendor belum membuka slot di tanggal ini' });
     }
     if (r.status !== 'available') {
-      return res.json({ ...base, available: false, reason: `Slot berstatus ${r.status}` });
+      // 'blocked' hanya lahir dari pesanan kategori eksklusif yang mengunci
+      // seluruh tanggal, jadi alasannya disebut apa adanya — "Slot berstatus
+      // blocked" tidak memberi tahu pemesan kenapa shift lain ikut mati.
+      return res.json({
+        ...base,
+        available: false,
+        reason: r.status === 'blocked'
+          ? 'Vendor sudah punya pesanan lain di tanggal ini'
+          : `Slot berstatus ${r.status}`,
+      });
     }
 
     // Slot bebas menurut DB, tapi mungkin sedang dipegang user lain di checkout.
