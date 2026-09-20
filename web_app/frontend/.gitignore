@@ -37,4 +37,3 @@ dist-ssr
 #
 # Foto yang BUKAN dari Pexels (hero landing, ikon kategori, vendor-bloom-*)
 # tidak kena aturan ini dan tetap ikut git.
-public/img/pexels-*.jpg
