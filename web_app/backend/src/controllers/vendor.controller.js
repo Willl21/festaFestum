@@ -1,6 +1,6 @@
 const pool = require('../config/db');
 const { BOOKING_AKTIF } = require('../lib/kategori');
-const { gambarBermasalah } = require('../lib/gambar');
+const { gambarBermasalah, urlFotoAbsolut } = require('../lib/gambar');
 
 const VALID_CITIES = [
   'jakarta_pusat', 'jakarta_utara', 'jakarta_barat', 'jakarta_selatan', 'jakarta_timur',
@@ -490,7 +490,7 @@ async function getVendorPhoto(req, res, next) {
 
     // Foto hasil seed bisa berupa URL http biasa, bukan data URL — diteruskan
     // sebagai redirect daripada dipaksa jadi berkas.
-    if (!cocok) return res.redirect(302, r.rows[0].image_url);
+    if (!cocok) return res.redirect(302, urlFotoAbsolut(r.rows[0].image_url));
 
     const bytes = Buffer.from(cocok[2], 'base64');
     res.set('Content-Type', cocok[1]);

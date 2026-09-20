@@ -1,6 +1,6 @@
 const pool = require('../config/db');
 const { periksaDetail } = require('../lib/layananDetail');
-const { gambarBermasalah } = require('../lib/gambar');
+const { gambarBermasalah, urlFotoAbsolut } = require('../lib/gambar');
 
 const VALID_CATEGORIES = [
   'event_organizer', 'florist', 'attire_rental', 'makeup_artist', 'photographer',
@@ -309,7 +309,7 @@ async function getServicePhoto(req, res, next) {
 
     // Sama seperti foto vendor: nilai berupa URL http biasa diteruskan sebagai
     // redirect, bukan dipaksa jadi berkas.
-    if (!cocok) return res.redirect(302, r.rows[0].image_url);
+    if (!cocok) return res.redirect(302, urlFotoAbsolut(r.rows[0].image_url));
 
     res.set('Content-Type', cocok[1]);
     // URL-nya tetap sama waktu fotonya diganti, jadi cache-nya harus bisa

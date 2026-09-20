@@ -22,4 +22,18 @@ function gambarBermasalah(value, maxChars, sebutan = 'Gambar') {
   return null;
 }
 
-module.exports = { gambarBermasalah };
+/** Alamat foto yang siap dipakai sebagai target redirect.
+ *
+ *  `unduh-foto.js` menulis '/img/pexels-N.jpg' ke DB — path itu relatif
+ *  terhadap FRONTEND, bukan API. Selama demo satu port keduanya satu origin
+ *  jadi apa adanya benar; sesudah dideploy terpisah (Netlify + Railway),
+ *  browser menyelesaikannya ke domain backend dan dapat 404. Origin frontend
+ *  diambil dari CORS_ORIGINS pertama — daftar yang memang sudah berisi alamat
+ *  frontend, jadi tidak ada variabel baru yang bisa lupa diisi. */
+function urlFotoAbsolut(value) {
+  if (!value.startsWith('/')) return value;
+  const frontend = (process.env.CORS_ORIGINS || '').split(',')[0].trim();
+  return frontend ? frontend.replace(/\/$/, '') + value : value;
+}
+
+module.exports = { gambarBermasalah, urlFotoAbsolut };
