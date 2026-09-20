@@ -27,3 +27,14 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Foto stok Pexels hasil seed (727 berkas, ~59 MB).
+#
+# Sengaja TIDAK di-commit: id fotonya tersimpan di nama berkasnya sendiri
+# (pexels-<id>.jpg) dan jalur itu ada di DB, jadi `node unduh-foto.js` di
+# folder backend bisa mengunduh ulang semuanya tanpa perlu menyimpan URL
+# aslinya di mana pun. Repo tetap kecil, clone baru cukup satu perintah.
+#
+# Foto yang BUKAN dari Pexels (hero landing, ikon kategori, vendor-bloom-*)
+# tidak kena aturan ini dan tetap ikut git.
+public/img/pexels-*.jpg

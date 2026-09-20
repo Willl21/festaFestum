@@ -44,10 +44,9 @@ async function buatUlasan(req, res, next) {
 
     const bk = await client.query(
       `SELECT b.booking_id, b.payment_status, s.vendor_id,
-              (sch.event_date < CURRENT_DATE) AS acara_lewat
+              (b.event_date < CURRENT_DATE) AS acara_lewat
          FROM bookings b
          JOIN services s ON s.service_id = b.service_id
-         JOIN vendor_schedules sch ON sch.schedule_id = b.schedule_id
         WHERE b.booking_id = $1 AND b.user_id = $2`,
       [req.params.bookingId, req.user.user_id]
     );

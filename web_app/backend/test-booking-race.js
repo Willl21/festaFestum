@@ -63,16 +63,12 @@ function futureDate(daysAhead = 90) {
   const serviceId = service.body.service.service_id;
 
   const eventDate = futureDate();
-  const sch = await api('/schedules', {
-    method: 'POST', token: vendorToken,
-    body: { slots: [{ event_date: eventDate, time_slot: 'pagi' }] },
-  });
-  assert.strictEqual(sch.status, 201, `buat schedule gagal: ${JSON.stringify(sch.body)}`);
-  assert.strictEqual(sch.body.created, 1, 'slot harusnya dibuat 1');
+  // Tidak ada slot yang perlu dibuka: sejak migrasi 013 vendor tersedia secara
+  // bawaan, dan POST /schedules justru MENUTUP tanggal.
 
   const check = await api('/schedules/check', {
     method: 'POST',
-    body: { service_id: serviceId, event_date: eventDate, time_slot: 'pagi' },
+    body: { service_id: serviceId, event_date: eventDate, start_time: '08:00' },
   });
   assert.strictEqual(check.status, 200);
   assert.strictEqual(check.body.available, true, `slot harusnya tersedia: ${check.body.reason}`);
@@ -85,7 +81,7 @@ function futureDate(daysAhead = 90) {
   const results = await Promise.all(tokens.map((t) => api('/bookings', {
     method: 'POST', token: t,
     body: {
-      service_id: serviceId, event_date: eventDate, time_slot: 'pagi',
+      service_id: serviceId, event_date: eventDate, start_time: '08:00',
       event_type: 'wedding', event_location_detail: 'Gedung Uji, Depok',
     },
   })));
@@ -109,7 +105,7 @@ function futureDate(daysAhead = 90) {
   // Setelah dipesan, slot tidak boleh tampil available lagi.
   const after = await api('/schedules/check', {
     method: 'POST',
-    body: { service_id: serviceId, event_date: eventDate, time_slot: 'pagi' },
+    body: { service_id: serviceId, event_date: eventDate, start_time: '08:00' },
   });
   assert.strictEqual(after.body.available, false, 'slot harusnya tidak available setelah dibooking');
 

@@ -1,37 +1,51 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { VendorPageHeader } from '../components/VendorLayout'
 import { ChevronDown } from '../components/icons'
-import { shifts } from '../data/shifts'
-import { listMySchedules, tambahSlot, kirim } from '../lib/api'
+import { listMySchedules, tutupTanggal, ubahKapasitas, getMyVendor, kirim } from '../lib/api'
 
 /** Kalender ketersediaan vendor — sumber data untuk schedule-first discovery.
  *
- *  Aturan mainnya sama dengan tabel vendor_schedules: TIDAK ADA baris berarti
- *  vendor tidak menerima pesanan di slot itu. Jadi default tiap tanggal adalah
- *  tutup, dan vendor membukanya satu per satu. Slot yang sudah 'booked' tidak
- *  bisa ditutup lagi dari sini — pesanannya harus dibatalkan lebih dulu.
+ *  ARAHNYA TERBALIK sejak migrasi 013. Dulu: tidak ada baris = tutup, dan
+ *  vendor membuka slotnya satu per satu — yang berarti vendor baru lahir
+ *  dalam keadaan tidak bisa dipesan sampai dia mengisi kalender ini. Sekarang
+ *  vendor tersedia secara bawaan, dan yang dicatat justru penutupannya.
  *
- *  Shift-nya ikut src/data/shifts.ts (dua pilihan, mengikuti mockup), bukan
- *  tiga nilai enum di DB. Membuka 'siang' dari sini percuma selama halaman
- *  detail vendor belum menawarkannya ke customer.
+ *  SATUANNYA TANGGAL sejak migrasi 014. Dulu tiap tanggal dipecah jadi tiga
+ *  shift dan vendor menutupnya satu per satu. Untuk vendor berkapasitas 1
+ *  ketiga tombol itu selalu bergerak barengan — satu pesanan pagi bikin
+ *  ketiganya penuh — jadi yang terlihat cuma tiga kontrol yang hasilnya
+ *  identik. Shift sudah tidak ada; jam acara diisi bebas oleh pemesan dan
+ *  tidak mengunci apa pun.
+ *
+ *  Status yang datang dari server sudah diturunkan di sana:
+ *    available -> tidak ditutup, kapasitas hari itu masih sisa
+ *    blocked   -> vendor menutupnya sendiri (punya schedule_id, bisa dicabut)
+ *    booked    -> kapasitas harian sudah habis
  *
  *  Sudah tersambung ke backend:
- *  baca       -> GET    /api/v1/schedules/me?from=&to=
- *  buka slot  -> POST   /api/v1/schedules
- *  tutup slot -> DELETE /api/v1/schedules/:id
+ *  baca          -> GET    /api/v1/schedules/me?from=&to=
+ *  tutup tanggal -> POST   /api/v1/schedules
+ *  buka lagi     -> DELETE /api/v1/schedules/:id
  *
  *  Perubahan dikirim ke server dulu, baru state lokal ikut. Kalau dibalik,
- *  kalender bisa menampilkan slot terbuka yang sebenarnya gagal tersimpan.
+ *  kalender bisa menampilkan penutupan yang sebenarnya gagal tersimpan.
  */
 
-type SlotStatus = 'available' | 'booked' | 'held' | 'blocked'
+type SlotStatus = 'available' | 'booked' | 'blocked'
 
-/** Satu baris vendor_schedules yang dipegang kalender. `id` dibutuhkan untuk
- *  menutup slot (DELETE butuh schedule_id, bukan tanggal + shift). */
-type Slot = { id: string; status: SlotStatus; customer: string | null }
+/** Satu tanggal di kalender. `id` hanya terisi kalau tanggal itu memang
+ *  penutupan — DELETE butuh schedule_id, dan tanggal 'available' tidak punya
+ *  baris di DB. */
+type Hari = {
+  id: string | null
+  status: SlotStatus
+  customer: string | null
+  jam: string | null
+  terpakai: number
+  jumlahPesanan: number
+}
 
-/** Kunci baris jadwal, sama bentuknya dengan (event_date, time_slot) di DB. */
-type Availability = Record<string, Partial<Record<string, Slot>>>
+type Availability = Record<string, Hari>
 
 const iso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -55,6 +69,12 @@ export default function VendorJadwalPage() {
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
   const [sibuk, setSibuk] = useState('')
+  // Berapa pesanan yang sanggup dilayani dalam sehari. Vendor berkapasitas 1
+  // otomatis penuh seharian begitu dapat satu pesanan; itu yang dulu jadi
+  // aturan "kunci seharian" yang dipatok per kategori.
+  const [kapasitas, setKapasitas] = useState(1)
+  const [vendorId, setVendorId] = useState('')
+  const [simpanKapasitas, setSimpanKapasitas] = useState('')
 
   const days = useMemo(() => {
     const first = new Date(month.getFullYear(), month.getMonth(), 1)
@@ -78,17 +98,17 @@ export default function VendorJadwalPage() {
       const r = await listMySchedules(iso(first), iso(last))
       const next: Availability = {}
       for (const row of r.data) {
-        const tgl = row.event_date.slice(0, 10)
-        next[tgl] = {
-          ...(next[tgl] || {}),
-          [row.time_slot]: {
-            id: row.schedule_id,
-            status: row.status,
-            customer: row.customer_name,
-          },
+        next[row.event_date.slice(0, 10)] = {
+          id: row.schedule_id,
+          status: row.status,
+          customer: row.customer_name,
+          jam: row.start_time,
+          terpakai: row.terpakai,
+          jumlahPesanan: row.jumlah_pesanan,
         }
       }
       setAvailability(next)
+      setKapasitas(r.daily_capacity)
     } catch (e) {
       setGalat((e as Error).message)
     } finally {
@@ -103,24 +123,46 @@ export default function VendorJadwalPage() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { muat() }, [muat])
 
-  const openCount = Object.values(availability).reduce(
-    (n, slots) => n + Object.values(slots).filter((s) => s && s.status === 'available').length,
-    0
-  )
+  // vendor_id tidak ikut di /schedules/me, padahal PATCH kapasitas butuh dia.
+  useEffect(() => {
+    getMyVendor()
+      .then((r) => setVendorId(r.vendor.vendor_id))
+      .catch(() => {})
+  }, [])
 
-  async function toggle(date: string, shift: string) {
-    const kini = availability[date]?.[shift]
-    // Slot yang sudah dipesan atau sedang dipegang user lain tidak boleh
-    // ditutup dari sini; backend juga menolaknya.
-    if (kini && kini.status !== 'available') return
-
-    setSibuk(date + shift)
+  async function simpanKap(n: number) {
+    if (!vendorId || n === kapasitas) return
+    setSimpanKapasitas('menyimpan')
     setGalat('')
     try {
-      if (kini) {
+      await ubahKapasitas(vendorId, n)
+      setSimpanKapasitas('tersimpan')
+      // Kapasitas mengubah tanggal mana yang terbaca penuh, jadi kalendernya
+      // ikut dimuat ulang dari server.
+      await muat()
+    } catch (e) {
+      setGalat((e as Error).message)
+      setSimpanKapasitas('')
+    }
+  }
+
+  const semua = Object.values(availability)
+  const bukaCount = semua.filter((h) => h.status === 'available').length
+  const tutupCount = semua.filter((h) => h.status === 'blocked').length
+
+  async function toggle(date: string) {
+    const kini = availability[date]
+    // Tanggal yang sudah terisi pesanan tidak boleh diapa-apakan dari sini;
+    // backend juga menolaknya dengan menyebut tanggal mana yang bentrok.
+    if (!kini || kini.status === 'booked') return
+
+    setSibuk(date)
+    setGalat('')
+    try {
+      if (kini.status === 'blocked' && kini.id) {
         await kirim(`/schedules/${kini.id}`, 'DELETE')
       } else {
-        await tambahSlot([{ event_date: date, time_slot: shift }])
+        await tutupTanggal([date])
       }
       // Muat ulang dari server, bukan menebak hasilnya di klien.
       await muat()
@@ -131,17 +173,37 @@ export default function VendorJadwalPage() {
     }
   }
 
-  const selectedSlots = selected ? availability[selected] || {} : {}
+  const hariDipilih = selected ? availability[selected] : undefined
 
   return (
     <>
       <VendorPageHeader
         title="Jadwal & Ketersediaan"
-        description="Buka tanggal yang bisa dipesan klien. Tanggal yang tidak dibuka tidak akan muncul di hasil pencarian."
+        description="Anda tersedia secara bawaan. Tutup tanggal yang tidak bisa Anda layani — tanggal yang ditutup tidak akan muncul di hasil pencarian."
         action={
-          <div className="rounded-md border border-line bg-white px-5 py-3 text-center">
-            <p className="font-display text-[24px] font-semibold">{openCount}</p>
-            <p className="text-[12px] text-ink/70">slot terbuka</p>
+          <div className="flex gap-3">
+            <div className="rounded-md border border-line bg-white px-5 py-3 text-center">
+              <p className="font-display text-[24px] font-semibold">{bukaCount}</p>
+              <p className="text-[12px] text-ink/70">
+                tanggal terbuka{tutupCount > 0 && `, ${tutupCount} ditutup`}
+              </p>
+            </div>
+            <div className="rounded-md border border-line bg-white px-5 py-3 text-center">
+              <label htmlFor="kapasitas" className="sr-only">Pesanan per hari</label>
+              <input
+                id="kapasitas"
+                type="number"
+                min={1}
+                max={99}
+                value={kapasitas}
+                onChange={(e) => setKapasitas(Math.min(99, Math.max(1, Number(e.target.value) || 1)))}
+                onBlur={(e) => simpanKap(Math.min(99, Math.max(1, Number(e.target.value) || 1)))}
+                className="w-16 rounded border border-line text-center font-display text-[24px] font-semibold"
+              />
+              <p className="text-[12px] text-ink/70">
+                pesanan/hari{simpanKapasitas === 'tersimpan' && ' ✓'}
+              </p>
+            </div>
           </div>
         }
       />
@@ -186,8 +248,7 @@ export default function VendorJadwalPage() {
               if (!date) return <div key={`pad-${i}`} />
 
               const key = iso(date)
-              const slots = availability[key] || {}
-              const values = Object.values(slots)
+              const hari = availability[key]
               const isPast = date < today
               const isSelected = key === selected
 
@@ -203,16 +264,19 @@ export default function VendorJadwalPage() {
                   } ${isPast ? 'cursor-not-allowed opacity-35' : ''}`}
                 >
                   <span className="text-[13px] font-semibold">{date.getDate()}</span>
-                  <span className="mt-auto flex gap-1">
-                    {values.map((slot, n) => (
-                      <span
-                        key={n}
-                        className={`h-1.5 w-1.5 rounded-full ${
-                          slot && slot.status !== 'available' ? 'bg-maroon' : 'bg-amber'
-                        }`}
-                      />
-                    ))}
-                  </span>
+                  {hari && (
+                    <span className="mt-auto flex w-full items-center justify-between gap-1">
+                      <span className={`h-1.5 w-1.5 rounded-full ${WARNA_STATUS[hari.status]}`} />
+                      {/* Angka terpakai/kapasitas menggantikan tiga titik shift:
+                          tanpa itu, vendor berkapasitas 10 tidak punya cara
+                          melihat berapa yang sudah masuk hari itu. */}
+                      {hari.terpakai > 0 && (
+                        <span className="text-[10px] text-ink/60">
+                          {hari.terpakai}/{kapasitas}
+                        </span>
+                      )}
+                    </span>
+                  )}
                 </button>
               )
             })}
@@ -220,15 +284,15 @@ export default function VendorJadwalPage() {
 
           <div className="mt-6 flex flex-wrap gap-5 border-t border-line pt-4 text-[12px] text-ink/70">
             <Legend className="bg-amber">Terbuka</Legend>
-            <Legend className="bg-maroon">Sudah dipesan</Legend>
-            <Legend className="border border-line bg-white">Tutup</Legend>
+            <Legend className="bg-maroon">Penuh</Legend>
+            <Legend className="border border-line bg-white">Anda tutup</Legend>
           </div>
         </section>
 
         <section className="h-fit rounded-lg border border-line bg-white p-6">
-          {!selected ? (
+          {!selected || !hariDipilih ? (
             <p className="text-[14px] text-ink/70">
-              Pilih tanggal di kalender untuk membuka atau menutup shift-nya.
+              Pilih tanggal di kalender untuk menutup atau membukanya kembali.
             </p>
           ) : (
             <>
@@ -242,55 +306,49 @@ export default function VendorJadwalPage() {
                 })}
               </h2>
 
-              <div className="mt-6 space-y-3">
-                {shifts.map((s) => {
-                  const slot = selectedSlots[s.value]
-                  // 'held' = sedang dipegang user lain di checkout; sama-sama
-                  // tidak boleh ditutup vendor.
-                  const terkunci = !!slot && slot.status !== 'available'
-                  const terbuka = !!slot && slot.status === 'available'
-                  const sedang = sibuk === selected + s.value
+              <p className="mt-4 text-[13px] text-ink/70">
+                {hariDipilih.terpakai} dari {kapasitas} terpakai
+              </p>
 
-                  return (
-                    <div
-                      key={s.value}
-                      className={`flex items-center justify-between gap-3 rounded-md border p-4 ${
-                        terkunci ? 'border-maroon/40 bg-maroon/5' : 'border-line'
-                      }`}
-                    >
-                      <div>
-                        <p className="text-[14px] font-semibold">{s.label}</p>
-                        <p className="text-[12px] text-ink/65">{s.hours}</p>
-                      </div>
+              {hariDipilih.status === 'booked' ? (
+                <div className="mt-4 rounded-md border border-maroon/40 bg-maroon/5 p-4">
+                  <p className="text-[13px] font-medium text-maroon">Kapasitas penuh</p>
+                  {hariDipilih.customer && (
+                    <p className="mt-1 text-[12px] text-ink/70">
+                      {hariDipilih.customer}
+                      {hariDipilih.jam && ` · ${hariDipilih.jam}`}
+                      {hariDipilih.jumlahPesanan > 1 && ` +${hariDipilih.jumlahPesanan - 1} lainnya`}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={sibuk === selected}
+                  onClick={() => toggle(selected)}
+                  className={`mt-4 w-full rounded-md px-4 py-3 text-[13px] font-semibold transition-colors disabled:opacity-50 ${
+                    hariDipilih.status === 'available'
+                      ? 'bg-amber text-navy-900'
+                      : 'border border-line text-ink/70 hover:border-ink'
+                  }`}
+                >
+                  {sibuk === selected
+                    ? 'Menyimpan...'
+                    : hariDipilih.status === 'available'
+                      ? 'Terbuka — klik untuk tutup'
+                      : 'Ditutup — klik untuk buka'}
+                </button>
+              )}
 
-                      {terkunci ? (
-                        <span className="rounded-full bg-maroon/10 px-3 py-1 text-right text-[12px] font-medium text-maroon">
-                          {slot.status === 'held' ? 'Sedang diproses' : 'Sudah dipesan'}
-                          {slot.customer && (
-                            <span className="block text-[11px] font-normal">{slot.customer}</span>
-                          )}
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={sedang}
-                          onClick={() => toggle(selected, s.value)}
-                          className={`rounded-md px-4 py-2 text-[12px] font-semibold transition-colors disabled:opacity-50 ${
-                            terbuka
-                              ? 'bg-amber text-navy-900'
-                              : 'border border-line text-ink/70 hover:border-ink'
-                          }`}
-                        >
-                          {sedang ? 'Menyimpan...' : terbuka ? 'Terbuka' : 'Tutup'}
-                        </button>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+              {hariDipilih.status !== 'booked' && hariDipilih.terpakai > 0 && (
+                <p className="mt-3 text-[12px] text-muted">
+                  Sudah ada {hariDipilih.jumlahPesanan} pesanan di tanggal ini, jadi tanggalnya tidak
+                  bisa ditutup sampai pesanannya dibatalkan.
+                </p>
+              )}
 
               <p className="mt-5 text-[12px] text-muted">
-                Slot yang sudah dipesan hanya bisa dilepas dengan membatalkan pesanannya di menu
+                Tanggal yang sudah dipesan hanya bisa dilepas dengan membatalkan pesanannya di menu
                 Pemesanan.
               </p>
             </>
@@ -299,6 +357,12 @@ export default function VendorJadwalPage() {
       </div>
     </>
   )
+}
+
+const WARNA_STATUS: Record<SlotStatus, string> = {
+  available: 'bg-amber',
+  booked: 'bg-maroon',
+  blocked: 'border border-line bg-white',
 }
 
 function MonthButton({

@@ -5,7 +5,6 @@ import { Link, useParams } from 'react-router-dom'
 import Img from '../components/Img'
 import { CheckCircleIcon } from '../components/icons'
 import { categories, type CategoryKey } from '../data/categories'
-import { shifts } from '../data/shifts'
 import { rupiah } from '../lib/format'
 import { getBooking, type ApiBooking } from '../lib/api'
 
@@ -59,7 +58,6 @@ export default function KonfirmasiPage() {
         const dibayar = booking.payments
           .filter((p) => p.gateway_status === 'success')
           .reduce((t, p) => t + Number(p.amount), 0)
-        const shiftLabel = shifts.find((x) => x.value === booking.time_slot)?.label ?? booking.time_slot
 
         return (
           <div className="min-h-screen bg-cream px-6 py-16 md:px-12">
@@ -107,7 +105,7 @@ export default function KonfirmasiPage() {
                     <dl className="mt-9 flex flex-wrap justify-between gap-6">
                       <div>
                         <dt className="text-[11px] font-semibold tracking-[0.06em] text-ink/70">TANGGAL ACARA</dt>
-                        <dd className="mt-2 text-[17px]">{`${new Date(booking.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} · ${shiftLabel}`}</dd>
+                        <dd className="mt-2 text-[17px]">{`${new Date(booking.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} · ${booking.start_time}`}</dd>
                       </div>
                       <div className="text-right">
                         <dt className="text-[11px] font-semibold tracking-[0.06em] text-ink/70">TOTAL DIBAYAR</dt>

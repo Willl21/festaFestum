@@ -70,18 +70,15 @@ function tanggal(n) {
   const serviceId = svc.body.service.service_id;
 
   const hariH = tanggal(30);
-  const slot = await api('/schedules', {
-    method: 'POST', token: vendor.token,
-    body: { slots: [{ event_date: hariH, time_slot: 'pagi' }] },
-  });
-  assert.strictEqual(slot.status, 201, `buat slot gagal: ${JSON.stringify(slot.body)}`);
+  // Sejak migrasi 013 vendor tersedia secara bawaan — tidak ada slot yang
+  // perlu dibuka lebih dulu.
 
   const customer = await daftar();
 
   const pesan = () => api('/bookings', {
     method: 'POST', token: customer.token,
     body: {
-      service_id: serviceId, event_date: hariH, time_slot: 'pagi',
+      service_id: serviceId, event_date: hariH, start_time: '08:00',
       event_type: 'wedding', event_location_detail: 'Uji lokasi',
     },
   });
@@ -160,8 +157,7 @@ function tanggal(n) {
   assert.strictEqual(belumLewat.status, 409, 'ulasan sebelum acara berlangsung harus ditolak');
 
   await pool.query(
-    `UPDATE vendor_schedules SET event_date = $2
-      WHERE schedule_id = (SELECT schedule_id FROM bookings WHERE booking_id = $1)`,
+    'UPDATE bookings SET event_date = $2 WHERE booking_id = $1',
     [hidup, tanggal(-1)]
   );
 
@@ -211,18 +207,15 @@ function tanggal(n) {
     process.exitCode = 1;
   })
   .finally(async () => {
-    // Urutannya penting: booking menahan schedule, schedule menahan vendor.
+    // Urutannya tetap penting: payments menahan bookings, bookings menahan
+    // services. Yang hilang cuma lompatan lewat vendor_schedules — bookings
+    // sekarang membawa vendor_id sendiri.
     if (vendorId) {
       await pool.query(
-        `DELETE FROM payments WHERE booking_id IN
-           (SELECT b.booking_id FROM bookings b
-              JOIN vendor_schedules s ON s.schedule_id = b.schedule_id
-             WHERE s.vendor_id = $1)`, [vendorId]
+        'DELETE FROM payments WHERE booking_id IN (SELECT booking_id FROM bookings WHERE vendor_id = $1)',
+        [vendorId]
       );
-      await pool.query(
-        `DELETE FROM bookings WHERE schedule_id IN
-           (SELECT schedule_id FROM vendor_schedules WHERE vendor_id = $1)`, [vendorId]
-      );
+      await pool.query('DELETE FROM bookings WHERE vendor_id = $1', [vendorId]);
       await pool.query('DELETE FROM vendor_schedules WHERE vendor_id = $1', [vendorId]);
       await pool.query('DELETE FROM services WHERE vendor_id = $1', [vendorId]);
       await pool.query('DELETE FROM vendors WHERE vendor_id = $1', [vendorId]);

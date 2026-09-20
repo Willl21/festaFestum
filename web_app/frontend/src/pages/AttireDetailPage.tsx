@@ -13,7 +13,7 @@ import { ArrowRight } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
 import { rupiah } from '../lib/format'
 import {
-  getVendor, getVendorServices, cekKetersediaan,
+  getVendor, getVendorServices, cekKetersediaan, urlFotoVendor,
   type ApiService, type ApiVendor,
 } from '../lib/api'
 
@@ -72,6 +72,9 @@ export default function AttireDetailPage() {
   const [layanan, setLayanan] = useState<ApiService[]>([])
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
+  // Nomor slot portofolio yang TERISI. GET /vendors/:id membalas nomor slot
+  // saja, bukan gambarnya — lihat image-storage-pattern.
+  const [fotoSlot, setFotoSlot] = useState<number[]>([])
 
   const [jenis, setJenis] = useState<'jas' | 'kebaya'>('jas')
   const [size, setSize] = useState('')
@@ -87,6 +90,7 @@ export default function AttireDetailPage() {
     Promise.all([getVendor(id), getVendorServices(id, kat.apiCategory)])
       .then(([r, s]) => {
         setVendor(r.vendor)
+        setFotoSlot(r.portfolio.map((f) => f.sort_order))
         setLayanan(s.data.filter((x) => x.is_active))
       })
       .catch((e) => setGalat(e.message))
@@ -94,16 +98,15 @@ export default function AttireDetailPage() {
   }, [id])
 
   const utama = layanan[0]
-  const [shift, setShift] = useState('')
+  const [jam, setJam] = useState('')
 
   // Jadwal sewa dipakai sebagai tanggal acara — itu hari busananya dipakai.
-  // Shift dulu dikunci 'pagi'; sekarang dipilih lewat kalender, karena
-  // vendor_schedules menyimpan ketersediaan per shift dan slot pagi bisa saja
-  // sudah penuh sementara slot lain masih kosong.
+  // Jamnya jam PENGAMBILAN setelan, diisi bebas oleh penyewa. Dia tidak
+  // menentukan ketersediaan apa pun — yang habis kapasitas harian vendor.
   async function lanjutkan() {
     if (!utama) return
-    if (!tglSewa || !shift) {
-      setCek({ ada: false, alasan: 'Pilih tanggal dan shift dulu.' })
+    if (!tglSewa || !jam) {
+      setCek({ ada: false, alasan: 'Pilih tanggal dan jam dulu.' })
       return
     }
     if (!size) {
@@ -114,12 +117,12 @@ export default function AttireDetailPage() {
     setMengecek(true)
     try {
       const r = await cekKetersediaan({
-        service_id: utama.service_id, event_date: tglSewa, time_slot: shift,
+        service_id: utama.service_id, event_date: tglSewa,
       })
       setCek({ ada: r.available, alasan: r.reason })
       if (r.available) {
         const q = new URLSearchParams({
-          service: utama.service_id, date: tglSewa, slot: shift,
+          service: utama.service_id, date: tglSewa, jam: jam,
           jenis, size, color, fitting: String(fitting),
           ambil: tglAmbil, ...(fitting && tglFitting ? { tglFitting } : {}),
         })
@@ -156,10 +159,24 @@ export default function AttireDetailPage() {
 
           {/* GALERI: satu foto tinggi di kiri, dua bertumpuk di kanan. */}
           <section className="mt-6 grid gap-3 md:grid-cols-2">
-            <Img alt={vendor.business_name} emoji={kat.emoji} tint={kat.tint} className="h-[400px] w-full object-cover md:h-[640px]" />
+            <Img
+              src={fotoSlot.includes(0) ? urlFotoVendor(id, 0) : undefined}
+              alt={vendor.business_name}
+              emoji={kat.emoji}
+              tint={kat.tint}
+              className="h-[400px] w-full object-cover md:h-[640px]"
+            />
             <div className="grid gap-3">
-              <Img alt={`${vendor.business_name} 2`} emoji={kat.emoji} tint={kat.tint} className="h-[200px] w-full object-cover md:h-[310px]" />
-              <Img alt={`${vendor.business_name} 3`} emoji={kat.emoji} tint={kat.tint} className="h-[200px] w-full object-cover md:h-[318px]" />
+              {[1, 2].map((n) => (
+                <Img
+                  key={n}
+                  src={fotoSlot.includes(n) ? urlFotoVendor(id, n) : undefined}
+                  alt={`${vendor.business_name} ${n + 1}`}
+                  emoji={kat.emoji}
+                  tint={kat.tint}
+                  className={`w-full object-cover ${n === 1 ? 'h-[200px] md:h-[310px]' : 'h-[200px] md:h-[318px]'}`}
+                />
+              ))}
             </div>
           </section>
 
@@ -248,8 +265,10 @@ export default function AttireDetailPage() {
                   <KalenderSlot
                     serviceId={utama.service_id}
                     tanggal={tglSewa}
-                    shift={shift}
-                    onPilih={(t, sh) => { setTglSewa(t); setShift(sh); setCek(null) }}
+                    jam={jam}
+                    labelJam="Jam Pengambilan"
+                    keteranganJam="Jam Anda mengambil setelannya di gerai vendor."
+                    onPilih={(t, j) => { setTglSewa(t); setJam(j); setCek(null) }}
                   />
                 </div>
               ) : (
@@ -259,7 +278,7 @@ export default function AttireDetailPage() {
               )}
               {/* Pengambilan bukan slot pemesanan — tidak tersimpan di
                   vendor_schedules dan tidak memakan kuota — jadi kalendernya
-                  polos: tanpa shift, tanpa pengabuan ketersediaan. Batas
+                  polos: tanpa jam, tanpa pengabuan ketersediaan. Batas
                   paling awalnya tanggal sewa, karena baju tidak bisa diambil
                   setelah hari pakainya lewat. */}
               <p className="mt-5 text-[15px] font-semibold">Jadwal Pengambilan</p>

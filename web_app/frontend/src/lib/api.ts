@@ -186,20 +186,19 @@ export type VendorListResponse = {
   pagination: { page: number; limit: number; total: number }
 }
 
-/** Daftar vendor per kategori. `eventDate` + `timeSlot` mengaktifkan
- *  schedule-first discovery dan harus diisi berdua atau tidak sama sekali. */
+/** Daftar vendor per kategori. `eventDate` mengaktifkan schedule-first
+ *  discovery: yang disaring ketersediaan HARI itu — jam acara tidak lagi
+ *  menentukan apa pun sejak migrasi 014. */
 export function listVendors(opts: {
   category: string
   city?: string
   eventDate?: string
-  timeSlot?: string
   limit?: number
 }) {
   return get<VendorListResponse>('/vendors', {
     category: opts.category,
     city: opts.city,
     event_date: opts.eventDate,
-    time_slot: opts.timeSlot,
     limit: String(opts.limit ?? 24),
   })
 }
@@ -249,27 +248,30 @@ export type Availability = {
 }
 
 export const cekKetersediaan = (body: {
-  service_id: string; event_date: string; time_slot: string
+  service_id: string; event_date: string
 }) => post<Availability>('/schedules/check', body)
 
+/** Satu TANGGAL, bukan satu shift — shift dibuang di migrasi 014. */
 export type SlotKetersediaan = {
   event_date: string
-  time_slot: 'pagi' | 'siang' | 'malam'
-  status: 'available' | 'held' | 'booked' | 'blocked'
+  status: 'available' | 'booked' | 'blocked'
+  /** Berapa pesanan lagi yang muat hari itu. 0 berarti penuh. */
+  sisa_kapasitas: number
 }
 
 export type Ketersediaan = {
   service_id: string
   vendor_id: string
   minimum_notice_days: number
+  daily_capacity: number
   /** Tanggal paling awal yang boleh dipesan, sudah menghitung
    *  minimum_notice_days memakai zona waktu server. */
   earliest_date: string
   data: SlotKetersediaan[]
 }
 
-/** Status seluruh slot dalam satu rentang, untuk menggambar kalender.
- *  Tanggal yang tidak muncul di `data` berarti vendor tidak membuka slot. */
+/** Status tiap tanggal dalam satu rentang, untuk menggambar kalender.
+ *  Satu baris per tanggal. */
 export const listKetersediaan = (serviceId: string, from: string, to: string) =>
   get<Ketersediaan>(`/services/${serviceId}/availability`, { from, to })
 
@@ -298,13 +300,19 @@ export type ApiBooking = {
   customer_name: string
   customer_phone: string
   event_date: string
-  time_slot: string
+  /** Jam acara (EO/MUA/fotografer) atau jam kirim (florist/sewa), 'HH:MM'.
+   *  Tidak mengunci apa pun — yang habis kapasitas harian vendor. */
+  start_time: string
   payments: ApiPayment[]
 }
 
+/** `quantity` = berapa buket (florist), berapa setel (sewa), berapa orang
+ *  (MUA). Tidak dikirim berarti 1. Backend mengalikan harga dan DP dengan
+ *  angka ini, dan untuk florist/sewa ikut memotong kapasitas harian vendor
+ *  sebanyak itu — untuk MUA tetap memotong 1, karena yang habis timnya. */
 export const buatBooking = (body: {
-  service_id: string; event_date: string; time_slot: string
-  event_type: string; event_location_detail: string
+  service_id: string; event_date: string; start_time: string
+  event_type: string; event_location_detail: string; quantity?: number
 }) => post<{ booking: ApiBooking }>('/bookings', body)
 
 /** Vendor menjawab pesanan yang masuk. `note` opsional — dipakai untuk
@@ -359,7 +367,7 @@ export type ApiPaymentDetail = ApiPayment & {
   business_name: string
   city: string | null
   event_date: string
-  time_slot: string
+  start_time: string
 }
 
 export const getPayment = (id: string) =>
@@ -387,7 +395,6 @@ export type VendorStats = {
   menunggu_dp: number
   lunas: number
   selesai_minggu_ini: number
-  slot_tersedia: number
 }
 
 export type VendorBalance = {
@@ -403,14 +410,25 @@ export type VendorBalance = {
   penarikan_aktif: boolean
 }
 
+/** Satu petak kalender vendor. Sejak migrasi 013 endpoint ini membalas GRID
+ *  penuh, bukan cuma baris yang ada — 'tidak ada baris' sekarang berarti
+ *  tersedia, jadi petak kosong harus ikut dikirim.
+ *
+ *  schedule_id cuma terisi untuk petak 'blocked' (penutupan yang dibuat
+ *  vendor); itu satu-satunya yang punya baris di DB dan bisa dicabut. */
 export type ApiSchedule = {
-  schedule_id: string
+  schedule_id: string | null
   event_date: string
-  time_slot: string
-  status: 'available' | 'held' | 'booked' | 'blocked'
+  status: 'available' | 'booked' | 'blocked'
+  /** Berapa yang sudah terpakai dari kapasitas hari itu. Dulu informasi ini
+   *  tersirat dari shift mana yang masih hijau. */
+  terpakai: number
   booking_id: string | null
   payment_status: string | null
   customer_name: string | null
+  /** Jam pesanan pertama hari itu, 'HH:MM'. */
+  start_time: string | null
+  jumlah_pesanan: number
 }
 
 export const listVendorBookings = () => get<{ data: ApiBooking[] }>('/bookings/vendor')
@@ -462,10 +480,19 @@ export const urlFotoVendor = (vendorId: string, slot = 0, v?: string | number) =
   `${BASE}/vendors/${vendorId}/photo/${slot}${v ? `?v=${v}` : ''}`
 
 export const listMySchedules = (from: string, to: string) =>
-  get<{ data: ApiSchedule[] }>('/schedules/me', { from, to })
+  get<{ data: ApiSchedule[]; daily_capacity: number }>('/schedules/me', { from, to })
 
-export const tambahSlot = (slots: { event_date: string; time_slot: string }[]) =>
-  post<{ created: number }>('/schedules', { slots })
+/** MENUTUP tanggal, bukan membukanya — lihat catatan di VendorJadwalPage.
+ *  Sejak migrasi 014 satuannya sehari penuh; tidak ada lagi bagian hari yang
+ *  bisa ditutup sendirian. Dibalas 409 kalau ada pesanan aktif di dalamnya. */
+export const tutupTanggal = (dates: string[]) =>
+  post<{ ditutup: number; dilewati: number; schedules: ApiSchedule[] }>('/schedules', { dates })
+
+/** Berapa pesanan yang sanggup dilayani vendor dalam sehari. Untuk MUA dan
+ *  fotografer ini jumlah tim; untuk florist dan sewa jas/kebaya jumlah unit
+ *  yang bisa keluar per hari. */
+export const ubahKapasitas = (vendorId: string, daily_capacity: number) =>
+  kirim<{ vendor: ApiVendor }>(`/vendors/${vendorId}`, 'PATCH', { daily_capacity })
 
 export const tambahLayanan = (vendorId: string, body: Record<string, unknown>) =>
   post<{ service: ApiService }>(`/vendors/${vendorId}/services`, body)

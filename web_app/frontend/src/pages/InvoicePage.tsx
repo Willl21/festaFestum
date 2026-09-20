@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { shifts } from '../data/shifts'
 import { categories, namaKota } from '../data/categories'
 import { rupiahBulat } from '../lib/format'
 import { getBooking, type ApiBooking } from '../lib/api'
@@ -76,7 +75,6 @@ export default function InvoicePage() {
     teks: booking.payment_status,
     kelas: 'border-line bg-cream text-ink',
   }
-  const shift = shifts.find((s) => s.value === booking.time_slot)
   const kategori = Object.values(categories).find((c) => c.apiCategory === booking.category)
 
   return (
@@ -135,8 +133,8 @@ export default function InvoicePage() {
           <div className="mt-3 grid gap-3 text-[13px] sm:grid-cols-3">
             <Baris label="Jenis acara" nilai={labelAcara[booking.event_type] ?? booking.event_type} />
             <Baris
-              label="Tanggal & shift"
-              nilai={`${tanggalPanjang(booking.event_date)} · ${shift?.label ?? booking.time_slot}`}
+              label="Tanggal & jam"
+              nilai={`${tanggalPanjang(booking.event_date)} · ${booking.start_time}`}
             />
             <Baris label="Lokasi" nilai={booking.event_location_detail} />
           </div>

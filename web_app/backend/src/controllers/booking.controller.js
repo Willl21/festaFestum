@@ -1,9 +1,8 @@
 const pool = require('../config/db');
 const { hitungSaldo, vendorIdMilik } = require('../lib/saldo');
 const { acquireLock, lockHolder, releaseLock } = require('../config/redis');
-const { kunciSeharian, BOOKING_AKTIF } = require('../lib/kategori');
+const { perTim: kategoriPerTim, BOOKING_AKTIF } = require('../lib/kategori');
 
-const VALID_SLOTS = ['pagi', 'siang', 'malam'];
 const VALID_EVENT_TYPES = [
   'wedding', 'engagement', 'graduation', 'gala_dinner', 'corporate_seminar',
 ];
@@ -19,28 +18,48 @@ function isValidDate(s) {
 }
 
 // POST /api/v1/bookings  (login)
-// Body: { service_id, event_date, time_slot, event_type, event_location_detail }
+// Body: { service_id, event_date, start_time, event_type, event_location_detail,
+//         quantity? }
 //
 // Tiga lapis pertahanan terhadap double-booking, dari luar ke dalam:
-//   1. Redis lock  — menolak lebih awal, sebelum sentuh DB
-//   2. SELECT ... FOR UPDATE — dua request yang lolos lapis 1 diantrekan DB
-//   3. UNIQUE (schedule_id) di bookings — jaring terakhir kalau 1 & 2 bocor
+//   1. Redis lock — menolak lebih awal, sebelum sentuh DB. Hanya untuk
+//      kategori yang mengunci shift; florist boleh checkout bersamaan.
+//   2. pg_advisory_xact_lock(vendor+tanggal) — menyerialkan semua pemesanan
+//      vendor itu di tanggal itu, jadi hitungan kapasitas tidak bisa balapan.
+//      Menggantikan SELECT ... FOR UPDATE yang dulu mengunci baris jadwal:
+//      barisnya sekarang tidak ada sampai vendor menutup tanggalnya.
+//   3. idx_booking_slot_ke_aktif — jaring terakhir di level DB kalau 1 & 2 bocor.
+//      Indeks unik cuma bisa menjamin "paling banyak satu", jadi tiap pesanan
+//      per_tim memegang NOMOR slot (0..kapasitas-1) dan indeksnya menjamin
+//      tidak ada dua pesanan memegang nomor yang sama. Lihat migrasi 014.
 async function createBooking(req, res, next) {
-  const { service_id, event_date, time_slot, event_type, event_location_detail } = req.body;
+  const {
+    service_id, event_date, start_time, event_type, event_location_detail, quantity,
+  } = req.body;
 
-  if (!service_id || !event_date || !time_slot || !event_type || !event_location_detail) {
+  if (!service_id || !event_date || !start_time || !event_type || !event_location_detail) {
     return res.status(400).json({
-      message: 'service_id, event_date, time_slot, event_type, dan event_location_detail wajib diisi',
+      message: 'service_id, event_date, start_time, event_type, dan event_location_detail wajib diisi',
     });
   }
   if (!isValidDate(event_date)) {
     return res.status(400).json({ message: 'event_date harus format YYYY-MM-DD' });
   }
-  if (!VALID_SLOTS.includes(time_slot)) {
-    return res.status(400).json({ message: 'time_slot tidak valid', allowed: VALID_SLOTS });
+  // Jam acara/kirim. HH:MM 24 jam — bentuk yang dikirim <input type="time">.
+  // Menit bebas, bukan kelipatan tertentu: kelima mockup "Isi data diri"
+  // memakai input jam biasa, bukan daftar pilihan.
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(start_time)) {
+    return res.status(400).json({ message: 'start_time harus format HH:MM (24 jam)' });
   }
   if (!VALID_EVENT_TYPES.includes(event_type)) {
     return res.status(400).json({ message: 'event_type tidak valid', allowed: VALID_EVENT_TYPES });
+  }
+
+  // Jumlah = berapa orang (MUA), berapa buket (florist), berapa setel (sewa).
+  // Tidak dikirim berarti 1, supaya pemanggil lama tetap jalan.
+  const jumlah = quantity === undefined || quantity === null ? 1 : Number(quantity);
+  if (!Number.isInteger(jumlah) || jumlah < 1 || jumlah > 999) {
+    return res.status(400).json({ message: 'quantity harus bilangan bulat 1-999' });
   }
 
   const userId = req.user.user_id;
@@ -50,9 +69,12 @@ async function createBooking(req, res, next) {
   const client = await pool.connect();
   try {
     const svc = await client.query(
-      `SELECT vendor_id, price, minimum_notice_days, category,
-              ($2::date >= CURRENT_DATE + minimum_notice_days) AS notice_ok
-       FROM services WHERE service_id = $1 AND is_active = TRUE`,
+      `SELECT s.vendor_id, s.price, s.minimum_notice_days, s.category,
+              v.daily_capacity,
+              ($2::date >= CURRENT_DATE + s.minimum_notice_days) AS notice_ok
+         FROM services s
+         JOIN vendors  v ON v.vendor_id = s.vendor_id
+        WHERE s.service_id = $1 AND s.is_active = TRUE`,
       [service_id, event_date]
     );
 
@@ -60,8 +82,15 @@ async function createBooking(req, res, next) {
       return res.status(404).json({ message: 'Layanan tidak ditemukan atau sudah tidak aktif' });
     }
 
-    const { vendor_id, price, minimum_notice_days, category, notice_ok } = svc.rows[0];
-    const seharian = kunciSeharian(category);
+    const {
+      vendor_id, price, minimum_notice_days, category, daily_capacity, notice_ok,
+    } = svc.rows[0];
+    // Satu pesanan = satu tim (MUA/EO/fotografer) atau sekian unit stok
+    // (florist/sewa). Yang pertama memotong kapasitas 1 berapa pun jumlahnya.
+    const perTim = kategoriPerTim(category);
+    // Tanggalnya habis begitu ada satu pesanan: cuma vendor per_tim yang
+    // kapasitasnya 1. Yang menentukan perlu-tidaknya lock Redis.
+    const eksklusif = perTim && daily_capacity === 1;
     vendorId = vendor_id;
 
     if (!notice_ok) {
@@ -70,100 +99,115 @@ async function createBooking(req, res, next) {
       });
     }
 
-    // Kalau user sudah hold slot ini lewat /schedules/hold, lock-nya sudah
-    // atas namanya — jangan direbut ulang, cukup dipakai lalu dilepas di akhir.
-    const holder = await lockHolder(vendor_id, event_date, time_slot);
-    if (holder && holder !== userId) {
-      return res.status(409).json({ message: 'Slot sedang diproses user lain' });
-    }
-    if (!holder) {
-      const got = await acquireLock(vendor_id, event_date, time_slot, userId);
-      if (!got) {
-        return res.status(409).json({ message: 'Slot sedang diproses user lain' });
+    // Lock Redis cuma masuk akal kalau tanggalnya memang eksklusif: dihitung
+    // per tim DAN kapasitasnya cuma satu. Florist berkapasitas 10 — dan MUA
+    // berkru 3 — tidak boleh dipaksa antre satu-satu di checkout, karena
+    // tanggalnya memang muat lebih dari satu pesanan.
+    if (eksklusif) {
+      // Kalau user sudah hold tanggal ini lewat /schedules/hold, lock-nya
+      // sudah atas namanya — jangan direbut ulang, cukup dipakai lalu
+      // dilepas di akhir.
+      const holder = await lockHolder(vendor_id, event_date);
+      if (holder && holder !== userId) {
+        return res.status(409).json({ message: 'Tanggal sedang diproses user lain' });
       }
+      if (!holder) {
+        const got = await acquireLock(vendor_id, event_date, userId);
+        if (!got) {
+          return res.status(409).json({ message: 'Tanggal sedang diproses user lain' });
+        }
+      }
+      weOwnTheLock = true;
     }
-    weOwnTheLock = true;
 
     await client.query('BEGIN');
 
-    // Kategori yang mengunci seharian mengunci SELURUH slot tanggal itu, urut
-    // menurut time_slot. Urutan yang sama untuk semua transaksi itu yang
-    // mencegah deadlock: tanpa ini, A yang memesan pagi dan B yang memesan
-    // siang saling menunggu slot yang sudah dipegang lawannya.
-    if (seharian) {
-      await client.query(
-        `SELECT schedule_id FROM vendor_schedules
-          WHERE vendor_id = $1 AND event_date = $2::date
-          ORDER BY time_slot
-          FOR UPDATE`,
-        [vendor_id, event_date]
-      );
-
-      // Dicek ke tabel bookings, bukan sekadar ke status slot. Status slot
-      // saja tidak cukup untuk pesanan yang lahir sebelum aturan ini ada, dan
-      // untuk slot yang baru dibuka vendor sesudah tanggalnya terpakai.
-      const dipakai = await client.query(
-        `SELECT 1
-           FROM bookings b
-           JOIN vendor_schedules vs ON vs.schedule_id = b.schedule_id
-          WHERE vs.vendor_id = $1 AND vs.event_date = $2::date
-            AND b.${BOOKING_AKTIF}
-          LIMIT 1`,
-        [vendor_id, event_date]
-      );
-
-      if (dipakai.rows.length > 0) {
-        await client.query('ROLLBACK');
-        return res.status(409).json({
-          message: 'Vendor ini sudah punya pesanan lain di tanggal tersebut',
-        });
-      }
-    }
-
-    // FOR UPDATE mengunci baris slot: request kedua menunggu di sini sampai
-    // yang pertama commit, lalu melihat status sudah bukan 'available'.
-    const sch = await client.query(
-      `SELECT schedule_id FROM vendor_schedules
-       WHERE vendor_id = $1 AND event_date = $2::date AND time_slot = $3::time_slot
-         AND status = 'available'
-       FOR UPDATE`,
-      [vendor_id, event_date, time_slot]
-    );
-
-    if (sch.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ message: 'Slot tidak tersedia' });
-    }
-
-    const scheduleId = sch.rows[0].schedule_id;
-    const dpAmount = (Number(price) * DP_RATE).toFixed(2);
-
+    // Semua pemesanan vendor ini di tanggal ini diserialkan di sini. Inilah
+    // yang membuat hitungan kapasitas — dan pemilihan nomor slot di bawah —
+    // tidak bisa balapan.
     await client.query(
-      `UPDATE vendor_schedules SET status = 'held', updated_at = now()
-       WHERE schedule_id = $1`,
-      [scheduleId]
+      'SELECT pg_advisory_xact_lock(hashtext($1))',
+      [`${vendor_id}:${event_date}`]
     );
 
-    // Sisa shift di tanggal yang sama ditutup, supaya kalender dan
-    // /schedules/check ikut jujur tanpa perlu tahu soal kategori — keduanya
-    // sudah menolak apa pun yang bukan 'available'. 'blocked' dipilih karena
-    // status itu ada di enum sejak awal dan belum dipakai apa pun.
-    if (seharian) {
-      await client.query(
-        `UPDATE vendor_schedules SET status = 'blocked', updated_at = now()
-          WHERE vendor_id = $1 AND event_date = $2::date
-            AND schedule_id <> $3 AND status = 'available'`,
-        [vendor_id, event_date, scheduleId]
-      );
+    // Baris vendor_schedules sekarang HANYA berarti "vendor menutup ini".
+    // Tidak ada baris = tersedia.
+    const tutup = await client.query(
+      `SELECT 1 FROM vendor_schedules
+        WHERE vendor_id = $1 AND event_date = $2::date`,
+      [vendor_id, event_date]
+    );
+    if (tutup.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Vendor tidak menerima pesanan di tanggal ini' });
     }
+
+    // per_tim dibaca dari BARIS PESANANNYA, bukan dari kategori layanan
+    // yang sedang dipesan: satu vendor satu kategori, jadi seluruh pesanannya
+    // dihitung dengan aturan yang sama, termasuk pesanan lama.
+    const pakai = await client.query(
+      `SELECT COALESCE(SUM(CASE WHEN per_tim THEN 1 ELSE quantity END), 0)::int AS terpakai
+         FROM bookings
+        WHERE vendor_id = $1 AND event_date = $2::date AND ${BOOKING_AKTIF}`,
+      [vendor_id, event_date]
+    );
+
+    const butuh = perTim ? 1 : jumlah;
+    const sisa = daily_capacity - pakai.rows[0].terpakai;
+    if (butuh > sisa) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        message: sisa <= 0
+          ? 'Vendor sudah penuh di tanggal tersebut'
+          : `Vendor hanya sanggup ${sisa} lagi di tanggal tersebut`,
+        sisa_kapasitas: Math.max(0, sisa),
+      });
+    }
+
+    // Nomor slot untuk pesanan per_tim: angka bebas TERKECIL di
+    // [0, daily_capacity). Dipilih di dalam advisory lock, jadi dua pemesan
+    // tidak bisa mendapat angka yang sama; kalaupun lock-nya bocor,
+    // idx_booking_slot_ke_aktif menolak yang kedua di level DB.
+    //
+    // Pesanan yang tidak per_tim tidak bernomor (NULL) — kapasitasnya dipotong
+    // per unit, dan beberapa pesanan memang boleh berbagi hari yang sama.
+    let slotKe = null;
+    if (perTim) {
+      const bebas = await client.query(
+        `SELECT n FROM generate_series(0, $3::int - 1) n
+          WHERE NOT EXISTS (
+            SELECT 1 FROM bookings
+             WHERE vendor_id = $1 AND event_date = $2::date
+               AND slot_ke = n AND per_tim AND ${BOOKING_AKTIF}
+          )
+          ORDER BY n LIMIT 1`,
+        [vendor_id, event_date, daily_capacity]
+      );
+      // Tidak mungkin kosong: hitungan kapasitas di atas sudah lolos. Kalau
+      // toh kosong, itu berarti kedua hitungan tidak sepakat — tolak, jangan
+      // menyimpan pesanan tanpa nomor.
+      if (bebas.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'Vendor sudah penuh di tanggal tersebut' });
+      }
+      slotKe = bebas.rows[0].n;
+    }
+
+    // Nominal selalu dihitung ulang di sini dari harga layanan di DB — angka
+    // dari browser tidak dipercaya, termasuk jumlahnya.
+    const totalPrice = (Number(price) * jumlah).toFixed(2);
+    const dpAmount = (Number(totalPrice) * DP_RATE).toFixed(2);
 
     const booking = await client.query(
       `INSERT INTO bookings
-         (user_id, service_id, schedule_id, event_type, event_location_detail,
-          total_price, dp_amount, soft_lock_expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, now() + interval '24 hours')
+         (user_id, service_id, vendor_id, event_date, start_time, per_tim,
+          slot_ke, quantity, event_type, event_location_detail, total_price,
+          dp_amount, soft_lock_expires_at)
+       VALUES ($1, $2, $3, $4::date, $5::time, $6, $7, $8, $9, $10, $11, $12,
+               now() + interval '24 hours')
        RETURNING *`,
-      [userId, service_id, scheduleId, event_type, event_location_detail, price, dpAmount]
+      [userId, service_id, vendor_id, event_date, start_time, perTim,
+       slotKe, jumlah, event_type, event_location_detail, totalPrice, dpAmount]
     );
 
     await client.query('COMMIT');
@@ -176,45 +220,37 @@ async function createBooking(req, res, next) {
     client.release();
     // Lock dilepas apa pun hasilnya: kalau booking sukses, DB (status 'held')
     // yang jadi penjaga; kalau gagal, slot harus segera bebas untuk user lain.
-    if (weOwnTheLock) await releaseLock(vendorId, event_date, time_slot, userId);
+    if (weOwnTheLock) await releaseLock(vendorId, event_date, userId);
   }
 }
 
-// Booking 'pending' yang lewat 24 jam tanpa DP dibatalkan, slotnya dibebaskan.
-// Satu statement, dijalankan berkala dari index.js.
+// Booking 'pending' yang lewat 24 jam tanpa DP dibatalkan.
+//
+// Tidak ada lagi baris jadwal yang perlu dikembalikan ke 'available':
+// kapasitas dihitung dari pesanan yang MASIH aktif, jadi begitu barisnya
+// jadi 'expired' dia otomatis keluar dari hitungan. Satu UPDATE, selesai.
 // ponytail: setInterval di dalam proses app. Kalau nanti backend jalan >1
 // instance, dua instance akan menyapu bersamaan — tidak merusak (query-nya
 // idempoten), tapi pindahkan ke cron eksternal kalau mulai berisik.
 async function expireStaleBookings() {
   try {
-    const { rows } = await pool.query(
-      `WITH expired AS (
-         UPDATE bookings
-            SET payment_status = 'expired',
-                -- Vendor yang tidak menjawab sampai batas waktu = menolak.
-                -- Tanpa ini pesanannya kedaluwarsa tapi statusnya tetap
-                -- 'menunggu' selamanya, dan customer tidak pernah dapat jawaban.
-                confirm_status = CASE WHEN confirm_status = 'menunggu'
-                                      THEN 'ditolak'::booking_confirm_status
-                                      ELSE confirm_status END,
-                confirm_note = CASE WHEN confirm_status = 'menunggu'
-                                    THEN 'Vendor tidak merespons sampai batas waktu'
-                                    ELSE confirm_note END,
-                updated_at = now()
-         WHERE payment_status = 'pending' AND soft_lock_expires_at < now()
-         RETURNING schedule_id
-       )
-       UPDATE vendor_schedules SET status = 'available', updated_at = now()
-       WHERE schedule_id IN (SELECT schedule_id FROM expired)
-         AND status = 'held'
-       RETURNING schedule_id`
+    const { rowCount } = await pool.query(
+      `UPDATE bookings
+          SET payment_status = 'expired',
+              -- Vendor yang tidak menjawab sampai batas waktu = menolak.
+              -- Tanpa ini pesanannya kedaluwarsa tapi statusnya tetap
+              -- 'menunggu' selamanya, dan customer tidak pernah dapat jawaban.
+              confirm_status = CASE WHEN confirm_status = 'menunggu'
+                                    THEN 'ditolak'::booking_confirm_status
+                                    ELSE confirm_status END,
+              confirm_note = CASE WHEN confirm_status = 'menunggu'
+                                  THEN 'Vendor tidak merespons sampai batas waktu'
+                                  ELSE confirm_note END,
+              updated_at = now()
+        WHERE payment_status = 'pending' AND soft_lock_expires_at < now()`
     );
-    // Shift lain yang ikut terkunci oleh pesanan eksklusif harus ikut dibuka.
-    // Baris yang kembali dari atas sedikit (pesanan yang baru kedaluwarsa di
-    // sapuan ini), jadi perulangannya murah.
-    for (const r of rows) await bukaKunciSeharian(pool, r.schedule_id);
 
-    if (rows.length) console.log(`[expiry] ${rows.length} slot dibebaskan`);
+    if (rowCount) console.log(`[expiry] ${rowCount} pesanan kedaluwarsa`);
   } catch (err) {
     console.error('[expiry] gagal:', err.message);
   }
@@ -232,7 +268,7 @@ const BOOKING_SELECT = `
          s.service_id, s.service_name, s.category,
          v.vendor_id, v.business_name, v.city,
          u.name AS customer_name, u.phone AS customer_phone,
-         sch.event_date, sch.time_slot,
+         b.event_date, to_char(b.start_time, 'HH24:MI') AS start_time, b.quantity,
          COALESCE(
            (SELECT json_agg(json_build_object(
                      'payment_id', p.payment_id,
@@ -255,8 +291,7 @@ const BOOKING_SELECT = `
     FROM bookings b
     JOIN services s         ON s.service_id  = b.service_id
     JOIN vendors  v         ON v.vendor_id   = s.vendor_id
-    JOIN users    u         ON u.user_id     = b.user_id
-    JOIN vendor_schedules sch ON sch.schedule_id = b.schedule_id`;
+    JOIN users    u         ON u.user_id     = b.user_id`;
 
 // GET /api/v1/bookings  (login) — pesanan milik customer yang sedang login.
 async function listMyBookings(req, res, next) {
@@ -299,7 +334,7 @@ async function listVendorBookings(req, res, next) {
     const { rows } = await pool.query(
       `${BOOKING_SELECT}
         WHERE v.owner_user_id = $1
-        ORDER BY sch.event_date ASC`,
+        ORDER BY b.event_date ASC`,
       [req.user.user_id]
     );
     res.json({ data: rows });
@@ -316,11 +351,9 @@ async function vendorStats(req, res, next) {
     const { rows } = await pool.query(
       `WITH v AS (SELECT vendor_id FROM vendors WHERE owner_user_id = $1),
        b AS (
-         SELECT bk.booking_id, bk.payment_status, bk.confirm_status, sch.event_date
+         SELECT bk.booking_id, bk.payment_status, bk.confirm_status, bk.event_date
            FROM bookings bk
-           JOIN services s ON s.service_id = bk.service_id
-           JOIN vendor_schedules sch ON sch.schedule_id = bk.schedule_id
-          WHERE s.vendor_id IN (SELECT vendor_id FROM v)
+          WHERE bk.vendor_id IN (SELECT vendor_id FROM v)
        )
        SELECT
          -- Pendapatan = pembayaran yang BENAR-BENAR lunas bulan ini.
@@ -351,10 +384,7 @@ async function vendorStats(req, res, next) {
          (SELECT count(*) FROM b WHERE payment_status = 'fully_paid')::int AS lunas,
          (SELECT count(*) FROM b
            WHERE event_date BETWEEN now() - interval '7 days' AND now()
-             AND payment_status NOT IN ('cancelled', 'expired'))::int AS selesai_minggu_ini,
-         (SELECT count(*) FROM vendor_schedules
-           WHERE vendor_id IN (SELECT vendor_id FROM v)
-             AND status = 'available' AND event_date >= CURRENT_DATE)::int AS slot_tersedia`,
+             AND payment_status NOT IN ('cancelled', 'expired'))::int AS selesai_minggu_ini`,
       [req.user.user_id]
     );
     res.json({ stats: rows[0] });
@@ -390,45 +420,6 @@ async function vendorBalance(req, res, next) {
   }
 }
 
-// Membebaskan slot sebuah booking yang batal. Dipakai jalur tolak DAN jalur
-// batal supaya dua-duanya melepas slot dengan syarat yang sama persis: hanya
-// slot yang masih 'held'. Slot 'booked' berarti uang sudah masuk dan
-// pembebasannya bukan urusan endpoint ini.
-async function bebaskanSlot(client, scheduleId) {
-  await client.query(
-    `UPDATE vendor_schedules SET status = 'available', updated_at = now()
-      WHERE schedule_id = $1 AND status = 'held'`,
-    [scheduleId]
-  );
-  await bukaKunciSeharian(client, scheduleId);
-}
-
-// Membuka shift yang ditutup oleh pesanan kategori eksklusif, setelah pesanan
-// itu batal/ditolak/kedaluwarsa.
-//
-// Syaratnya tanggal itu benar-benar sudah bersih: NOT EXISTS mencegah pesanan
-// kedua di tanggal yang sama (data lama sebelum aturan ini ada) kehilangan
-// kuncinya gara-gara pesanan pertama dibatalkan. Dipanggil untuk semua
-// kategori — kalau tidak ada yang 'blocked', query ini tidak mengubah apa pun.
-async function bukaKunciSeharian(client, scheduleId) {
-  await client.query(
-    `UPDATE vendor_schedules vs SET status = 'available', updated_at = now()
-       FROM vendor_schedules asal
-      WHERE asal.schedule_id = $1
-        AND vs.vendor_id = asal.vendor_id
-        AND vs.event_date = asal.event_date
-        AND vs.status = 'blocked'
-        AND NOT EXISTS (
-          SELECT 1 FROM bookings b
-            JOIN vendor_schedules lain ON lain.schedule_id = b.schedule_id
-           WHERE lain.vendor_id = asal.vendor_id
-             AND lain.event_date = asal.event_date
-             AND b.${BOOKING_AKTIF}
-        )`,
-    [scheduleId]
-  );
-}
-
 // PATCH /api/v1/bookings/:bookingId/konfirmasi  (role: vendor_owner)
 // Body: { action: 'terima' | 'tolak', note? }
 //
@@ -451,7 +442,7 @@ async function konfirmasiBooking(req, res, next) {
     // Kepemilikan ikut di WHERE: vendor lain tidak menemukan baris ini sama
     // sekali, jadi balasannya 404 dan ID pesanan yang valid tidak bocor.
     const bk = await client.query(
-      `SELECT b.booking_id, b.schedule_id, b.confirm_status, b.payment_status
+      `SELECT b.booking_id, b.confirm_status, b.payment_status
          FROM bookings b
          JOIN services s ON s.service_id = b.service_id
          JOIN vendors  v ON v.vendor_id  = s.vendor_id
@@ -507,7 +498,6 @@ async function konfirmasiBooking(req, res, next) {
           WHERE booking_id = $1`,
         [booking.booking_id, note || null]
       );
-      await bebaskanSlot(client, booking.schedule_id);
     }
 
     await client.query('COMMIT');
@@ -534,7 +524,7 @@ async function batalBooking(req, res, next) {
     await client.query('BEGIN');
 
     const bk = await client.query(
-      `SELECT booking_id, schedule_id, payment_status
+      `SELECT booking_id, payment_status
          FROM bookings
         WHERE booking_id = $1 AND user_id = $2
         FOR UPDATE`,
@@ -562,7 +552,6 @@ async function batalBooking(req, res, next) {
         WHERE booking_id = $1`,
       [booking.booking_id]
     );
-    await bebaskanSlot(client, booking.schedule_id);
 
     await client.query('COMMIT');
 

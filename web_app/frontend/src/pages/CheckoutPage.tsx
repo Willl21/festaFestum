@@ -7,7 +7,6 @@ import FlowLayout from '../components/FlowLayout'
 import { LockIcon, ShieldIcon } from '../components/icons'
 import { categories, namaKota, type CategoryKey } from '../data/categories'
 import { grupMetode, metodeBayar } from '../data/payments'
-import { shifts } from '../data/shifts'
 import { rupiah } from '../lib/format'
 import { getBooking, bayarBooking, type ApiBooking } from '../lib/api'
 
@@ -101,7 +100,6 @@ export default function CheckoutPage() {
         const dp = Number(booking.dp_amount)
         const pelunasan = booking.payment_status === 'dp_paid'
         const tagihan = pelunasan ? harga - dp : dp
-        const shiftLabel = shifts.find((s) => s.value === booking.time_slot)?.label ?? booking.time_slot
 
         return (
           <FlowLayout title={pelunasan ? 'Selesaikan Pelunasan' : 'Selesaikan Pesanan Anda'}>
@@ -134,7 +132,7 @@ export default function CheckoutPage() {
                           {new Date(booking.event_date).toLocaleDateString('id-ID', {
                             day: 'numeric', month: 'long', year: 'numeric',
                           })}{' '}
-                          · {shiftLabel}
+                          · {booking.start_time}
                         </dd>
                       </div>
                       <div>

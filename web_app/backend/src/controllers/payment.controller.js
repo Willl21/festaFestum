@@ -35,13 +35,6 @@ async function applySuccess(client, paymentId, gatewayTxnId) {
         WHERE booking_id = $1 AND payment_status = 'pending'`,
       [booking_id]
     );
-    // DP masuk = slot resmi terpakai, bukan sekadar 'held'.
-    await client.query(
-      `UPDATE vendor_schedules SET status = 'booked', updated_at = now()
-        WHERE schedule_id = (SELECT schedule_id FROM bookings WHERE booking_id = $1)
-          AND status <> 'booked'`,
-      [booking_id]
-    );
   } else {
     await client.query(
       `UPDATE bookings SET payment_status = 'fully_paid', updated_at = now()
@@ -304,12 +297,11 @@ async function getPayment(req, res, next) {
               b.event_location_detail,
               s.service_name, s.category,
               v.business_name, v.city,
-              sch.event_date, sch.time_slot
+              b.event_date, to_char(b.start_time, 'HH24:MI') AS start_time
          FROM payments p
          JOIN bookings b ON b.booking_id = p.booking_id
          JOIN services s ON s.service_id = b.service_id
          JOIN vendors  v ON v.vendor_id  = s.vendor_id
-         JOIN vendor_schedules sch ON sch.schedule_id = b.schedule_id
         WHERE p.payment_id = $1 AND b.user_id = $2`,
       [req.params.paymentId, req.user.user_id]
     );

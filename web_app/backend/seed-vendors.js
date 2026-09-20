@@ -16,10 +16,10 @@ const pool = require('./src/config/db');
 const CSV = path.join(__dirname, '..', '..', 'data_science', 'datasets', 'vendors.csv');
 const PER_KATEGORI = Number(process.argv[2]) || 3;
 
-// Berapa hari ke depan slot ketersediaan dibuat. Tanpa baris vendor_schedules,
-// vendor TIDAK AKAN MUNCUL di pencarian — discovery-nya berbasis tanggal.
-const HARI_KE_DEPAN = 30;
-const SLOTS = ['pagi', 'siang', 'malam'];
+// Sejak migrasi 013 tidak ada lagi ketersediaan yang perlu diseed: tidak ada
+// baris vendor_schedules berarti vendor TERSEDIA. Dulu skrip ini harus
+// mengarang 30 hari x 3 shift per vendor — 9.200 baris untuk 102 vendor —
+// semata supaya vendornya muncul di pencarian.
 
 // Password sama untuk semua akun seed, supaya gampang dipakai saat demo.
 const PASSWORD_SEED = 'password123';
@@ -141,24 +141,6 @@ const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.|\.$
         ]
       );
 
-      // Slot ketersediaan, sekali INSERT untuk semua tanggal sekaligus.
-      const nilai = [];
-      const params = [vendorId];
-      let n = 2;
-      for (let h = 1; h <= HARI_KE_DEPAN; h++) {
-        const tgl = new Date(Date.now() + h * 86400000).toISOString().slice(0, 10);
-        for (const s of SLOTS) {
-          nilai.push(`($1, $${n++}, $${n++}, 'available')`);
-          params.push(tgl, s);
-        }
-      }
-      await client.query(
-        `INSERT INTO vendor_schedules (vendor_id, event_date, time_slot, status)
-         VALUES ${nilai.join(',')}
-         ON CONFLICT (vendor_id, event_date, time_slot) DO NOTHING`,
-        params
-      );
-
       await client.query('COMMIT');
       dibuat++;
       console.log(`  + ${v.vendor_name.padEnd(28)} ${v.kategori.padEnd(16)} ${v.kota}`);
@@ -173,8 +155,7 @@ const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.|\.$
 
   const total = await pool.query(
     `SELECT (SELECT count(*) FROM vendors)::int AS vendor,
-            (SELECT count(*) FROM services)::int AS layanan,
-            (SELECT count(*) FROM vendor_schedules WHERE status='available')::int AS slot`
+            (SELECT count(*) FROM services)::int AS layanan`
   );
 
   console.log(`\n${dibuat} vendor dibuat, ${dilewati} dilewati (sudah ada).`);

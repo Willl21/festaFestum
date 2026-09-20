@@ -9,6 +9,9 @@ import { rupiah } from '../lib/format'
 export type OrderSummary = {
   vendor: string
   packageName: string
+  /** Ditempel di baris "Harga Paket", mis. "× 3". Diisi halaman yang punya
+   *  input jumlah, supaya total yang berlipat tidak terbaca seperti salah. */
+  satuan?: string
   price: number
   /** DP dihitung BACKEND. Halaman ini cuma menampilkan, tidak menghitung —
    *  kalau dua-duanya menghitung, angkanya bisa berbeda dan user ditagih
@@ -61,7 +64,10 @@ export default function OrderLayout({
             <p className="mt-2 text-[15px] text-ink/80">{order.packageName}</p>
 
             <dl className="mt-7 space-y-3 text-[15px]">
-              <Row label="Harga Paket" value={rupiah(order.price)} />
+              <Row
+                label={`Harga Paket${order.satuan ? ` ${order.satuan}` : ''}`}
+                value={rupiah(order.price)}
+              />
               <Row label="DP yang dibayar sekarang" value={rupiah(order.dp)} />
               <Row label="Sisa saat pelunasan" value={rupiah(order.price - order.dp)} />
             </dl>

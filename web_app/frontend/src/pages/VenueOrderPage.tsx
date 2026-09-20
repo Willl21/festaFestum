@@ -28,6 +28,11 @@ type Variant = {
   estimate: { id: string; label: string; type?: string; placeholder: string }
   venueLabel: string
   note: { label?: string; placeholder?: string }
+  /** true kalau isi field estimate berarti JUMLAH yang dipesan, jadi harga
+   *  dikali angka itu. Cuma MUA: satu pesanan bisa merias beberapa orang,
+   *  dan harganya per orang. "Jumlah tamu" milik EO adalah ukuran acara,
+   *  bukan jumlah pesanan — mengalikannya akan salah besar. */
+  kuantitas?: boolean
 }
 
 const variants = {
@@ -39,6 +44,7 @@ const variants = {
       type: 'number',
       placeholder: 'Contoh: 3',
     },
+    kuantitas: true,
     venueLabel: 'NAMA VENUE/ LOKASI',
     note: { label: 'PREFERENSI MAKEUP & REQUEST KHUSUS' },
   },
@@ -90,13 +96,13 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
   const [mengirim, setMengirim] = useState(false)
 
   // Dibawa dari halaman detail lewat query. EO tidak punya kalender di
-  // halaman detailnya, jadi tanggal & shift diisi di sini.
+  // halaman detailnya, jadi tanggal & jam diisi di sini.
   const [serviceId, setServiceId] = useState(params.get('service') ?? '')
   const [tanggal, setTanggal] = useState(params.get('date') ?? '')
-  // Tanpa nilai cadangan 'pagi': KalenderSlot yang menentukan shift mana
-  // yang bebas di tanggal terpilih. Kalau halaman ini dibuka dari kartu
-  // vendor dengan ?slot=, nilai itu tetap dipakai sebagai pilihan awal.
-  const [shift, setShift] = useState(params.get('slot') ?? '')
+  // Tanpa nilai bawaan: jam diisi sendiri oleh pemesan. Kalau halaman ini
+  // dibuka dari halaman detail dengan ?jam=, nilai itu dipakai sebagai
+  // isian awal.
+  const [jam, setJam] = useState(params.get('jam') ?? '')
 
   const [jenisAcara, setJenisAcara] = useState(JENIS_ACARA[0].value)
   const [estimasi, setEstimasi] = useState('')
@@ -117,7 +123,13 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
   }, [id, params, kat.apiCategory])
 
   const paket = layanan.find((s) => s.service_id === serviceId) ?? layanan[0]
-  const harga = paket ? Number(paket.price) : 0
+  const satuanHarga = paket ? Number(paket.price) : 0
+  // Untuk MUA, kapasitas harian vendor tetap terpotong SATU berapa pun jumlah
+  // orangnya — yang habis timnya, bukan stok. Yang berlipat cuma harganya.
+  const jumlah = ('kuantitas' in v && v.kuantitas)
+    ? Math.min(999, Math.max(1, Number(estimasi) || 1))
+    : 1
+  const harga = satuanHarga * jumlah
 
   async function ajukan() {
     setGalat('')
@@ -140,9 +152,10 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
       const r = await buatBooking({
         service_id: paket.service_id,
         event_date: tanggal,
-        time_slot: shift,
+        start_time: jam,
         event_type: jenisAcara,
         event_location_detail: detail,
+        quantity: jumlah,
       })
       navigate(`/checkout/${r.booking.booking_id}`)
     } catch (e) {
@@ -164,6 +177,7 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
             order={{
               vendor: vendor.business_name,
               packageName: paket?.service_name ?? 'Belum ada paket',
+              satuan: jumlah > 1 ? `× ${jumlah} orang` : undefined,
               price: harga,
               // DP 30% mengikuti backend. Angka yang MENGIKAT tetap dp_amount yang
               // dikembalikan POST /bookings dan ditampilkan di halaman checkout.
@@ -198,7 +212,7 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
               <p className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
                 TANGGAL ACARA
               </p>
-              {/* Kalender menggantikan input tanggal + dropdown shift: di
+              {/* Kalender + input jam bebas, menggantikan input tanggal polos: di
                   halaman pesan pun tanggal yang tidak bisa dipesan harus mati
                   sejak awal, bukan ditolak setelah tombol ditekan. */}
               {paket ? (
@@ -206,8 +220,8 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
                   <KalenderSlot
                     serviceId={paket.service_id}
                     tanggal={tanggal}
-                    shift={shift}
-                    onPilih={(t, sh) => { setTanggal(t); setShift(sh) }}
+                    jam={jam}
+                    onPilih={(t, j) => { setTanggal(t); setJam(j) }}
                   />
                 </div>
               ) : (

@@ -3,42 +3,46 @@ import { DayPicker } from 'react-day-picker'
 import { id as localeId } from 'react-day-picker/locale'
 import { ChevronDown } from './icons'
 import { KELAS_KALENDER, isoLokal as iso } from '../lib/kalender'
-import { shifts } from '../data/shifts'
 import { listKetersediaan, type SlotKetersediaan } from '../lib/api'
 
-/** Kalender + pilihan shift, satu komponen untuk semua halaman pemesanan.
+/** Kalender + jam acara, satu komponen untuk semua halaman pemesanan.
  *
- *  Bentuknya mengikuti calendar-03 dari 21st.dev, tapi ditumpuk: kalender di
- *  atas, pilihan waktu di bawah. Aslinya bersebelahan dan butuh ~500px,
- *  sementara kartu pemesanan di halaman detail cuma 420px.
+ *  SHIFT DIBUANG di migrasi 014. Dulu di bawah kalender ada tiga tombol
+ *  (Pagi/Siang/Sore) dengan jam 08-12 / 12-16 / 16-22 — angka yang KARANGAN
+ *  kita sendiri, bukan dari PM, dan kelima mockup "Isi data diri" memang
+ *  meminta WAKTU MULAI sebagai input bebas. Sekarang jamnya <input
+ *  type="time"> biasa: native, bisa diketik, dan punya penanganan keyboard
+ *  serta format lokal tanpa kode tambahan.
  *
- *  Daftar waktunya cuma DUA — `shifts` di data/shifts.ts, mengikuti mockup —
- *  bukan daftar jam yang bisa di-scroll seperti aslinya.
+ *  Jam TIDAK menentukan ketersediaan apa pun. Yang habis kapasitas harian
+ *  vendor, jadi yang perlu dicek cuma tanggalnya — dan itu sudah dijawab
+ *  satu request GET /services/:id/availability untuk sebulan penuh.
  *
  *  Dibangun di atas react-day-picker, bukan blok shadcn utuh: proyek ini
  *  tidak memakai shadcn/Radix sama sekali, jadi ikut cara itu berarti
  *  menyeret masuk lima dependensi plus sistem gaya kedua yang bentrok dengan
  *  token warna di index.css. Yang dipakai cuma grid bulan + aksesibilitas
- *  keyboardnya; seluruh tampilannya dari kelas Tailwind proyek ini.
- *
- *  Tanggal diabu-abukan lewat GET /services/:id/availability — satu request
- *  untuk sebulan. Tanggal yang vendornya tidak membuka slot sama sekali,
- *  yang semua slotnya sudah terpakai, atau yang melanggar minimum_notice_days
- *  tidak bisa dipilih. */
+ *  keyboardnya; seluruh tampilannya dari kelas Tailwind proyek ini. */
 export default function KalenderSlot({
   serviceId,
   tanggal,
-  shift,
+  jam,
   onPilih,
+  labelJam = 'Jam Acara',
+  keteranganJam,
 }: {
   serviceId: string
   tanggal: string
-  shift: string
-  /** Dipanggil tiap tanggal atau shift berubah. Tanggal format YYYY-MM-DD. */
-  onPilih: (tanggal: string, shift: string) => void
+  jam: string
+  /** Dipanggil tiap tanggal atau jam berubah. Tanggal format YYYY-MM-DD,
+   *  jam format HH:MM 24 jam — dua-duanya persis yang diminta backend. */
+  onPilih: (tanggal: string, jam: string) => void
+  /** Florist & sewa jas menyebutnya jam kirim, bukan jam acara. */
+  labelJam?: string
+  keteranganJam?: string
 }) {
   const [bulan, setBulan] = useState(() => new Date())
-  const [slots, setSlots] = useState<SlotKetersediaan[]>([])
+  const [hari, setHari] = useState<SlotKetersediaan[]>([])
   const [paling, setPaling] = useState<string>('')
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
@@ -59,7 +63,7 @@ export default function KalenderSlot({
     listKetersediaan(serviceId, dari, sampai)
       .then((r) => {
         if (batal) return
-        setSlots(r.data)
+        setHari(r.data)
         setPaling(r.earliest_date)
         setGalat('')
 
@@ -85,27 +89,20 @@ export default function KalenderSlot({
     }
   }, [serviceId, bulan])
 
-  // Tanggal -> daftar shift yang masih bebas di tanggal itu.
-  //
-  // Hanya shift yang benar-benar ditawarkan UI yang dihitung. Enum time_slot
-  // di DB punya tiga nilai, tapi mockup cuma punya dua ('siang' tidak dipakai
-  // — lihat data/shifts.ts). Tanpa saringan ini, tanggal yang cuma punya slot
-  // siang akan terlihat bisa dipilih lalu ternyata tidak ada shift apa pun.
-  const bebasPerTanggal = useMemo(() => {
-    const dipakai = new Set<string>(shifts.map((s) => s.value))
-    const m = new Map<string, Set<string>>()
-    for (const s of slots) {
-      if (s.status !== 'available') continue
-      if (!dipakai.has(s.time_slot)) continue
-      if (paling && s.event_date < paling) continue
-      if (!m.has(s.event_date)) m.set(s.event_date, new Set())
-      m.get(s.event_date)!.add(s.time_slot)
+  // Tanggal -> sisa kapasitas. Tanggal yang tidak ada di peta ini tidak bisa
+  // dipilih: entah ditutup vendor, sudah penuh, atau melanggar lead time.
+  const bisaDipilih = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const h of hari) {
+      if (h.status !== 'available') continue
+      if (paling && h.event_date < paling) continue
+      m.set(h.event_date, h.sisa_kapasitas)
     }
     return m
-  }, [slots, paling])
+  }, [hari, paling])
 
   const terpilih = tanggal ? new Date(`${tanggal}T00:00:00`) : undefined
-  const bebasHariIni = bebasPerTanggal.get(tanggal) ?? new Set<string>()
+  const sisa = bisaDipilih.get(tanggal)
 
   return (
     <div>
@@ -118,15 +115,8 @@ export default function KalenderSlot({
           // sinkron di badan effect memicu render berantai (dan ditolak lint).
           onMonthChange={(m) => { setBulan(m); setMemuat(true) }}
           selected={terpilih}
-          // Tanggal tanpa satu pun shift bebas tidak bisa diklik.
-          disabled={(d) => !bebasPerTanggal.has(iso(d))}
-          onSelect={(d) => {
-            if (!d) return
-            const baru = iso(d)
-            // Shift yang sedang dipilih belum tentu ada di tanggal baru.
-            const bebas = bebasPerTanggal.get(baru) ?? new Set<string>()
-            onPilih(baru, bebas.has(shift) ? shift : '')
-          }}
+          disabled={(d) => !bisaDipilih.has(iso(d))}
+          onSelect={(d) => d && onPilih(iso(d), jam)}
           className="text-[14px]"
           classNames={KELAS_KALENDER}
           components={{
@@ -146,43 +136,31 @@ export default function KalenderSlot({
       </div>
 
       <div className="mt-5">
-        <p className="text-[15px] font-semibold">Shift Layanan</p>
+        <label htmlFor="jam-acara" className="text-[15px] font-semibold">
+          {labelJam}
+        </label>
 
         {galat ? (
           <p className="mt-3 text-[13px] text-maroon">{galat}</p>
         ) : (
-          // Tiga kolom sejak shift siang dihidupkan; dipersempit jadi satu
-          // kolom di layar sempit supaya labelnya tidak terpotong.
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {shifts.map((s) => {
-              const bisa = bebasHariIni.has(s.value)
-              const aktif = shift === s.value
-              return (
-                <button
-                  key={s.value}
-                  type="button"
-                  disabled={!bisa}
-                  onClick={() => onPilih(tanggal, s.value)}
-                  className={`w-full border px-3 py-2.5 text-left transition-colors ${
-                    aktif
-                      ? 'border-navy-900 bg-lavender/40'
-                      : 'border-line hover:border-navy-900 disabled:hover:border-line'
-                  } disabled:cursor-not-allowed disabled:opacity-40`}
-                >
-                  <span className="block text-[13px] font-semibold">{s.label}</span>
-                  <span className="block text-[12px] text-muted">{s.hours}</span>
-                </button>
-              )
-            })}
-
-            <p className="col-span-2 text-[12px] leading-relaxed text-muted">
+          <>
+            <input
+              id="jam-acara"
+              type="time"
+              value={jam}
+              disabled={!tanggal}
+              onChange={(e) => onPilih(tanggal, e.target.value)}
+              className="mt-3 w-full border border-line px-3 py-2.5 text-[14px] transition-colors focus:border-navy-900 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+            />
+            <p className="mt-2 text-[12px] leading-relaxed text-muted">
               {!tanggal
-                ? 'Pilih tanggal dulu untuk melihat shift yang tersedia.'
-                : bebasHariIni.size === 0
-                  ? 'Tidak ada shift tersisa di tanggal ini.'
-                  : `${bebasHariIni.size} shift tersedia.`}
+                ? 'Pilih tanggal dulu.'
+                : keteranganJam
+                  ?? (sisa !== undefined && sisa > 0
+                    ? `Masih ada ${sisa} slot di tanggal ini.`
+                    : 'Jam bebas — vendor menyesuaikan.')}
             </p>
-          </div>
+          </>
         )}
       </div>
     </div>

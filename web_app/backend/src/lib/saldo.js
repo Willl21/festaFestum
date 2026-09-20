@@ -19,11 +19,10 @@ const PLATFORM_FEE_RATE = 0.025;
 async function hitungSaldo(db, vendorId) {
   const { rows } = await db.query(
     `WITH lunas AS (
-       SELECT p.amount, sch.event_date
+       SELECT p.amount, bk.event_date
          FROM payments p
          JOIN bookings bk ON bk.booking_id = p.booking_id
          JOIN services s  ON s.service_id  = bk.service_id
-         JOIN vendor_schedules sch ON sch.schedule_id = bk.schedule_id
         WHERE s.vendor_id = $1 AND p.gateway_status = 'success'
      )
      SELECT

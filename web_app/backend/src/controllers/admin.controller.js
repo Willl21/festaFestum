@@ -179,10 +179,9 @@ async function escrowSummary(req, res, next) {
   try {
     const { rows } = await pool.query(
       `WITH lunas AS (
-         SELECT p.amount, sch.event_date
+         SELECT p.amount, bk.event_date
            FROM payments p
            JOIN bookings bk ON bk.booking_id = p.booking_id
-           JOIN vendor_schedules sch ON sch.schedule_id = bk.schedule_id
           WHERE p.gateway_status = 'success'
        )
        SELECT
@@ -268,7 +267,7 @@ async function listBookings(req, res, next) {
 
     const { rows } = await pool.query(
       `SELECT bk.booking_id, bk.total_price, bk.payment_status, bk.created_at,
-              sch.event_date, sch.time_slot,
+              bk.event_date, to_char(bk.start_time, 'HH24:MI') AS start_time,
               s.service_name, s.category,
               v.business_name, v.city,
               u.name AS customer_name
@@ -276,7 +275,6 @@ async function listBookings(req, res, next) {
          JOIN services s ON s.service_id = bk.service_id
          JOIN vendors  v ON v.vendor_id  = s.vendor_id
          JOIN users    u ON u.user_id    = bk.user_id
-         JOIN vendor_schedules sch ON sch.schedule_id = bk.schedule_id
         ORDER BY bk.created_at DESC
         LIMIT $1`,
       [limit]

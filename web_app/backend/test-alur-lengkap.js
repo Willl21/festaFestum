@@ -64,10 +64,8 @@ const ok = (l) => { langkah++; console.log(`  ${String(langkah).padStart(2)}. ${
   });
 
   const TGL = futureDate(15);
-  await api('/schedules', {
-    method: 'POST', token: vendorToken,
-    body: { slots: [{ event_date: TGL, time_slot: 'pagi' }] },
-  });
+  // Tidak ada slot yang perlu dibuka: sejak migrasi 013 vendor tersedia
+  // secara bawaan, dan POST /schedules justru MENUTUP tanggal.
 
   console.log('\nAlur customer (persis seperti yang dipanggil frontend):');
 
@@ -81,12 +79,12 @@ const ok = (l) => { langkah++; console.log(`  ${String(langkah).padStart(2)}. ${
   ok('FloristPage: vendor muncul dengan harga & rating');
 
   // === 2. Schedule-first: tanggal + shift ================================
-  const tersedia = await api(`/vendors?category=florist&event_date=${TGL}&time_slot=pagi&limit=24`);
+  const tersedia = await api(`/vendors?category=florist&event_date=${TGL}&limit=24`);
   assert.ok(
     tersedia.body.data.some((v) => v.vendor_id === vendorId),
-    'vendor hilang dari filter schedule-first padahal slotnya dibuka'
+    'vendor hilang dari filter schedule-first padahal tanggalnya tidak ditutup'
   );
-  ok('Filter tanggal + shift: vendor tetap muncul');
+  ok('Filter tanggal: vendor tetap muncul');
 
   // === 3. Halaman detail: GET /vendors/:id + /services ===================
   const detail = await api(`/vendors/${vendorId}`);
@@ -99,7 +97,7 @@ const ok = (l) => { langkah++; console.log(`  ${String(langkah).padStart(2)}. ${
   // === 4. Tombol "Ajukan Pesanan": cek ketersediaan ======================
   const cek = await api('/schedules/check', {
     method: 'POST',
-    body: { service_id: serviceId, event_date: TGL, time_slot: 'pagi' },
+    body: { service_id: serviceId, event_date: TGL, start_time: '08:00' },
   });
   assert.strictEqual(cek.body.available, true, `slot harusnya tersedia: ${cek.body.reason}`);
   ok('Cek jadwal sebelum pindah halaman: tersedia');
@@ -107,7 +105,7 @@ const ok = (l) => { langkah++; console.log(`  ${String(langkah).padStart(2)}. ${
   // Tanggal terlalu mepet harus ditolak DI SINI, bukan setelah isi form.
   const mepet = await api('/schedules/check', {
     method: 'POST',
-    body: { service_id: serviceId, event_date: futureDate(1), time_slot: 'pagi' },
+    body: { service_id: serviceId, event_date: futureDate(1), start_time: '08:00' },
   });
   assert.strictEqual(mepet.body.available, false, 'lead time 3 hari harusnya menolak H+1');
   ok('Tanggal terlalu mepet ditolak sebelum user mengisi form');
@@ -121,8 +119,8 @@ const ok = (l) => { langkah++; console.log(`  ${String(langkah).padStart(2)}. ${
   assert.strictEqual(rentang.status, 200, `availability gagal: ${JSON.stringify(rentang.body)}`);
   assert.ok(Array.isArray(rentang.body.data), 'availability harus punya kunci data');
   assert.ok(
-    rentang.body.data.some((x) => x.event_date === TGL && x.time_slot === 'pagi'),
-    'slot yang baru dibuka tidak muncul di rentang'
+    rentang.body.data.some((x) => x.event_date === TGL && x.status === 'available'),
+    'tanggal yang dipakai tidak muncul sebagai tersedia di rentang'
   );
   // Tanggal paling awal ikut menghitung minimum_notice_days, supaya kalender
   // bisa mematikan tanggal yang terlalu mepet tanpa menebak di browser.
@@ -141,7 +139,7 @@ const ok = (l) => { langkah++; console.log(`  ${String(langkah).padStart(2)}. ${
   const booking = await api('/bookings', {
     method: 'POST', token: customerToken,
     body: {
-      service_id: serviceId, event_date: TGL, time_slot: 'pagi',
+      service_id: serviceId, event_date: TGL, start_time: '08:00',
       event_type: 'wedding',
       event_location_detail: 'Bunga acara — Gedung Uji — Jl. Uji No. 1\nCatatan: uji alur',
     },
@@ -161,7 +159,7 @@ const ok = (l) => { langkah++; console.log(`  ${String(langkah).padStart(2)}. ${
   // Slot langsung terkunci untuk orang lain.
   const cek2 = await api('/schedules/check', {
     method: 'POST',
-    body: { service_id: serviceId, event_date: TGL, time_slot: 'pagi' },
+    body: { service_id: serviceId, event_date: TGL, start_time: '08:00' },
   });
   assert.strictEqual(cek2.body.available, false, 'slot harusnya terkunci setelah dibooking');
   ok('Slot langsung terkunci untuk customer lain');
