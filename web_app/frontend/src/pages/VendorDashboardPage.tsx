@@ -89,7 +89,7 @@ export default function VendorDashboardPage() {
 
               <StatCard label="Total Pemesanan" icon={<CalendarIcon className="h-5 w-5" />}>
                 <p className="font-display text-[30px] font-semibold">{stats.total_pesanan}</p>
-                <p className="mt-1 text-[13px] text-ink/70">{stats.selesai_minggu_ini} acara minggu ini · {stats.slot_tersedia} slot bebas</p>
+                <p className="mt-1 text-[13px] text-ink/70">{stats.selesai_minggu_ini} acara minggu ini</p>
               </StatCard>
 
               {/* Kartu permintaan tertunda sengaja gelap: ini satu-satunya kartu

@@ -40,12 +40,15 @@ export default function AttireOrderPage() {
 
   // Dibawa dari halaman detail.
   const [serviceId, setServiceId] = useState(params.get('service') ?? '')
+  // Jumlah barang yang dipesan. Dikirim sebagai `quantity` dan dipakai backend
+  // untuk mengalikan harga sekaligus memotong kapasitas harian vendor.
+  const [jumlah, setJumlah] = useState(1)
   const [ukuran, setUkuran] = useState(params.get('size') ?? '')
   const [tglSewa, setTglSewa] = useState(params.get('date') ?? '')
-  // Dulu shift dipatok 'pagi' diam-diam, jadi penyewaan di tanggal yang slot
-  // paginya penuh gagal tanpa user pernah diberi pilihan. Sekarang dipilih
-  // lewat kalender, sama seperti kategori lain.
-  const [shift, setShift] = useState(params.get('slot') ?? '')
+  // Tanpa nilai bawaan. Dulu shift dipatok 'pagi' diam-diam, jadi penyewaan
+  // di tanggal yang slot paginya penuh gagal tanpa penyewa pernah diberi
+  // pilihan; sekarang jamnya diketik sendiri dan tidak mengunci apa pun.
+  const [jam, setJam] = useState(params.get('jam') ?? '')
   const [tglAmbil, setTglAmbil] = useState(params.get('ambil') ?? '')
   const [fitting, setFitting] = useState(params.get('fitting') !== 'false')
   const [tglFitting, setTglFitting] = useState(params.get('tglFitting') ?? '')
@@ -68,13 +71,15 @@ export default function AttireOrderPage() {
   }, [id, params])
 
   const paket = layanan.find((s) => s.service_id === serviceId) ?? layanan[0]
-  const harga = paket ? Number(paket.price) : 0
+  const satuanHarga = paket ? Number(paket.price) : 0
+  // Sewa jas/kebaya memotong stok harian vendor sebanyak jumlah setel ini.
+  const harga = satuanHarga * jumlah
 
   async function ajukan() {
     setGalat('')
     if (!paket) return setGalat('Vendor ini belum punya layanan aktif.')
     if (!tglSewa) return setGalat('Tanggal sewa wajib diisi.')
-    if (!shift) return setGalat('Pilih shift dulu.')
+    if (!jam) return setGalat('Pilih jam dulu.')
     if (!ukuran) return setGalat('Ukuran wajib dipilih.')
 
     // Tabel bookings tidak punya kolom ukuran/warna/fitting. Semuanya
@@ -94,9 +99,10 @@ export default function AttireOrderPage() {
       const r = await buatBooking({
         service_id: paket.service_id,
         event_date: tglSewa,
-        time_slot: shift,
+        start_time: jam,
         event_type: jenisAcara,
         event_location_detail: detail,
+        quantity: jumlah,
       })
       navigate(`/checkout/${r.booking.booking_id}`)
     } catch (e) {
@@ -118,6 +124,7 @@ export default function AttireOrderPage() {
             order={{
               vendor: vendor.business_name,
               packageName: paket?.service_name ?? 'Belum ada paket',
+              satuan: jumlah > 1 ? `× ${jumlah}` : undefined,
               price: harga,
               dp: Math.round(harga * 0.3),
               emoji: kat.emoji,
@@ -154,6 +161,11 @@ export default function AttireOrderPage() {
                   id="tanggal-ambil" label="TANGGAL  PENGAMBILAN" type="date"
                   value={tglAmbil} onChange={setTglAmbil}
                 />
+                <OrderField
+                  id="jumlah" label="JUMLAH SETEL" type="number" placeholder="1"
+                  value={String(jumlah)}
+                  onChange={(v) => setJumlah(Math.min(999, Math.max(1, Number(v) || 1)))}
+                />
                 <Select
                   id="jenis" label="JENIS ACARA" value={jenisAcara} onChange={setJenisAcara}
                   options={JENIS_ACARA}
@@ -168,8 +180,10 @@ export default function AttireOrderPage() {
                   <KalenderSlot
                     serviceId={paket.service_id}
                     tanggal={tglSewa}
-                    shift={shift}
-                    onPilih={(t, sh) => { setTglSewa(t); setShift(sh) }}
+                    jam={jam}
+                    labelJam="Jam Pengambilan"
+                    keteranganJam="Jam Anda mengambil setelannya di gerai vendor."
+                    onPilih={(t, j) => { setTglSewa(t); setJam(j) }}
                   />
                 </div>
               ) : (

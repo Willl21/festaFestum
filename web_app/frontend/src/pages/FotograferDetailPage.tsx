@@ -11,7 +11,7 @@ import { ArrowRight, CheckCircleIcon, ChevronDown } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
 import { rupiah } from '../lib/format'
 import {
-  getVendor, getVendorServices, cekKetersediaan,
+  getVendor, getVendorServices, cekKetersediaan, urlFotoVendor,
   type ApiService, type ApiVendor,
 } from '../lib/api'
 
@@ -36,11 +36,15 @@ export default function FotograferDetailPage() {
   const [layanan, setLayanan] = useState<ApiService[]>([])
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
+  // Nomor slot portofolio yang TERISI. GET /vendors/:id membalas nomor slot
+  // saja, bukan gambarnya — lihat image-storage-pattern.
+  const [fotoSlot, setFotoSlot] = useState<number[]>([])
 
   const [paketId, setPaketId] = useState('')
   const [tanggal, setTanggal] = useState('')
-  // Sengaja kosong: KalenderSlot yang menentukan shift mana yang bebas.
-  const [shift, setShift] = useState('')
+  // Sengaja kosong: jam diisi sendiri oleh pemesan, tanpa nilai bawaan yang
+  // diam-diam ikut terkirim.
+  const [jam, setJam] = useState('')
   const [cek, setCek] = useState<{ ada: boolean; alasan: string | null } | null>(null)
   const [mengecek, setMengecek] = useState(false)
 
@@ -49,6 +53,7 @@ export default function FotograferDetailPage() {
       .then(([v, s]) => {
         const aktif = s.data.filter((x) => x.is_active)
         setVendor(v.vendor)
+        setFotoSlot(v.portfolio.map((f) => f.sort_order))
         setLayanan(aktif)
         if (aktif[0]) setPaketId(aktif[0].service_id)
       })
@@ -68,12 +73,12 @@ export default function FotograferDetailPage() {
     setMengecek(true)
     try {
       const r = await cekKetersediaan({
-        service_id: dipilih.service_id, event_date: tanggal, time_slot: shift,
+        service_id: dipilih.service_id, event_date: tanggal,
       })
       setCek({ ada: r.available, alasan: r.reason })
       if (r.available) {
         navigate(`/${kategori.slug}/${id}/pesan?service=${dipilih.service_id}`
-          + `&date=${tanggal}&slot=${shift}`)
+          + `&date=${tanggal}&jam=${jam}`)
       }
     } catch (e) {
       setCek({ ada: false, alasan: (e as Error).message })
@@ -112,12 +117,20 @@ export default function FotograferDetailPage() {
             <h2 className="font-display text-[19px] font-semibold">Portofolio</h2>
 
             <div className="mt-5 grid gap-3 md:grid-cols-4">
-              <Photo n={0} nama={vendor.business_name} className="h-[300px] md:col-span-2 md:h-[510px]" />
+              <Photo n={0} nama={vendor.business_name}
+                src={fotoSlot.includes(0) ? urlFotoVendor(id, 0) : undefined}
+                className="h-[300px] md:col-span-2 md:h-[510px]" />
               <div className="grid gap-3">
-                <Photo n={1} nama={vendor.business_name} className="h-[180px] md:h-[249px]" />
-                <Photo n={2} nama={vendor.business_name} className="h-[180px] md:h-[249px]" />
+                <Photo n={1} nama={vendor.business_name}
+                src={fotoSlot.includes(1) ? urlFotoVendor(id, 1) : undefined}
+                className="h-[180px] md:h-[249px]" />
+                <Photo n={2} nama={vendor.business_name}
+                src={fotoSlot.includes(2) ? urlFotoVendor(id, 2) : undefined}
+                className="h-[180px] md:h-[249px]" />
               </div>
-              <Photo n={3} nama={vendor.business_name} className="h-[300px] md:h-[510px]" />
+              <Photo n={3} nama={vendor.business_name}
+                src={fotoSlot.includes(3) ? urlFotoVendor(id, 3) : undefined}
+                className="h-[300px] md:h-[510px]" />
             </div>
           </section>
 
@@ -222,7 +235,7 @@ export default function FotograferDetailPage() {
               </div>
 
               <p className="mt-6 text-[15px] font-semibold">Tanggal Acara</p>
-              {/* Kalender menggantikan <input type="date"> + radio shift: tanggal
+              {/* Kalender menggantikan <input type="date"> polos: tanggal
                   yang vendornya tidak buka, sudah penuh, atau masih di dalam
                   minimum_notice_days langsung mati di grid. */}
               {dipilih ? (
@@ -230,8 +243,8 @@ export default function FotograferDetailPage() {
                   <KalenderSlot
                     serviceId={dipilih.service_id}
                     tanggal={tanggal}
-                    shift={shift}
-                    onPilih={(t, sh) => { setTanggal(t); setShift(sh); setCek(null) }}
+                    jam={jam}
+                    onPilih={(t, j) => { setTanggal(t); setJam(j); setCek(null) }}
                   />
                 </div>
               ) : (
@@ -274,10 +287,16 @@ export default function FotograferDetailPage() {
   )
 }
 
-function Photo({ n, nama, className }: { n: number; nama: string; className: string }) {
+/** Slot 3 sengaja tidak pernah punya foto: portofolio cuma tiga slot
+ *  (SLOT_FOTO 0-2), sementara mockup fotografer menggambar empat kotak.
+ *  Yang keempat jatuh ke emoji kategori. */
+function Photo({ n, nama, src, className }: {
+  n: number; nama: string; src?: string; className: string
+}) {
   return (
     <div className={`relative overflow-hidden ${className}`}>
       <Img
+        src={src}
         alt={`${nama} ${n + 1}`}
         emoji={kategori.emoji}
         tint={kategori.tint}

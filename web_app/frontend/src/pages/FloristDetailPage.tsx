@@ -37,10 +37,11 @@ export default function FloristDetailPage() {
   // Nomor slot yang benar-benar terisi; gambarnya diambil terpisah.
   const [fotoSlot, setFotoSlot] = useState<number[]>([])
 
-  // Tanggal & shift yang dipilih user, lalu hasil pengecekannya ke backend.
+  // Tanggal & jam yang dipilih user, lalu hasil pengecekannya ke backend.
   const [tanggal, setTanggal] = useState('')
-  // Sengaja kosong: KalenderSlot yang menentukan shift mana yang bebas.
-  const [shift, setShift] = useState('')
+  // Sengaja kosong: jam diisi sendiri oleh pemesan, tanpa nilai bawaan yang
+  // diam-diam ikut terkirim.
+  const [jam, setJam] = useState('')
   const [cek, setCek] = useState<{ ada: boolean; alasan: string | null } | null>(null)
   const [mengecek, setMengecek] = useState(false)
 
@@ -70,12 +71,12 @@ export default function FloristDetailPage() {
     setMengecek(true)
     try {
       const r = await cekKetersediaan({
-        service_id: utama.service_id, event_date: tanggal, time_slot: shift,
+        service_id: utama.service_id, event_date: tanggal,
       })
       setCek({ ada: r.available, alasan: r.reason })
       if (r.available) {
         navigate(`/${kategori.slug}/${id}/pesan?service=${utama.service_id}`
-          + `&date=${tanggal}&slot=${shift}`)
+          + `&date=${tanggal}&jam=${jam}`)
       }
     } catch (e) {
       setCek({ ada: false, alasan: (e as Error).message })
@@ -189,7 +190,7 @@ export default function FloristDetailPage() {
               </p>
 
               <p className="mt-5 text-[15px] font-semibold">Tanggal Acara</p>
-              {/* Kalender menggantikan <input type="date"> + radio shift: tanggal
+              {/* Kalender menggantikan <input type="date"> polos: tanggal
                   yang vendornya tidak buka, sudah penuh, atau masih di dalam
                   minimum_notice_days langsung mati di grid. */}
               {utama ? (
@@ -197,8 +198,10 @@ export default function FloristDetailPage() {
                   <KalenderSlot
                     serviceId={utama.service_id}
                     tanggal={tanggal}
-                    shift={shift}
-                    onPilih={(t, sh) => { setTanggal(t); setShift(sh); setCek(null) }}
+                    jam={jam}
+                    labelJam="Jam Kirim"
+                    keteranganJam="Jam buket dikirim ke alamat tujuan."
+                    onPilih={(t, j) => { setTanggal(t); setJam(j); setCek(null) }}
                   />
                 </div>
               ) : (

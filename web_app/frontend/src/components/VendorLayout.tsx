@@ -5,7 +5,7 @@ import { clearAuth, getMyVendor, usePengguna, type ApiVendor } from '../lib/api'
 import Img from './Img'
 import {
   GridIcon, CalendarIcon, ClockIcon, FolderIcon, WalletIcon,
-  BellIcon, ChatIcon, UserCircleIcon, HelpIcon, SettingsIcon,
+  BellIcon, ChatIcon, UserCircleIcon, HelpIcon, SettingsIcon, MenuIcon,
 } from './icons'
 
 /** Kerangka dashboard vendor: sidebar kiri tetap + topbar, isinya lewat
@@ -13,7 +13,13 @@ import {
  *  memakai navbar/footer marketplace sama sekali.
  *
  *  Semua halaman vendor lewat sini, jadi penjaga aksesnya cukup satu di
- *  layout ini — sama seperti AdminLayout. Lihat PenjagaAkses.tsx. */
+ *  layout ini — sama seperti AdminLayout. Lihat PenjagaAkses.tsx.
+ *
+ *  Di bawah lg, sidebar yang SAMA dipakai sebagai drawer (fixed + digeser
+ *  keluar layar), bukan disembunyikan lalu digantikan menu kedua. Sebelumnya
+ *  dia `hidden` tanpa pengganti apa pun, jadi vendor yang membuka dari HP
+ *  mendarat di dashboard lalu mentok — tidak ada jalan ke Jadwal, Layanan,
+ *  Pemesanan, atau Keuangan. */
 
 const menu = [
   { to: '/vendor', label: 'Dashboard', icon: GridIcon, end: true },
@@ -34,6 +40,7 @@ export default function VendorLayout() {
   // "Rendered fewer hooks than expected". AdminLayout sudah urut begini.
   const user = usePengguna()
   const [vendor, setVendor] = useState<ApiVendor | null>(null)
+  const [menuBuka, setMenuBuka] = useState(false)
 
   useEffect(() => {
     // Nama bisnis & status verifikasi tidak ada di objek user — keduanya milik
@@ -52,8 +59,27 @@ export default function VendorLayout() {
   }
 
   return (
-    <div className="flex min-h-screen bg-[#f7f8fc]">
-      <aside className="sticky top-0 hidden h-screen w-[258px] shrink-0 flex-col border-r border-line bg-white lg:flex">
+    <div
+      className="flex min-h-screen bg-[#f7f8fc]"
+      onKeyDown={(e) => e.key === 'Escape' && setMenuBuka(false)}
+    >
+      {/* Latar gelap cuma ada selagi drawer terbuka. <button>, bukan <div>,
+          supaya bisa ditutup lewat keyboard juga. */}
+      {menuBuka && (
+        <button
+          type="button"
+          aria-label="Tutup menu"
+          onClick={() => setMenuBuka(false)}
+          className="fixed inset-0 z-30 bg-ink/40 lg:hidden"
+        />
+      )}
+
+      <aside
+        id="menu-vendor"
+        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-[258px] shrink-0 flex-col overflow-y-auto border-r border-line bg-white transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0 ${
+          menuBuka ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
         <div className="px-6 pt-8 pb-6 text-center">
           <Img
             src={user?.avatar_url || '/img/vendor-avatar.jpg'}
@@ -71,7 +97,9 @@ export default function VendorLayout() {
           </p>
         </div>
 
-        <nav className="space-y-1 px-3">
+        {/* Menutup drawer lewat nav-nya, bukan lewat useEffect yang mengintai
+            perubahan rute: yang bisa membukanya cuma menu ini. */}
+        <nav className="space-y-1 px-3" onClick={() => setMenuBuka(false)}>
           {menu.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
@@ -125,12 +153,17 @@ export default function VendorLayout() {
             <BellIcon />
             <ChatIcon />
             <UserCircleIcon className="h-6 w-6" />
+            {/* Tombol Keluar yang dulu di sini dibuang: sidebar sudah punya
+                satu, dan sekarang sidebarnya terjangkau dari HP. */}
             <button
               type="button"
-              onClick={keluar}
-              className="rounded-md border border-line px-4 py-1.5 text-[12px] font-semibold text-ink/80 transition-colors hover:border-navy-900 hover:text-navy-900 lg:hidden"
+              aria-label="Buka menu"
+              aria-expanded={menuBuka}
+              aria-controls="menu-vendor"
+              onClick={() => setMenuBuka(true)}
+              className="rounded-md border border-line p-1.5 text-ink/80 transition-colors hover:border-navy-900 hover:text-navy-900 lg:hidden"
             >
-              Keluar
+              <MenuIcon />
             </button>
           </div>
         </header>

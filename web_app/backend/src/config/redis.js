@@ -5,9 +5,9 @@ const Redis = require('ioredis');
 const LOCK_TTL_SECONDS = 900;
 
 // Kalau REDIS_URL belum diisi, aplikasi tetap jalan tanpa lock. Ini disengaja:
-// constraint UNIQUE (vendor_id, event_date, time_slot) + transaksi FOR UPDATE
-// sudah menjamin tidak ada double-booking. Redis cuma bikin bentrokannya
-// ketahuan lebih awal (saat user klik "Pesan"), bukan syarat kebenaran.
+// pg_advisory_xact_lock(vendor+tanggal) + idx_booking_slot_ke_aktif sudah
+// menjamin tidak ada double-booking. Redis cuma bikin bentrokannya ketahuan
+// lebih awal (saat user klik "Pesan"), bukan syarat kebenaran.
 const redis = process.env.REDIS_URL ? new Redis(process.env.REDIS_URL) : null;
 
 if (redis) {
@@ -16,7 +16,12 @@ if (redis) {
   console.warn('[redis] REDIS_URL kosong — soft lock dimatikan, andalkan constraint DB');
 }
 
-const lockKey = (vendorId, eventDate, timeSlot) => `lock:${vendorId}:${eventDate}:${timeSlot}`;
+// Sejak migrasi 014 kuncinya per TANGGAL, bukan per shift — tidak ada lagi
+// bagian hari yang bisa dipegang sendirian. Lock ini cuma dipasang untuk
+// vendor yang benar-benar eksklusif seharian (per_tim & daily_capacity = 1);
+// memasangnya pada vendor berkapasitas banyak akan memaksa pembeli antre
+// satu-satu tanpa mencegah apa pun.
+const lockKey = (vendorId, eventDate) => `lock:${vendorId}:${eventDate}`;
 
 // Lepas lock hanya kalau pemegangnya memang kita. Tanpa pengecekan ini, user A
 // yang lock-nya sudah kedaluwarsa bisa menghapus lock milik user B yang baru.
@@ -29,11 +34,11 @@ const RELEASE_SCRIPT = `
 
 // true  = lock didapat (atau Redis mati, jadi lanjut saja)
 // false = slot sedang dipegang user lain
-async function acquireLock(vendorId, eventDate, timeSlot, userId) {
+async function acquireLock(vendorId, eventDate, userId) {
   if (!redis) return true;
   try {
     const res = await redis.set(
-      lockKey(vendorId, eventDate, timeSlot), userId, 'EX', LOCK_TTL_SECONDS, 'NX'
+      lockKey(vendorId, eventDate), userId, 'EX', LOCK_TTL_SECONDS, 'NX'
     );
     return res === 'OK';
   } catch (err) {
@@ -44,20 +49,20 @@ async function acquireLock(vendorId, eventDate, timeSlot, userId) {
 }
 
 // Siapa pemegang lock saat ini (null kalau bebas / Redis mati)
-async function lockHolder(vendorId, eventDate, timeSlot) {
+async function lockHolder(vendorId, eventDate) {
   if (!redis) return null;
   try {
-    return await redis.get(lockKey(vendorId, eventDate, timeSlot));
+    return await redis.get(lockKey(vendorId, eventDate));
   } catch (err) {
     console.error('[redis] get gagal:', err.message);
     return null;
   }
 }
 
-async function releaseLock(vendorId, eventDate, timeSlot, userId) {
+async function releaseLock(vendorId, eventDate, userId) {
   if (!redis) return;
   try {
-    await redis.eval(RELEASE_SCRIPT, 1, lockKey(vendorId, eventDate, timeSlot), userId);
+    await redis.eval(RELEASE_SCRIPT, 1, lockKey(vendorId, eventDate), userId);
   } catch (err) {
     console.error('[redis] release gagal:', err.message);
   }

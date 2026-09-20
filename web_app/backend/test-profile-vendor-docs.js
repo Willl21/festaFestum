@@ -1,6 +1,7 @@
 // Uji endpoint profil user & dokumen vendor. Jalankan dengan server hidup:
 //   node test-profile-vendor-docs.js
 const assert = require('assert');
+const pool = require('./src/config/db');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 
@@ -18,6 +19,9 @@ async function api(path, { method = 'GET', body, token } = {}) {
 
 const uniq = () => Math.random().toString(36).slice(2, 10);
 
+// Semua email yang dibuat run ini, supaya bisa disapu di akhir.
+const DIBUAT = [];
+
 async function register(role) {
   const tag = uniq();
   const r = await api('/auth/register', {
@@ -28,6 +32,7 @@ async function register(role) {
     },
   });
   assert.strictEqual(r.status, 201, `register gagal: ${JSON.stringify(r.body)}`);
+  DIBUAT.push(`t${tag}@mail.com`);
   return r.body.token;
 }
 
@@ -94,4 +99,21 @@ async function register(role) {
   assert.strictEqual(r.status, 403);
 
   console.log('OK — profil user & dokumen vendor lolos semua skenario');
-})();
+})()
+  .catch((err) => {
+    console.error('GAGAL:', err.message);
+    process.exitCode = 1;
+  })
+  // Bersih-bersih jalan baik lolos maupun gagal. Skrip ini dulu satu-satunya
+  // yang tidak punya blok ini, jadi tiap run meninggalkan 2 akun uji.
+  // Vendor, layanan, dan dokumen ikut CASCADE dari users; tidak ada booking
+  // yang dibuat di sini, jadi urutan bookings-dulu tidak diperlukan.
+  .finally(async () => {
+    if (DIBUAT.length) {
+      const r = await pool.query(
+        'DELETE FROM users WHERE email = ANY($1::text[])', [DIBUAT]
+      );
+      console.log(`Data uji dibersihkan: ${r.rowCount} akun.`);
+    }
+    await pool.end();
+  });

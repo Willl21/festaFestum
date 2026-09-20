@@ -3,7 +3,6 @@ import TabelSkeleton from '../components/TabelSkeleton'
 import TukarHalus from '../components/TukarHalus'
 import { Link } from 'react-router-dom'
 import { VendorPageHeader, StatusPill } from '../components/VendorLayout'
-import { shifts } from '../data/shifts'
 import { rupiahBulat } from '../lib/format'
 import { listVendorBookings, konfirmasiBooking, type ApiBooking } from '../lib/api'
 
@@ -117,7 +116,6 @@ export default function VendorPemesananPage() {
                 <tbody>
                   {rows.map((b) => {
                     const st = statusPesanan(b)
-                    const shift = shifts.find((x) => x.value === b.time_slot)
                     const dibayar = b.payments
                       .filter((p) => p.gateway_status === 'success')
                       .reduce((t, p) => t + Number(p.amount), 0)
@@ -141,7 +139,7 @@ export default function VendorPemesananPage() {
                             })}
                           </p>
                           <p className="mt-0.5 text-[13px] text-ink/70">
-                            {shift ? shift.label + ' (' + shift.hours + ')' : b.time_slot}
+                            {b.start_time}
                           </p>
                         </td>
                         <td className="px-6 py-5 text-right">

@@ -12,7 +12,7 @@ import { ArrowRight, ChevronDown, PhotoIcon } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
 import { rupiah } from '../lib/format'
 import {
-  getVendor, getVendorServices, cekKetersediaan,
+  getVendor, getVendorServices, cekKetersediaan, urlFotoVendor,
   type ApiService, type ApiVendor,
 } from '../lib/api'
 
@@ -29,14 +29,17 @@ export default function MuaDetailPage() {
   const [layanan, setLayanan] = useState<ApiService[]>([])
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
+  // Nomor slot portofolio yang TERISI. GET /vendors/:id membalas nomor slot
+  // saja, bukan gambarnya — lihat image-storage-pattern.
+  const [fotoSlot, setFotoSlot] = useState<number[]>([])
 
   // Paket yang dipilih = service_id, bukan namanya. Nama bisa kembar antar
   // vendor, service_id tidak.
   const [paketId, setPaketId] = useState('')
   const [tanggal, setTanggal] = useState('')
-  // Sengaja kosong: KalenderSlot yang menentukan shift mana yang bebas di
-  // tanggal terpilih, jadi nilai awal 'pagi' bisa menunjuk slot yang tutup.
-  const [shift, setShift] = useState('')
+  // Sengaja kosong: jam diisi sendiri oleh pemesan. Nilai bawaan cuma bikin
+  // jam yang tidak pernah dipilih siapa pun ikut terkirim ke backend.
+  const [jam, setJam] = useState('')
   const [cek, setCek] = useState<{ ada: boolean; alasan: string | null } | null>(null)
   const [mengecek, setMengecek] = useState(false)
 
@@ -45,6 +48,7 @@ export default function MuaDetailPage() {
       .then(([v, s]) => {
         const aktif = s.data.filter((x) => x.is_active)
         setVendor(v.vendor)
+        setFotoSlot(v.portfolio.map((f) => f.sort_order))
         setLayanan(aktif)
         if (aktif[0]) setPaketId(aktif[0].service_id)
       })
@@ -65,12 +69,12 @@ export default function MuaDetailPage() {
     setMengecek(true)
     try {
       const r = await cekKetersediaan({
-        service_id: dipilih.service_id, event_date: tanggal, time_slot: shift,
+        service_id: dipilih.service_id, event_date: tanggal,
       })
       setCek({ ada: r.available, alasan: r.reason })
       if (r.available) {
         navigate(`/${kategori.slug}/${id}/pesan?service=${dipilih.service_id}`
-          + `&date=${tanggal}&slot=${shift}`)
+          + `&date=${tanggal}&jam=${jam}`)
       }
     } catch (e) {
       setCek({ ada: false, alasan: (e as Error).message })
@@ -100,15 +104,18 @@ export default function MuaDetailPage() {
             {vendor.is_verified ? 'Vendor Terverifikasi' : 'Makeup Artist'} · {namaKota(vendor.city)}
           </span>
 
-          {/* GALERI: dua blok, besar di kiri. Foto vendor belum ada. */}
+          {/* GALERI: dua blok, besar di kiri. Foto portofolio asli; slot yang
+              kosong jatuh ke emoji kategori lewat <Img>. */}
           <section className="relative mt-6 grid gap-2.5 md:grid-cols-3">
             <Img
+              src={fotoSlot.includes(0) ? urlFotoVendor(id, 0) : undefined}
               alt={vendor.business_name}
               emoji={kategori.emoji}
               tint={kategori.tint}
               className="h-[300px] w-full object-cover md:col-span-2 md:h-[520px]"
             />
             <Img
+              src={fotoSlot.includes(1) ? urlFotoVendor(id, 1) : undefined}
               alt={`${vendor.business_name} 2`}
               emoji={kategori.emoji}
               tint={kategori.tint}
@@ -187,7 +194,7 @@ export default function MuaDetailPage() {
               </div>
 
               <p className="mt-5 text-[15px] font-semibold">Tanggal Acara</p>
-              {/* Kalender menggantikan <input type="date"> + radio shift:
+              {/* Kalender menggantikan <input type="date"> polos:
                   tanggal yang vendornya tidak buka, sudah penuh, atau masih
                   di dalam minimum_notice_days langsung mati di grid, jadi
                   user tidak perlu menebak lalu ditolak. */}
@@ -196,8 +203,8 @@ export default function MuaDetailPage() {
                   <KalenderSlot
                     serviceId={dipilih.service_id}
                     tanggal={tanggal}
-                    shift={shift}
-                    onPilih={(t, sh) => { setTanggal(t); setShift(sh); setCek(null) }}
+                    jam={jam}
+                    onPilih={(t, j) => { setTanggal(t); setJam(j); setCek(null) }}
                   />
                 </div>
               ) : (

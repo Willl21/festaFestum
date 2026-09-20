@@ -5,7 +5,6 @@ import { Link } from 'react-router-dom'
 import Img from '../components/Img'
 import { SearchIcon, ChevronDown } from '../components/icons'
 import { categories, namaKota, type CategoryKey } from '../data/categories'
-import { shifts } from '../data/shifts'
 import { rupiah } from '../lib/format'
 import { getToken, listMyBookings, batalBooking, kirimUlasan, type ApiBooking } from '../lib/api'
 
@@ -251,7 +250,6 @@ export default function PesananSayaPage() {
               const lunasPenuh = p.payment_status === 'fully_paid'
               // Tagihan yang masih menggantung, kalau ada.
               const tertunda = p.payments.find((x) => x.gateway_status === 'pending')
-              const shiftLabel = shifts.find((x) => x.value === p.time_slot)?.label ?? p.time_slot
 
               return (
                 <article key={p.booking_id} className="border border-line bg-white">
@@ -286,7 +284,7 @@ export default function PesananSayaPage() {
                         <div>
                           <dt className="text-[10px] font-semibold tracking-[0.04em] text-muted">TANGGAL ACARA</dt>
                           <dd className="mt-1 text-[13px] font-semibold">
-                            {tanggalPanjang(p.event_date)} · {shiftLabel}
+                            {tanggalPanjang(p.event_date)} · {p.start_time}
                           </dd>
                         </div>
                         <div>

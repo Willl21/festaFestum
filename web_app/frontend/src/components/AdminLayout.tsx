@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { GridIcon, ShieldIcon, WalletIcon, UserCircleIcon, BellIcon } from './icons'
+import { GridIcon, ShieldIcon, WalletIcon, UserCircleIcon, BellIcon, MenuIcon } from './icons'
 import { cekAkses } from './PenjagaAkses'
 import { clearAuth, usePengguna } from '../lib/api'
 
@@ -11,7 +12,12 @@ import { clearAuth, usePengguna } from '../lib/api'
  *
  *  Penjaga aksesnya di layout ini, bukan di tiap halaman: keempat halaman
  *  admin lewat sini, jadi satu pemeriksaan menutup semuanya — dan halaman
- *  admin baru ikut terjaga tanpa perlu diingat. Lihat PenjagaAkses.tsx. */
+ *  admin baru ikut terjaga tanpa perlu diingat. Lihat PenjagaAkses.tsx.
+ *
+ *  Drawer di bawah lg dengan pola yang sama persis seperti VendorLayout —
+ *  sidebar yang sama digeser, bukan menu kedua. Sengaja disalin dan tidak
+ *  diangkat jadi komponen bersama: dua kemunculan, dan warnanya beda
+ *  (navy vs putih). Kalau muncul yang ketiga, baru disatukan. */
 
 const menu = [
   { to: '/admin', label: 'Ringkasan', icon: GridIcon, end: true },
@@ -23,6 +29,9 @@ const menu = [
 export default function AdminLayout() {
   const navigate = useNavigate()
   const user = usePengguna()
+  // Sebelum cabang penolakan — sama seperti di VendorLayout, hook di bawah
+  // early return bikin jumlahnya berubah saat keluar.
+  const [menuBuka, setMenuBuka] = useState(false)
   const tolak = cekAkses('admin', '/admin/masuk')
   if (tolak) return tolak
 
@@ -32,8 +41,25 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className="flex min-h-screen bg-[#f7f8fc]">
-      <aside className="sticky top-0 hidden h-screen w-[268px] shrink-0 flex-col bg-navy-900 lg:flex">
+    <div
+      className="flex min-h-screen bg-[#f7f8fc]"
+      onKeyDown={(e) => e.key === 'Escape' && setMenuBuka(false)}
+    >
+      {menuBuka && (
+        <button
+          type="button"
+          aria-label="Tutup menu"
+          onClick={() => setMenuBuka(false)}
+          className="fixed inset-0 z-30 bg-ink/50 lg:hidden"
+        />
+      )}
+
+      <aside
+        id="menu-admin"
+        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-[268px] shrink-0 flex-col overflow-y-auto bg-navy-900 transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0 ${
+          menuBuka ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
         <div className="flex items-center gap-3 px-6 pt-7 pb-8">
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 font-display text-[18px] font-semibold text-amber">
             F.
@@ -48,7 +74,7 @@ export default function AdminLayout() {
           </span>
         </div>
 
-        <nav className="space-y-1 px-3">
+        <nav className="space-y-1 px-3" onClick={() => setMenuBuka(false)}>
           {menu.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
@@ -88,10 +114,22 @@ export default function AdminLayout() {
 
       <div className="min-w-0 flex-1">
         <header className="flex items-center justify-between gap-4 border-b border-line bg-white px-6 py-4 md:px-10">
-          <p className="text-[12px] tracking-wide text-muted uppercase">
-            Konsol Marketplace Institusional <span className="mx-2 text-amber">•</span> Hub Sentral
-            Jabodetabek
-          </p>
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              aria-label="Buka menu"
+              aria-expanded={menuBuka}
+              aria-controls="menu-admin"
+              onClick={() => setMenuBuka(true)}
+              className="shrink-0 rounded-md border border-line p-1.5 text-ink/80 transition-colors hover:border-navy-900 hover:text-navy-900 lg:hidden"
+            >
+              <MenuIcon />
+            </button>
+            <p className="text-[12px] tracking-wide text-muted uppercase">
+              Konsol Marketplace Institusional <span className="mx-2 text-amber">•</span> Hub
+              Sentral Jabodetabek
+            </p>
+          </div>
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-2 text-[12px] text-ink/70">
               <span className="h-2 w-2 rounded-full bg-[#2e6b52]" /> Gateway Escrow: Sandbox

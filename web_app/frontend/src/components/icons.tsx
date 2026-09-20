@@ -260,3 +260,9 @@ export const SettingsIcon = ({ className = 'h-4 w-4' }) => (
     <path d="M12 2.8v2.4M12 18.8v2.4M4.5 12H2.1M21.9 12h-2.4M6.7 6.7 5 5m14 14-1.7-1.7M6.7 17.3 5 19M19 5l-1.7 1.7" strokeLinecap="round" />
   </svg>
 )
+
+export const MenuIcon = ({ className = 'h-6 w-6' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+    <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />
+  </svg>
+)

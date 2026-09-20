@@ -4,7 +4,8 @@ import Reveal from '../components/Reveal'
 import TukarHalus from '../components/TukarHalus'
 import { Link } from 'react-router-dom'
 import Img from '../components/Img'
-import { listVendors, type ApiVendor } from '../lib/api'
+import HoverRevealCards, { type CardItem } from '../components/hovercard'
+import { listVendors, urlFotoVendor, type ApiVendor } from '../lib/api'
 import { categories, namaKota, type CategoryKey } from '../data/categories'
 
 /** Enum kategori backend -> kunci kategori frontend. */
@@ -29,12 +30,14 @@ const searchFields: Field[] = [
   },
 ]
 
-const kategori = [
-  { label: 'MUA', image: '/img/kategori-mua.jpg', to: '/mua' },
-  { label: 'Jas & Kebaya', image: '/img/kategori-attire.jpg', to: '/jas-kebaya' },
-  { label: 'Florist', image: '/img/kategori-florist.png', to: '/florist' },
-  { label: 'Fotografer', image: '/img/kategori-fotografer.jpg', to: '/fotografer' },
-  { label: 'Event Organizer', image: '/img/kategori-eo.jpg', to: '/event-organizer' },
+// Subtitle-nya bukan hiasan: dia yang membedakan lima kartu yang fotonya
+// sama-sama gelap, dan HoverRevealCards memang menaruh dua baris teks.
+const kategori: CardItem[] = [
+  { id: 'mua', title: 'MUA', subtitle: 'Rias pengantin', imageUrl: '/img/kategori-mua.jpg', to: '/mua' },
+  { id: 'attire', title: 'Jas & Kebaya', subtitle: 'Sewa busana', imageUrl: '/img/kategori-attire.jpg', to: '/jas-kebaya' },
+  { id: 'florist', title: 'Florist', subtitle: 'Buket & dekorasi', imageUrl: '/img/kategori-florist.png', to: '/florist' },
+  { id: 'fotografer', title: 'Fotografer', subtitle: 'Dokumentasi', imageUrl: '/img/kategori-fotografer.jpg', to: '/fotografer' },
+  { id: 'eo', title: 'Event Organizer', subtitle: 'Perencana acara', imageUrl: '/img/kategori-eo.jpg', to: '/event-organizer' },
 ]
 
 const langkah = [
@@ -118,18 +121,7 @@ export default function LandingPage() {
               Berbagai pilihan layanan untuk membantu mempersiapkan acara formal Anda.
             </p>
 
-            <div className="mt-7 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-5">
-              {kategori.map((k) => (
-                <Link key={k.label} to={k.to} className="group block">
-                  <Img
-                    src={k.image}
-                    alt={k.label}
-                    className="h-[240px] w-full object-cover transition-opacity group-hover:opacity-90"
-                  />
-                  <span className="mt-3 block text-center text-[14px] font-medium">{k.label}</span>
-                </Link>
-              ))}
-            </div>
+            <HoverRevealCards items={kategori} className="mt-7" />
           </Reveal>
 
           {/* REKOMENDASI */}
@@ -151,6 +143,7 @@ export default function LandingPage() {
                 return (
                   <article className="flex flex-col border border-line bg-white transition-transform duration-200 motion-safe:hover:scale-[1.02]">
                     <Img
+                      src={besar.has_photo ? urlFotoVendor(besar.vendor_id) : undefined}
                       alt={besar.business_name}
                       emoji={kat.emoji}
                       tint={kat.tint}
@@ -185,6 +178,7 @@ export default function LandingPage() {
                   return (
                     <article key={v.vendor_id} className="flex flex-col border border-line bg-white transition-transform duration-200 motion-safe:hover:scale-[1.02]">
                       <Img
+                        src={v.has_photo ? urlFotoVendor(v.vendor_id) : undefined}
                         alt={v.business_name}
                         emoji={kat.emoji}
                         tint={kat.tint}
