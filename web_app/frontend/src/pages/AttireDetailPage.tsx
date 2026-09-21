@@ -151,7 +151,7 @@ export default function AttireDetailPage() {
         <div className="mx-auto max-w-[1330px] px-6 pt-12 pb-20 md:px-12">
           <BackButton ke={`/${kat.slug}`} />
 
-          <h1 className="mt-5 font-display text-[38px] font-semibold">{vendor.business_name}</h1>
+          <h1 className="mt-5 font-display text-[28px] md:text-[38px] font-semibold">{vendor.business_name}</h1>
           <p className="mt-2 text-[14px] text-[#2e6b52]">
             {kat.label} · {namaKota(vendor.city)}
             {vendor.is_verified && ' · Terverifikasi'}

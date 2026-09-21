@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import Img from '../components/Img'
+import HeroSlideshow from '../components/HeroSlideshow'
 import SearchPanel, { type Field } from '../components/SearchPanel'
 import VendorCard, { type Vendor } from '../components/VendorCard'
 import KategoriSkeleton from '../components/KategoriSkeleton'
@@ -28,6 +28,11 @@ const searchFields: Field[] = [
     options: ['Semua Jenis', 'Buket Pengantin', 'Dekorasi Pelaminan', 'Meja Tamu', 'Hand Bouquet'],
   },
 ]
+
+/** Lima foto hero yang berganti tiap 6 detik. Ditulis di sini, bukan di
+ *  HeroSlideshow, supaya tiap halaman tetap bisa dibaca utuh dan fotonya
+ *  bisa ditukar tanpa menyentuh halaman lain. */
+const fotoHero = [1, 2, 3, 4, 5].map((n) => `/img/hero-florist-${n}.jpg`)
 
 export default function FloristPage() {
   const [vendors, setVendors] = useState<Vendor[]>([])
@@ -65,15 +70,13 @@ export default function FloristPage() {
         <>
       {/* HERO */}
       <section className="relative">
-        <div className="h-[340px] overflow-hidden md:h-[500px]">
-          <Img
-            src="/img/hero-florist.jpg"
-            alt="Rangkaian bunga mawar"
-            emoji={kategori.emoji}
-            tint={kategori.tint}
-            className="h-full w-full object-cover"
-          />
-        </div>
+        <HeroSlideshow
+          foto={fotoHero}
+          alt="Rangkaian bunga mawar"
+          emoji={kategori.emoji}
+          tint={kategori.tint}
+          className="h-[340px] overflow-hidden md:h-[500px]"
+        />
 
         {/* Panel duduk di batas bawah foto, menindih tipis saja. */}
         <div className="relative z-10 mx-auto -mt-2 max-w-[1330px] px-6 md:px-12">

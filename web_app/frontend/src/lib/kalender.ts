@@ -24,12 +24,16 @@ export const KELAS_KALENDER = {
     'flex h-7 w-7 items-center justify-center rounded-sm text-ink/70 transition-colors hover:bg-lavender/50 disabled:opacity-30',
   button_next:
     'flex h-7 w-7 items-center justify-center rounded-sm text-ink/70 transition-colors hover:bg-lavender/50 disabled:opacity-30',
-  month_grid: 'mt-2 w-full border-collapse',
+  month_grid: 'mt-2 w-full table-fixed border-collapse',
   weekdays: 'text-[11px] tracking-wide text-muted uppercase',
   weekday: 'pb-2 font-normal',
   day: 'p-0.5 text-center',
+  // w-full + max-w-9, bukan w-9 tetap: 7x36px + padding sel tidak muat di
+  // panel pemesanan pada layar 360px dan bikin SELURUH halaman bisa digeser
+  // ke samping. Batas atasnya dipertahankan supaya di layar lebar tombolnya
+  // tetap kotak, bukan pil melebar.
   day_button:
-    'h-9 w-9 rounded-sm text-[13px] transition-colors hover:bg-lavender/50 disabled:cursor-not-allowed disabled:text-ink/25 disabled:hover:bg-transparent',
+    'mx-auto h-9 w-full max-w-9 rounded-sm text-[13px] transition-colors hover:bg-lavender/50 disabled:cursor-not-allowed disabled:text-ink/25 disabled:hover:bg-transparent',
   selected: '[&>button]:bg-navy-900 [&>button]:text-white [&>button:hover]:bg-navy-900',
   today: '[&>button]:font-semibold [&>button]:text-maroon',
   outside: 'opacity-45',

@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
+import { MenuIcon } from './icons'
 import { clearAuth, usePengguna } from '../lib/api'
 
 export default function Navbar() {
@@ -7,6 +9,9 @@ export default function Navbar() {
   // Halaman profil duduk di dalam SiteLayout, jadi navbar TIDAK ter-mount ulang
   // setelah nama atau foto disimpan — usePengguna() yang bikin ikut berubah.
   const user = usePengguna()
+  // Di bawah md tautan navigasi tidak muat di bilah; tanpa panel ini
+  // Beranda/Festa AI/Pesanan Saya sama sekali tidak bisa dijangkau dari HP.
+  const [menuBuka, setMenuBuka] = useState(false)
 
   // "Pesanan Saya" hanya untuk yang sudah masuk; tamu tidak punya pesanan.
   const links = [
@@ -21,8 +26,11 @@ export default function Navbar() {
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-line bg-cream/95 backdrop-blur">
-      <div className="mx-auto flex h-[70px] max-w-[1440px] items-center justify-between px-6 md:px-12">
+    <header
+      className="sticky top-0 z-50 border-b border-line bg-cream/95 backdrop-blur"
+      onKeyDown={(e) => e.key === 'Escape' && setMenuBuka(false)}
+    >
+      <div className="mx-auto flex h-[70px] max-w-[1440px] items-center justify-between gap-3 px-4 sm:px-6 md:px-12">
         <Link to="/" className="font-display text-2xl font-semibold tracking-tight md:text-[28px]">
           Festa Festum
         </Link>
@@ -67,45 +75,84 @@ export default function Navbar() {
           ))}
         </nav>
 
-        {user ? (
-          <div className="flex items-center gap-3">
-            <Link
-              to={user.role === 'vendor_owner' ? '/vendor' : '/profil'}
-              className="flex items-center gap-2.5"
-              title={user.email}
-            >
-              {user.avatar_url ? (
-                <img
-                  src={user.avatar_url}
-                  alt=""
-                  className="h-9 w-9 rounded-full object-cover"
-                />
-              ) : (
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-navy-900 text-[14px] font-medium text-white">
-                  {user.name.trim().charAt(0).toUpperCase()}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {user ? (
+            <div className="flex items-center gap-3">
+              <Link
+                to={user.role === 'vendor_owner' ? '/vendor' : '/profil'}
+                className="flex items-center gap-2.5"
+                title={user.email}
+              >
+                {user.avatar_url ? (
+                  <img
+                    src={user.avatar_url}
+                    alt=""
+                    className="h-9 w-9 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-navy-900 text-[14px] font-medium text-white">
+                    {user.name.trim().charAt(0).toUpperCase()}
+                  </span>
+                )}
+                <span className="hidden max-w-[140px] truncate text-[15px] text-ink md:block">
+                  {user.name}
                 </span>
-              )}
-              <span className="hidden max-w-[140px] truncate text-[15px] text-ink md:block">
-                {user.name}
-              </span>
-            </Link>
-            <button
-              type="button"
-              onClick={keluar}
-              className="text-[13px] font-semibold tracking-[0.06em] text-muted transition-colors hover:text-maroon"
+              </Link>
+              <button
+                type="button"
+                onClick={keluar}
+                className="text-[13px] font-semibold tracking-[0.06em] text-muted transition-colors hover:text-maroon"
+              >
+                KELUAR
+              </button>
+            </div>
+          ) : (
+            <Link
+              to="/masuk"
+              className="flex h-9 items-center rounded bg-navy-900 px-5 text-[14px] font-medium text-white transition-opacity hover:opacity-90"
             >
-              KELUAR
-            </button>
-          </div>
-        ) : (
-          <Link
-            to="/masuk"
-            className="flex h-9 items-center rounded bg-navy-900 px-5 text-[14px] font-medium text-white transition-opacity hover:opacity-90"
+              Masuk
+            </Link>
+          )}
+
+          <button
+            type="button"
+            aria-label="Buka menu"
+            aria-expanded={menuBuka}
+            aria-controls="menu-utama"
+            onClick={() => setMenuBuka((v) => !v)}
+            className="rounded-md border border-line p-1.5 text-ink/80 transition-colors hover:border-navy-900 hover:text-navy-900 md:hidden"
           >
-            Masuk
-          </Link>
-        )}
+            <MenuIcon className="h-5 w-5" />
+          </button>
+        </div>
       </div>
+
+      {/* Menu HP: tautan yang sama, ditumpuk di bawah bilah. Ditutup lewat
+          onClick di <nav> (bubbling dari tautan yang ditekan), bukan efek
+          yang mengintai rute — pola yang sama dengan drawer VendorLayout. */}
+      {menuBuka && (
+        <nav
+          id="menu-utama"
+          onClick={() => setMenuBuka(false)}
+          className="border-t border-line bg-cream px-4 py-2 sm:px-6 md:hidden"
+        >
+          {links.map((l) => (
+            <NavLink
+              key={l.to}
+              to={l.to}
+              end={l.to === '/'}
+              className={({ isActive }) =>
+                `block rounded px-2 py-3 text-[15px] ${
+                  isActive ? 'font-medium text-ink' : 'text-ink/80'
+                }`
+              }
+            >
+              {l.label}
+            </NavLink>
+          ))}
+        </nav>
+      )}
     </header>
   )
 }

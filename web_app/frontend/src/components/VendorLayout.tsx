@@ -147,12 +147,18 @@ export default function VendorLayout() {
         <header className="flex items-center justify-between gap-4 border-b border-line bg-white px-6 py-4 md:px-10">
           <p className="font-display text-[24px] font-semibold">Festa Marketplace</p>
           <div className="flex items-center gap-4 text-ink/70">
-            <span className="rounded-full bg-lavender/50 px-3 py-1 text-[12px] font-semibold text-navy-900">
-              <span className="text-amber">●</span> Status: Aktif
+            {/* Empat hiasan ini tidak muat bareng tombol menu di layar 375px —
+                header-nya melar 13px dan SELURUH halaman vendor bisa digeser
+                ke samping. Tidak satu pun bisa diklik, jadi yang dikorbankan
+                di HP memang ini, bukan tombol menunya. */}
+            <span className="hidden items-center gap-4 sm:flex">
+              <span className="rounded-full bg-lavender/50 px-3 py-1 text-[12px] font-semibold text-navy-900">
+                <span className="text-amber">●</span> Status: Aktif
+              </span>
+              <BellIcon />
+              <ChatIcon />
+              <UserCircleIcon className="h-6 w-6" />
             </span>
-            <BellIcon />
-            <ChatIcon />
-            <UserCircleIcon className="h-6 w-6" />
             {/* Tombol Keluar yang dulu di sini dibuang: sidebar sudah punya
                 satu, dan sekarang sidebarnya terjangkau dari HP. */}
             <button

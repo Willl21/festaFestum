@@ -173,7 +173,7 @@ export default function PesananSayaPage() {
     <TukarHalus memuat={memuat} rangka={<TabelSkeleton kolom={4} baris={5} label="Memuat pesanan…" />}>
       {() => (
         <div className="mx-auto max-w-[1330px] px-6 pt-12 pb-20 md:px-12">
-          <h1 className="font-display text-[38px] font-semibold">Pesanan Saya</h1>
+          <h1 className="font-display text-[28px] md:text-[38px] font-semibold">Pesanan Saya</h1>
           <p className="mt-2 max-w-[560px] text-[15px] leading-relaxed text-ink/75">
             Pantau status pembayaran, jadwal acara, dan dana escrow setiap pesanan Anda di satu tempat.
           </p>

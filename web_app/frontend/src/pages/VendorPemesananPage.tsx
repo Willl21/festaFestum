@@ -82,7 +82,7 @@ export default function VendorPemesananPage() {
             title="Manajemen Pemesanan"
             description="Kelola daftar pesanan klien Anda dan pantau status acara terkini."
             action={
-              <div className="flex rounded-md border border-line bg-white p-1">
+              <div className="flex flex-wrap rounded-md border border-line bg-white p-1">
                 {tabs.map((t) => (
                   <button
                     key={t}

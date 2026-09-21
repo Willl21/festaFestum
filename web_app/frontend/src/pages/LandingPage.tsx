@@ -4,6 +4,7 @@ import Reveal from '../components/Reveal'
 import TukarHalus from '../components/TukarHalus'
 import { Link } from 'react-router-dom'
 import Img from '../components/Img'
+import HeroSlideshow from '../components/HeroSlideshow'
 import HoverRevealCards, { type CardItem } from '../components/hovercard'
 import { listVendors, urlFotoVendor, type ApiVendor } from '../lib/api'
 import { categories, namaKota, type CategoryKey } from '../data/categories'
@@ -38,6 +39,19 @@ const kategori: CardItem[] = [
   { id: 'florist', title: 'Florist', subtitle: 'Buket & dekorasi', imageUrl: '/img/kategori-florist.png', to: '/florist' },
   { id: 'fotografer', title: 'Fotografer', subtitle: 'Dokumentasi', imageUrl: '/img/kategori-fotografer.jpg', to: '/fotografer' },
   { id: 'eo', title: 'Event Organizer', subtitle: 'Perencana acara', imageUrl: '/img/kategori-eo.jpg', to: '/event-organizer' },
+]
+
+/** Lima foto hero yang berganti tiap 6 detik. Satu per kategori, jadi yang
+ *  baru mendarat langsung melihat cakupan marketplace-nya — bukan lima
+ *  variasi satu tema. `hero-landing.jpg` dipertahankan sebagai foto PERTAMA:
+ *  dia yang di-preload di index.html, jadi menggantinya berarti layar
+ *  pertama menunggu unduhan baru. Dia juga yang mewakili Event Organizer. */
+const fotoHero = [
+  '/img/hero-landing.jpg',
+  '/img/hero-florist-1.jpg',
+  '/img/hero-mua-1.jpg',
+  '/img/hero-fotografer-1.jpg',
+  '/img/hero-attire-1.jpg',
 ]
 
 const langkah = [
@@ -87,11 +101,10 @@ export default function LandingPage() {
           {/* HERO */}
           <section className="relative">
             <div className="relative h-[560px] overflow-hidden md:h-[720px]">
-              <Img
-                src="/img/hero-landing.jpg"
-                prioritas
+              <HeroSlideshow
+                foto={fotoHero}
                 alt="Dekorasi acara formal"
-                className="h-full w-full object-cover"
+                className="h-full w-full"
               />
               <div className="absolute inset-0 bg-black/35" />
 

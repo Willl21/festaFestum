@@ -215,7 +215,7 @@ export default function VendorJadwalPage() {
       )}
 
       <div className="mt-8 grid gap-7 lg:grid-cols-[1fr_320px]">
-        <section className="rounded-lg border border-line bg-white p-6">
+        <section className="rounded-lg border border-line bg-white p-4 sm:p-6">
           <div className="flex items-center justify-between gap-4">
             <h2 className="font-display text-[22px] font-semibold">
               {monthNames[month.getMonth()]} {month.getFullYear()}
@@ -235,7 +235,7 @@ export default function VendorJadwalPage() {
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-7 gap-1.5 text-center text-[12px] font-semibold text-ink/60">
+          <div className="mt-6 grid grid-cols-7 gap-1 text-center text-[12px] font-semibold text-ink/60 sm:gap-1.5">
             {dayNames.map((d) => (
               <div key={d} className="pb-1">
                 {d}
@@ -243,7 +243,7 @@ export default function VendorJadwalPage() {
             ))}
           </div>
 
-          <div className="mt-1 grid grid-cols-7 gap-1.5">
+          <div className="mt-1 grid grid-cols-7 gap-1 sm:gap-1.5">
             {days.map((date, i) => {
               if (!date) return <div key={`pad-${i}`} />
 
@@ -259,7 +259,7 @@ export default function VendorJadwalPage() {
                   disabled={isPast}
                   onClick={() => setSelected(key)}
                   aria-pressed={isSelected}
-                  className={`flex h-[74px] flex-col items-start rounded-md border p-2 text-left transition-colors ${
+                  className={`flex h-[64px] flex-col items-start rounded-md border p-1.5 text-left transition-colors sm:h-[74px] sm:p-2 ${
                     isSelected ? 'border-ink bg-lavender/40' : 'border-line hover:border-navy-900/40'
                   } ${isPast ? 'cursor-not-allowed opacity-35' : ''}`}
                 >

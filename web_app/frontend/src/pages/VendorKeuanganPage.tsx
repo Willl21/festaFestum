@@ -186,7 +186,7 @@ export default function VendorKeuanganPage() {
                 <p className="flex items-center gap-2 text-[14px] font-semibold text-ink/80">
                   <WalletIcon className="h-5 w-5 text-amber" /> Saldo Tersedia
                 </p>
-                <p className="mt-4 font-display text-[38px] leading-tight font-semibold">
+                <p className="mt-4 font-display text-[28px] md:text-[38px] leading-tight font-semibold">
                   {rupiahBulat(balance.available)}
                 </p>
                 <p className="mt-1 text-[13px] text-ink/70">Siap untuk ditarik ke rekening terdaftar.</p>

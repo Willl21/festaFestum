@@ -100,7 +100,7 @@ export default function VendorDokumenPage() {
 
   return (
     <div className="min-h-screen bg-cream px-4 py-12">
-      <h1 className="text-center font-display text-[36px] font-semibold text-navy-900">
+      <h1 className="text-center font-display text-[28px] md:text-[36px] font-semibold text-navy-900">
         Festa Vendor
       </h1>
 

@@ -131,7 +131,7 @@ export default function AdminLayout() {
             </p>
           </div>
           <div className="flex items-center gap-4">
-            <span className="flex items-center gap-2 text-[12px] text-ink/70">
+            <span className="hidden items-center gap-2 text-[12px] text-ink/70 sm:flex">
               <span className="h-2 w-2 rounded-full bg-[#2e6b52]" /> Gateway Escrow: Sandbox
             </span>
             <BellIcon className="h-5 w-5 text-ink/50" />

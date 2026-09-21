@@ -14,7 +14,7 @@ export default function FlowLayout({ title, children }: { title?: string; childr
       </header>
 
       <main className="mx-auto w-full max-w-[1330px] flex-1 px-6 pt-10 pb-16 md:px-12">
-        {title && <h1 className="font-display text-[32px] font-semibold">{title}</h1>}
+        {title && <h1 className="font-display text-[26px] md:text-[32px] font-semibold">{title}</h1>}
         {children}
       </main>
 

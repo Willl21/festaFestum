@@ -68,7 +68,7 @@ export default function EoDetailPage() {
           {/* HERO: teks kiri, foto kanan dengan panel statistik. */}
           <section className="mt-5 grid items-center gap-10 lg:grid-cols-2">
             <div>
-              <h1 className="font-display text-[38px] font-semibold">{vendor.business_name}</h1>
+              <h1 className="font-display text-[28px] md:text-[38px] font-semibold">{vendor.business_name}</h1>
               <span className="mt-3 inline-block rounded-full bg-lavender px-4 py-1.5 text-[13px] text-navy-700">
                 {`${kat.label} · ${namaKota(vendor.city)}`}
               </span>

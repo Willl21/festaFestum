@@ -69,7 +69,7 @@ export default function KonfirmasiPage() {
                   </span>
                 </span>
 
-                <h1 className="mt-8 font-display text-[42px] font-semibold">Pemesanan Berhasil!</h1>
+                <h1 className="mt-8 font-display text-[30px] md:text-[42px] font-semibold">Pemesanan Berhasil!</h1>
                 <p className="mx-auto mt-4 max-w-[460px] text-[15px] leading-relaxed text-ink/75">
                   Terima kasih telah mempercayakan perayaan Anda kepada Festa Festum. Pemesanan Anda telah
                   diamankan.

@@ -101,7 +101,7 @@ export default function FloristDetailPage() {
         <div className="mx-auto max-w-[1330px] px-6 pt-12 pb-20 md:px-12">
           <BackButton ke={`/${kategori.slug}`} />
 
-          <h1 className="mt-5 font-display text-[38px] font-semibold">{vendor.business_name}</h1>
+          <h1 className="mt-5 font-display text-[28px] md:text-[38px] font-semibold">{vendor.business_name}</h1>
           <span className="mt-3 inline-block rounded-full bg-pink-100 px-4 py-1.5 text-[13px] text-maroon">
             {vendor.is_verified ? 'Vendor Terverifikasi' : 'Florist'} · {namaKota(vendor.city)}
           </span>
