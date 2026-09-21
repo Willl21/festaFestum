@@ -24,16 +24,26 @@ export default function KalenderTanggal({
   onPilih: (tanggal: string) => void
   mulaiDari?: string
 }) {
-  const [bulan, setBulan] = useState(() =>
-    tanggal ? new Date(`${tanggal}T00:00:00`) : new Date()
-  )
+  // Bulan yang DIPILIH SENDIRI oleh pengguna lewat panah. Selama dia belum
+  // menggeser, bulannya diturunkan dari data — itu yang bikin kalender ini
+  // ikut pindah saat `mulaiDari` berubah.
+  const [bulanManual, setBulanManual] = useState<Date | null>(null)
+
+  // Tanpa `mulaiDari` di sini, kalender pengambilan terbuka di bulan berjalan
+  // sementara seluruh tanggal sahnya ada di bulan berikutnya (sewa jas punya
+  // lead time) — gridnya mati semua dan terbaca seperti "tidak ada tanggal
+  // yang bisa dipilih". Masalah yang sama pernah diperbaiki di KalenderSlot
+  // dengan melompat ke bulan pertama yang bisa dipesan.
+  const bulan =
+    bulanManual ??
+    new Date(`${tanggal || mulaiDari || new Date().toISOString().slice(0, 10)}T00:00:00`)
 
   return (
     <DayPicker
       mode="single"
       locale={localeId}
       month={bulan}
-      onMonthChange={setBulan}
+      onMonthChange={setBulanManual}
       selected={tanggal ? new Date(`${tanggal}T00:00:00`) : undefined}
       disabled={mulaiDari ? (d) => isoLokal(d) < mulaiDari : undefined}
       onSelect={(d) => d && onPilih(isoLokal(d))}

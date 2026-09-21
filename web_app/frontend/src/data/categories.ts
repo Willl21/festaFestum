@@ -57,6 +57,17 @@ export const categories: Record<CategoryKey, CategoryInfo> = {
   },
 }
 
+/** Enum jabodetabek_city dari DB, urut seperti VALID_CITIES di
+ *  `backend/src/controllers/vendor.controller.js`. Dipusatkan karena nilainya
+ *  dikirim apa adanya sebagai filter `city` — salah satu huruf saja dibalas
+ *  400 oleh backend, dan panel cari terbaca "rusak" tanpa sebab yang jelas.
+ *  Sebelumnya daftar ini diketik ulang di landing, lengkap dengan salah ketik
+ *  'Tanggerang' dan tanpa Jakarta Utara maupun Tangerang Selatan. */
+export const KOTA = [
+  'jakarta_pusat', 'jakarta_utara', 'jakarta_barat', 'jakarta_selatan', 'jakarta_timur',
+  'bogor', 'depok', 'tangerang', 'tangerang_selatan', 'bekasi',
+]
+
 /** Enum jabodetabek_city dari DB -> tulisan yang enak dibaca. */
 export function namaKota(kota: string | null): string {
   if (!kota) return '-'

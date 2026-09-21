@@ -13,7 +13,7 @@ import { serviceIcons } from '../components/serviceIcons'
 import { categories, namaKota } from '../data/categories'
 import { rupiah } from '../lib/format'
 import {
-  getVendor, getVendorServices, cekKetersediaan, urlFotoVendor,
+  getVendor, getVendorServices, cekKetersediaan, urlFotoVendor, urlFotoLayanan,
   type ApiService, type ApiVendor,
 } from '../lib/api'
 
@@ -160,17 +160,31 @@ export default function FloristDetailPage() {
                 {layanan.map((s, i) => {
                   const Icon = serviceIcons[IKON[i % IKON.length]]
                   return (
-                    <div key={s.service_id} className="flex gap-3 border border-line bg-white p-4">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-pink-100 text-maroon">
-                        <Icon />
-                      </span>
-                      <div>
-                        <h3 className="text-[13px] font-semibold">{s.service_name}</h3>
-                        <p className="mt-1 text-[13px] leading-relaxed text-ink/75">
-                          {s.description || `Minimal pesan ${s.minimum_notice_days} hari sebelum acara.`}
-                        </p>
-                        <p className="mt-1.5 text-[13px] font-semibold">{rupiah(Number(s.price))}</p>
-                        <RincianLayanan service={s} className="mt-2.5" />
+                    <div key={s.service_id} className="flex flex-col border border-line bg-white">
+                      {/* Tiap layanan sudah punya foto sendiri di
+                          `services.image_url` sejak migrasi 011 — halaman ini
+                          cuma belum pernah menampilkannya, jadi buket dan
+                          dekorasi tampil sebagai ikon yang sama semua.
+                          Slot kosong jatuh ke emoji kategori lewat <Img>. */}
+                      <Img
+                        src={s.has_photo ? urlFotoLayanan(s.service_id) : undefined}
+                        alt={s.service_name}
+                        emoji={kategori.emoji}
+                        tint={kategori.tint}
+                        className="h-[180px] w-full object-cover"
+                      />
+                      <div className="flex gap-3 p-4">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-pink-100 text-maroon">
+                          <Icon />
+                        </span>
+                        <div>
+                          <h3 className="text-[13px] font-semibold">{s.service_name}</h3>
+                          <p className="mt-1 text-[13px] leading-relaxed text-ink/75">
+                            {s.description || `Minimal pesan ${s.minimum_notice_days} hari sebelum acara.`}
+                          </p>
+                          <p className="mt-1.5 text-[13px] font-semibold">{rupiah(Number(s.price))}</p>
+                          <RincianLayanan service={s} className="mt-2.5" />
+                        </div>
                       </div>
                     </div>
                   )

@@ -81,6 +81,7 @@ export default function AttireOrderPage() {
     if (!tglSewa) return setGalat('Tanggal sewa wajib diisi.')
     if (!jam) return setGalat('Pilih jam dulu.')
     if (!ukuran) return setGalat('Ukuran wajib dipilih.')
+    if (!tglAmbil) return setGalat('Tanggal pengambilan wajib diisi.')
 
     // Tabel bookings tidak punya kolom ukuran/warna/fitting. Semuanya
     // dititipkan ke event_location_detail; menambah kolom demi satu kategori
@@ -141,7 +142,7 @@ export default function AttireOrderPage() {
               {layanan.length > 1 && (
                 <div className="mb-5">
                   <Select
-                    id="paket" label="PAKET YANG DISEWA"
+                    id="paket" label="KOLEKSI YANG DISEWA"
                     value={serviceId} onChange={setServiceId}
                     options={layanan.map((s) => ({ value: s.service_id, label: s.service_name }))}
                   />
@@ -156,10 +157,6 @@ export default function AttireOrderPage() {
                 <Select
                   id="warna" label="PILIH WARNA" value={warna} onChange={setWarna}
                   options={colors.map((c) => ({ value: c, label: c }))}
-                />
-                <OrderField
-                  id="tanggal-ambil" label="TANGGAL  PENGAMBILAN" type="date"
-                  value={tglAmbil} onChange={setTglAmbil}
                 />
                 <OrderField
                   id="jumlah" label="JUMLAH SETEL" type="number" placeholder="1"
@@ -192,6 +189,21 @@ export default function AttireOrderPage() {
                 </p>
               )}
 
+              {/* Sama seperti panel di halaman detail: yang bergantung pada
+                  tanggal sewa baru muncul setelah tanggal sewanya ada. Dulu
+                  TANGGAL PENGAMBILAN malah duduk di grid paling atas, di ATAS
+                  tanggal sewa yang membatasinya. */}
+              {tglSewa && (
+                <div className="mt-6 max-w-[320px]">
+                  <OrderField
+                    id="tanggal-ambil" label="TANGGAL PENGAMBILAN" type="date"
+                    value={tglAmbil} onChange={setTglAmbil}
+                  />
+                </div>
+              )}
+
+              {tglSewa && tglAmbil && (
+                <>
               <fieldset className="mt-6 flex items-center gap-6">
                 <legend className="float-left mr-6 text-[11px] font-semibold tracking-[0.06em] text-ink/70">
                   PERLU FITTING?
@@ -216,7 +228,7 @@ export default function AttireOrderPage() {
               {fitting && (
                 <div className="mt-5 grid gap-5 sm:grid-cols-2">
                   <OrderField
-                    id="tanggal-fitting" label="TANGGAL  FITTING" type="date"
+                    id="tanggal-fitting" label="TANGGAL FITTING" type="date"
                     value={tglFitting} onChange={setTglFitting}
                   />
                   <OrderField
@@ -224,6 +236,8 @@ export default function AttireOrderPage() {
                     value={jamFitting} onChange={setJamFitting}
                   />
                 </div>
+              )}
+                </>
               )}
             </OrderSection>
 

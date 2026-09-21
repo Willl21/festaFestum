@@ -13,7 +13,7 @@ import { ArrowRight } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
 import { rupiah } from '../lib/format'
 import {
-  getVendor, getVendorServices, cekKetersediaan, urlFotoVendor,
+  getVendor, getVendorServices, cekKetersediaan, urlFotoVendor, urlFotoLayanan,
   type ApiService, type ApiVendor,
 } from '../lib/api'
 
@@ -76,6 +76,9 @@ export default function AttireDetailPage() {
   // saja, bukan gambarnya — lihat image-storage-pattern.
   const [fotoSlot, setFotoSlot] = useState<number[]>([])
 
+  /** Produk yang sedang dipilih. Halaman ini dulu selalu memakai layanan
+   *  PERTAMA, jadi vendor dengan enam koleksi cuma bisa menjual satu. */
+  const [produkId, setProdukId] = useState('')
   const [jenis, setJenis] = useState<'jas' | 'kebaya'>('jas')
   const [size, setSize] = useState('')
   const [color, setColor] = useState(WARNA[0].hex)
@@ -91,14 +94,25 @@ export default function AttireDetailPage() {
       .then(([r, s]) => {
         setVendor(r.vendor)
         setFotoSlot(r.portfolio.map((f) => f.sort_order))
-        setLayanan(s.data.filter((x) => x.is_active))
+        const aktif = s.data.filter((x) => x.is_active)
+        setLayanan(aktif)
+        if (aktif[0]) setProdukId(aktif[0].service_id)
       })
       .catch((e) => setGalat(e.message))
       .finally(() => setMemuat(false))
   }, [id])
 
-  const utama = layanan[0]
+  const utama = layanan.find((s) => s.service_id === produkId) ?? layanan[0]
   const [jam, setJam] = useState('')
+
+  /** Tiap produk punya kalender dan lead time sendiri, jadi tanggal yang
+   *  sudah dipilih untuk produk lama belum tentu sah untuk yang baru.
+   *  Dikosongkan supaya orang tidak membawa tanggal mati ke halaman pesan. */
+  function pilihProduk(id: string) {
+    if (id === produkId) return
+    setProdukId(id)
+    setTglSewa(''); setJam(''); setTglAmbil(''); setTglFitting(''); setCek(null)
+  }
 
   // Jadwal sewa dipakai sebagai tanggal acara — itu hari busananya dipakai.
   // Jamnya jam PENGAMBILAN setelan, diisi bebas oleh penyewa. Dia tidak
@@ -111,6 +125,10 @@ export default function AttireDetailPage() {
     }
     if (!size) {
       setCek({ ada: false, alasan: 'Pilih ukuran dulu.' })
+      return
+    }
+    if (!tglAmbil) {
+      setCek({ ada: false, alasan: 'Pilih jadwal pengambilan dulu.' })
       return
     }
 
@@ -184,6 +202,76 @@ export default function AttireDetailPage() {
             <div>
               <h2 className="font-display text-[17px] font-semibold">Tentang Koleksi</h2>
               <p className="mt-4 max-w-[560px] text-[15px] leading-[1.85] text-ink/85">{vendor.description || 'Vendor ini belum menuliskan deskripsi.'}</p>
+
+              {/* KOLEKSI — yang dijual vendor jas/kebaya adalah BARANG, bukan
+                  paket jasa seperti florist atau EO. Jadi daftarnya foto
+                  dulu, baru nama: orang memilih kebayanya dari rupanya.
+                  Datanya tetap tabel `services` yang sama — tiap baris satu
+                  potong koleksi, fotonya dari `services.image_url` yang sudah
+                  ada sejak migrasi 011 dan diisi vendor lewat /vendor/layanan.
+                  Tidak ada tabel produk baru. */}
+              <h2 className="mt-12 border-t border-line pt-12 font-display text-[26px] font-semibold">
+                Koleksi Tersedia
+              </h2>
+              <p className="mt-3 max-w-[520px] text-[12px] leading-relaxed text-ink/70">
+                Pilih satu koleksi untuk melihat jadwal dan harga sewanya di panel pemesanan.
+              </p>
+
+              {layanan.length === 0 ? (
+                <p className="mt-7 text-[14px] text-muted">
+                  Vendor ini belum menambahkan koleksi.
+                </p>
+              ) : (
+                <ul className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                  {layanan.map((s) => {
+                    const aktif = s.service_id === utama?.service_id
+                    return (
+                      <li key={s.service_id}>
+                        <button
+                          type="button"
+                          onClick={() => pilihProduk(s.service_id)}
+                          aria-pressed={aktif}
+                          className={`flex h-full w-full flex-col overflow-hidden border text-left transition-colors ${
+                            aktif ? 'border-navy-900 bg-lavender/25' : 'border-line bg-white hover:border-navy-900/40'
+                          }`}
+                        >
+                          <Img
+                            src={s.has_photo ? urlFotoLayanan(s.service_id) : undefined}
+                            alt={s.service_name}
+                            emoji={kat.emoji}
+                            tint={kat.tint}
+                            className="h-[200px] w-full object-cover"
+                          />
+                          <span className="flex flex-1 flex-col px-4 pt-3 pb-4">
+                            <span className="font-display text-[17px] font-semibold">
+                              {s.service_name}
+                            </span>
+                            <span className="mt-1 text-[13px] font-semibold">
+                              {rupiah(Number(s.price))}
+                            </span>
+                            <RincianLayanan service={s} className="mt-2.5" />
+                            {/* mt-auto, bukan mt-3: tiap koleksi punya jumlah
+                                baris rincian yang berbeda, jadi penanda yang
+                                mengikuti isi mendarat di ketinggian yang
+                                beda-beda di tiap kartu. Didorong ke dasar
+                                kolom supaya sebarisnya rata. `flex` menjaga
+                                lebarnya tetap seukuran teks, tidak melar. */}
+                            <span className="mt-auto flex pt-3">
+                              <span
+                                className={`rounded-sm px-2.5 py-1 text-[11px] font-semibold ${
+                                  aktif ? 'bg-navy-900 text-white' : 'border border-line text-ink/70'
+                                }`}
+                              >
+                                {aktif ? 'Dipilih' : 'Pilih koleksi'}
+                              </span>
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
 
               <h2 className="mt-12 border-t border-line pt-12 font-display text-[26px] font-semibold">
                 Paduan Ukuran
@@ -273,49 +361,63 @@ export default function AttireDetailPage() {
                 </div>
               ) : (
                 <p className="mt-3 text-[13px] text-muted">
-                  Vendor ini belum menambahkan paket, jadi jadwalnya belum bisa dilihat.
+                  Vendor ini belum menambahkan koleksi, jadi jadwalnya belum bisa dilihat.
                 </p>
               )}
-              {/* Pengambilan bukan slot pemesanan — tidak tersimpan di
-                  vendor_schedules dan tidak memakan kuota — jadi kalendernya
-                  polos: tanpa jam, tanpa pengabuan ketersediaan. Batas
-                  paling awalnya tanggal sewa, karena baju tidak bisa diambil
-                  setelah hari pakainya lewat. */}
-              <p className="mt-5 text-[15px] font-semibold">Jadwal Pengambilan</p>
-              <div className="mt-3">
-                <KalenderTanggal
-                  tanggal={tglAmbil}
-                  onPilih={setTglAmbil}
-                  mulaiDari={tglSewa || undefined}
-                />
-              </div>
-
-              <p className="mt-5 text-[15px] font-semibold">Perlu Fitting?</p>
-              <div className="mt-2 flex gap-4">
-                <Toggle active={fitting} onClick={() => setFitting(true)}>
-                  Ya
-                </Toggle>
-                <Toggle active={!fitting} onClick={() => setFitting(false)}>
-                  Tidak
-                </Toggle>
-              </div>
-
-              {/* Jadwal fitting hanya relevan kalau user memang mau fitting. */}
-              {fitting && (
+              {/* BERTAHAP: tiap tanggal baru muncul setelah yang sebelumnya
+                  terisi. Tiga kalender sekaligus di satu panel sempit bukan
+                  cuma panjang — urutannya juga tidak kelihatan, padahal dua
+                  tanggal di bawah memang BERGANTUNG pada tanggal sewa
+                  (pengambilan dibatasi olehnya, fitting harus sebelumnya).
+                  Yang belum relevan tidak ditampilkan, bukan dinonaktifkan:
+                  kontrol mati yang menumpuk sama membingungkannya. */}
+              {tglSewa && jam && (
                 <>
-                  <p className="mt-5 text-[15px] font-semibold">Jadwal Fitting</p>
+                  {/* Pengambilan bukan slot pemesanan — tidak tersimpan di
+                      vendor_schedules dan tidak memakan kuota — jadi
+                      kalendernya polos: tanpa jam, tanpa pengabuan
+                      ketersediaan. Batas paling awalnya tanggal sewa, karena
+                      baju tidak bisa diambil setelah hari pakainya lewat. */}
+                  <p className="mt-5 text-[15px] font-semibold">Jadwal Pengambilan</p>
                   <div className="mt-3">
-                    {/* Fitting harus SEBELUM hari pakai, jadi tidak dibatasi
-                        tanggal sewa seperti pengambilan. */}
-                    <KalenderTanggal tanggal={tglFitting} onPilih={setTglFitting} />
+                    <KalenderTanggal
+                      tanggal={tglAmbil}
+                      onPilih={setTglAmbil}
+                      mulaiDari={tglSewa || undefined}
+                    />
                   </div>
                 </>
               )}
 
-              {/* Halaman ini tidak punya daftar paket seperti empat halaman
-                  detail lain — cuma layanan pertama yang dipakai — jadi
-                  keterangan tambahannya ditaruh di panel ini, tepat sebelum
-                  harga. */}
+              {tglSewa && jam && tglAmbil && (
+                <>
+                  <p className="mt-5 text-[15px] font-semibold">Perlu Fitting?</p>
+                  <div className="mt-2 flex gap-4">
+                    <Toggle active={fitting} onClick={() => setFitting(true)}>
+                      Ya
+                    </Toggle>
+                    <Toggle active={!fitting} onClick={() => setFitting(false)}>
+                      Tidak
+                    </Toggle>
+                  </div>
+
+                  {/* Jadwal fitting hanya relevan kalau user memang mau fitting. */}
+                  {fitting && (
+                    <>
+                      <p className="mt-5 text-[15px] font-semibold">Jadwal Fitting</p>
+                      <div className="mt-3">
+                        {/* Fitting harus SEBELUM hari pakai, jadi tidak
+                            dibatasi tanggal sewa seperti pengambilan. */}
+                        <KalenderTanggal tanggal={tglFitting} onPilih={setTglFitting} />
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* Keterangan koleksi yang sedang dipilih, diulang di panel
+                  tepat sebelum harga supaya yang sudah menggulir jauh dari
+                  grid koleksi tidak perlu naik lagi untuk memastikan. */}
               {utama && (
                 <RincianLayanan service={utama} className="mt-6 border-t border-line pt-4" />
               )}

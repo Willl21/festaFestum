@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react'
 import LandingSkeleton from '../components/LandingSkeleton'
 import Reveal from '../components/Reveal'
 import TukarHalus from '../components/TukarHalus'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import Img from '../components/Img'
 import HeroSlideshow from '../components/HeroSlideshow'
 import HoverRevealCards, { type CardItem } from '../components/hovercard'
 import { listVendors, urlFotoVendor, type ApiVendor } from '../lib/api'
-import { categories, namaKota, type CategoryKey } from '../data/categories'
+import { categories, KOTA, namaKota, type CategoryKey } from '../data/categories'
 
 /** Enum kategori backend -> kunci kategori frontend. */
 const KATEGORI: Record<string, CategoryKey> = {
@@ -21,13 +21,29 @@ import SearchPanel, { type Field } from '../components/SearchPanel'
 import AiBanner from '../components/AiBanner'
 import { StarIcon, ArrowRight } from '../components/icons'
 
+/** Panel cari landing = pintu masuk schedule-first discovery. Ketiganya
+ *  diteruskan ke halaman kategori sebagai query string, bukan diproses di
+ *  sini: yang menampilkan daftar vendor memang halaman itu, dan dengan begitu
+ *  hasil pencarian punya URL sendiri yang bisa di-refresh dan dibagikan. */
 const searchFields: Field[] = [
-  { kind: 'date', label: 'Tanggal', placeholder: 'Pilih Tanggal' },
-  { kind: 'select', label: 'Lokasi', options: ['Jakarta Pusat', 'Jakarta Selatan','Jakarta Timur','Jakarta Barat','Tanggerang','Bekasi', 'Depok', 'Bogor'] },
+  { kind: 'date', key: 'tanggal', label: 'Tanggal' },
   {
     kind: 'select',
+    key: 'kota',
+    label: 'Lokasi',
+    options: [
+      { value: '', label: 'Semua Lokasi' },
+      ...KOTA.map((k) => ({ value: k, label: namaKota(k) })),
+    ],
+  },
+  {
+    kind: 'select',
+    key: 'kategori',
     label: 'Vendor',
-    options: ['Pilih Vendor', 'MUA', 'Fotografer', 'Florist', 'Jas & Kebaya', 'Event Organizer'],
+    options: (Object.keys(categories) as CategoryKey[]).map((k) => ({
+      value: k,
+      label: categories[k].label,
+    })),
   },
 ]
 
@@ -79,6 +95,11 @@ export default function LandingPage() {
   const [unggulan, setUnggulan] = useState<ApiVendor[]>([])
   const [memuat, setMemuat] = useState(true)
 
+  const navigate = useNavigate()
+  const [cari, setCari] = useState<Record<string, string>>({
+    tanggal: '', kota: '', kategori: 'mua',
+  })
+
   useEffect(() => {
     Promise.all(
       Object.keys(KATEGORI).map((c) => listVendors({ category: c, limit: 2 }))
@@ -93,6 +114,14 @@ export default function LandingPage() {
   }, [])
 
   const [besar, ...kecil] = unggulan
+
+  function jalankanCari() {
+    const q = new URLSearchParams()
+    if (cari.kota) q.set('city', cari.kota)
+    if (cari.tanggal) q.set('date', cari.tanggal)
+    const slug = categories[(cari.kategori as CategoryKey) ?? 'mua'].slug
+    navigate(`/${slug}${q.toString() ? `?${q}` : ''}`)
+  }
 
   return (
     <TukarHalus memuat={memuat} rangka={<LandingSkeleton label="Memuat beranda…" />}>
@@ -121,7 +150,13 @@ export default function LandingPage() {
 
             {/* Panel duduk di batas bawah foto, menindih tipis saja. */}
             <div className="relative z-10 mx-auto -mt-3 max-w-[1290px] px-6 md:px-12">
-              <SearchPanel fields={searchFields} />
+              <SearchPanel
+                fields={searchFields}
+                nilai={cari}
+                onUbah={(k, v) => setCari((c) => ({ ...c, [k]: v }))}
+                onCari={jalankanCari}
+                labelTombol="Cari"
+              />
             </div>
           </section>
 

@@ -353,7 +353,10 @@ const TEMPLAT = {
     {
       nama: 'Kebaya Pengantin Modern',
       faktor: 1, hariMinimal: 30,
-      foto: 'wedding gown dress fabric detail',
+      // 'wedding gown ...' memulangkan gaun pengantin BARAT — dua puluh
+      // foto kebaya di katalog semuanya jadi gaun putih. Pexels punya
+      // stok kebaya sungguhan, tapi cuma kalau katanya disebut.
+      foto: 'indonesian traditional wedding bride kebaya',
       deskripsi: 'Kebaya pengantin dengan payet kerja tangan, disewakan bersama '
         + 'kain, selop, dan perlengkapan pelengkapnya.',
       details: {
@@ -371,7 +374,7 @@ const TEMPLAT = {
     {
       nama: 'Jas Pengantin Pria',
       faktor: 0.8, hariMinimal: 21,
-      foto: 'formal suit tuxedo hanging rack',
+      foto: 'groom tuxedo suit formal menswear',
       deskripsi: 'Setelan jas pengantin lengkap dengan kemeja, dasi atau bowtie, '
         + 'dan sepatu bila dibutuhkan.',
       details: {
@@ -389,7 +392,9 @@ const TEMPLAT = {
     {
       nama: 'Kebaya Keluarga & Ibu',
       faktor: 0.45, hariMinimal: 14,
-      foto: 'traditional fabric batik textile',
+      // Kain batik saja tidak menunjukkan kebayanya; yang disewakan
+      // pakaiannya, bukan bahannya.
+      foto: 'kebaya',
       deskripsi: 'Kebaya untuk orang tua dan keluarga inti, tersedia dalam set '
         + 'seragam beberapa potong dengan kain senada.',
       details: {
@@ -406,7 +411,7 @@ const TEMPLAT = {
     {
       nama: 'Beskap Adat Jawa',
       faktor: 0.6, hariMinimal: 21,
-      foto: 'traditional javanese batik clothing',
+      foto: 'javanese groom beskap batik traditional indonesian',
       deskripsi: 'Beskap lengkap dengan blangkon, keris imitasi, dan jarik untuk '
         + 'prosesi pernikahan adat.',
       details: {
@@ -424,7 +429,7 @@ const TEMPLAT = {
     {
       nama: 'Gaun Malam Gala',
       faktor: 0.9, hariMinimal: 14,
-      foto: 'evening gown dress boutique',
+      foto: 'elegant evening gown gala dress',
       deskripsi: 'Gaun panjang untuk gala dinner atau acara resmi perusahaan, '
         + 'tersedia beberapa potongan dan panjang.',
       details: {
