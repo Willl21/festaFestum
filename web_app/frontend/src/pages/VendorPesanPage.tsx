@@ -68,7 +68,12 @@ export default function VendorPesanPage() {
   const [teks, setTeks] = useState('')
   const [kirim, setKirim] = useState(false)
   const [query, setQuery] = useState('')
-  const bawah = useRef<HTMLDivElement>(null)
+  // Di bawah lg, daftar dan ruang obrolan TIDAK ditumpuk: satu layar satu
+  // panel, seperti aplikasi pesan mana pun. Menumpuknya berarti di HP harus
+  // menggulung melewati seluruh daftar dulu sebelum sampai ke pesannya.
+  // Penandanya cuma untuk kelas CSS; di lg ke atas keduanya tampil bersama.
+  const [ruangDiHp, setRuangDiHp] = useState(() => !!cari.get('c'))
+  const kotakPesan = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let hidup = true
@@ -118,8 +123,15 @@ export default function VendorPesanPage() {
     }
   }, [aktif])
 
+  // Menggulung KOTAKNYA sendiri, bukan scrollIntoView pada penanda di dasar:
+  // scrollIntoView ikut menggulung semua leluhur, termasuk dokumen, jadi di
+  // layar sempit seluruh halaman melompat ke bawah dan judul + tombol kembali
+  // ikut terlewat. Dijalankan tiap jumlah pesan bertambah, bukan tiap render,
+  // supaya penarikan ulang yang tidak membawa apa-apa tidak merebut posisi
+  // gulungan yang sedang dibaca orangnya.
   useEffect(() => {
-    bawah.current?.scrollIntoView({ block: 'end' })
+    const el = kotakPesan.current
+    if (el) el.scrollTop = el.scrollHeight
   }, [pesan.length, aktif])
 
   const terlihat = useMemo(() => {
@@ -131,6 +143,13 @@ export default function VendorPesanPage() {
         || (c.booking_id || '').toLowerCase().includes(q)
     )
   }, [daftar, query])
+
+  // "Ruangnya belum siap" diturunkan, bukan disimpan di state sendiri: kepala
+  // dan isi percakapan selalu datang dari SATU fetch, jadi selama kepala belum
+  // menunjuk ruangan yang dipilih, isinya memang belum ada. Tanpa ini kotaknya
+  // memajang "belum ada pesan" selagi datanya masih jalan — keterangan yang
+  // salah, dan itu yang paling bikin ragu waktu ruangan pertama kali dibuka.
+  const ruangSiap = !!aktif && kepala?.conversation_id === aktif
 
   async function kirimkan(e: React.FormEvent) {
     e.preventDefault()
@@ -161,6 +180,7 @@ export default function VendorPesanPage() {
           : [r.conversation, ...lama]
       )
       setAktif(r.conversation.conversation_id)
+      setRuangDiHp(true)
     } catch (err) {
       setGalat((err as Error).message)
     }
@@ -205,6 +225,7 @@ export default function VendorPesanPage() {
                 onClick={() => {
                   setTab(t.id)
                   setAktif('')
+                  setRuangDiHp(false)
                   setPesan([])
                   setKepala(null)
                 }}
@@ -241,7 +262,11 @@ export default function VendorPesanPage() {
           ) : (
             <div className="mt-7 grid gap-6 lg:grid-cols-[340px_1fr]">
               {/* --- daftar --- */}
-              <section className="h-fit rounded-lg border border-line bg-white p-4">
+              <section
+                className={`h-fit rounded-lg border border-line bg-white p-4 ${
+                  ruangDiHp ? 'hidden lg:block' : ''
+                }`}
+              >
                 <label className="relative block">
                   <span className="sr-only">Cari klien atau nomor pesanan</span>
                   <SearchIcon className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -262,9 +287,17 @@ export default function VendorPesanPage() {
                         <button
                           type="button"
                           onClick={() => {
+                            // Isi ruangan dikosongkan HANYA kalau ruangannya memang berganti. Kalau
+                            // id-nya sama (mis. balik dari daftar lalu membuka ruangan yang itu
+                            // juga), efek penariknya TIDAK jalan lagi karena dependensinya tidak
+                            // berubah — mengosongkan di sini berarti ruangan blank sampai polling
+                            // 10 detik berikutnya. Itu yang bikin obrolan terasa menggantung.
+                            if (c.conversation_id !== aktif) {
+                              setPesan([])
+                              setKepala(null)
+                            }
                             setAktif(c.conversation_id)
-                            setPesan([])
-                            setKepala(null)
+                            setRuangDiHp(true)
                             if (dariUrl) setCari({}, { replace: true })
                             setDaftar((lama) =>
                               lama.map((x) =>
@@ -328,9 +361,30 @@ export default function VendorPesanPage() {
               </section>
 
               {/* --- ruang obrolan --- */}
-              <section className="flex min-h-[560px] flex-col rounded-lg border border-line bg-white">
-                {kepala && (
-                  <header className="flex flex-wrap items-start justify-between gap-4 border-b border-line p-5">
+              <section
+                className={`min-h-[560px] flex-col rounded-lg border border-line bg-white ${
+                  ruangDiHp ? 'flex' : 'hidden lg:flex'
+                }`}
+              >
+                {/* Header selalu dirender, bahkan selagi isi ruangan dimuat:
+                    tombol kembali ada di dalamnya, dan di HP menyembunyikannya
+                    selama menunggu berarti tidak ada jalan keluar sama sekali. */}
+                <header className="border-b border-line p-5">
+                    <button
+                      type="button"
+                      onClick={() => setRuangDiHp(false)}
+                      className="mb-3 text-[13px] font-medium text-ink/70 hover:text-ink lg:hidden"
+                    >
+                      <span aria-hidden>&larr;</span> Semua obrolan
+                    </button>
+                    {!kepala && (
+                      <div>
+                        <div className="shimmer h-5 w-44 max-w-full rounded-sm bg-line/70" />
+                        <div className="shimmer mt-2 h-3 w-56 max-w-full rounded-sm bg-line/50" />
+                      </div>
+                    )}
+                    {kepala && (
+                    <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <h2 className="font-display text-[20px] font-semibold">
                         {kepala.jenis === 'admin_vendor'
@@ -359,11 +413,29 @@ export default function VendorPesanPage() {
                         </Link>
                       </div>
                     )}
+                    </div>
+                    )}
                   </header>
-                )}
 
-                <div className="flex-1 space-y-4 overflow-y-auto p-5">
-                  {pesan.length === 0 && (
+                <div ref={kotakPesan} className="flex-1 space-y-4 overflow-y-auto p-5">
+                  {!ruangSiap && (
+                    <div className="space-y-4" role="status" aria-live="polite">
+                      <span className="sr-only">Memuat pesan…</span>
+                      {[0, 1, 2].map((i) => (
+                        <div key={i} className={i % 2 ? 'flex justify-end' : 'flex justify-start'}>
+                          <div className="w-[62%] max-w-[300px]">
+                            <div className="shimmer h-3 w-20 rounded-sm bg-line/70" />
+                            <div
+                              className="shimmer mt-2 rounded-lg bg-line/60"
+                              style={{ height: 52 + i * 14 }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {ruangSiap && pesan.length === 0 && (
                     <p className="py-10 text-center text-[13px] text-muted">
                       Belum ada pesan di ruangan ini.
                     </p>
@@ -406,7 +478,6 @@ export default function VendorPesanPage() {
                       </div>
                     )
                   })}
-                  <div ref={bawah} />
                 </div>
 
                 <form onSubmit={kirimkan} className="flex items-end gap-3 border-t border-line p-4">
@@ -430,9 +501,9 @@ export default function VendorPesanPage() {
                   <button
                     type="submit"
                     disabled={kirim || !teks.trim()}
-                    className="h-12 rounded-md bg-navy-900 px-6 text-[14px] font-semibold text-white disabled:opacity-50"
+                    className="h-12 shrink-0 rounded-md bg-navy-900 px-4 text-[14px] font-semibold text-white disabled:opacity-50 sm:px-6"
                   >
-                    {kirim ? 'Mengirim…' : 'Kirim Pesan'}
+                    {kirim ? 'Mengirim…' : 'Kirim'}
                   </button>
                 </form>
               </section>

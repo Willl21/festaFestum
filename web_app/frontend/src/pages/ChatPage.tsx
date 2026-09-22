@@ -76,7 +76,16 @@ export default function ChatPage() {
   const [teks, setTeks] = useState('')
   const [kirim, setKirim] = useState(false)
   const [query, setQuery] = useState('')
-  const bawah = useRef<HTMLDivElement>(null)
+  // Di bawah lg, daftar dan ruang obrolan TIDAK ditumpuk: satu layar satu
+  // panel, seperti aplikasi pesan mana pun. Menumpuknya berarti di HP kita
+  // harus menggulung melewati seluruh daftar dulu sebelum sampai ke pesannya.
+  // Penandanya cuma dipakai untuk kelas CSS; di lg ke atas keduanya tampil
+  // bersama dan penanda ini tidak berpengaruh sama sekali.
+  // Nilai awalnya dibaca dari URL sekali saja: datang lewat tombol "Chat
+  // Vendor" berarti ruangannya yang dituju, bukan daftarnya, jadi di HP pun
+  // langsung mendarat di percakapannya.
+  const [ruangDiHp, setRuangDiHp] = useState(() => !!cari.get('c'))
+  const kotakPesan = useRef<HTMLDivElement>(null)
 
   const masuk = !!getToken()
   // Dibuka dari /pesanan lewat ?c=<id>, jadi tombol di sana tidak perlu tahu
@@ -130,8 +139,15 @@ export default function ChatPage() {
   // Menggulung ke pesan terbaru tiap jumlahnya bertambah — bukan tiap render,
   // supaya penarikan ulang yang tidak membawa apa-apa tidak merebut posisi
   // gulungan yang sedang dibaca orangnya.
+  // Menggulung KOTAKNYA sendiri, bukan scrollIntoView pada penanda di dasar:
+  // scrollIntoView ikut menggulung semua leluhur, termasuk dokumen, jadi di
+  // layar sempit seluruh halaman melompat ke bawah dan judul + tombol kembali
+  // ikut terlewat. Dijalankan tiap jumlah pesan bertambah, bukan tiap render,
+  // supaya penarikan ulang yang tidak membawa apa-apa tidak merebut posisi
+  // gulungan yang sedang dibaca orangnya.
   useEffect(() => {
-    bawah.current?.scrollIntoView({ block: 'end' })
+    const el = kotakPesan.current
+    if (el) el.scrollTop = el.scrollHeight
   }, [pesan.length, aktif])
 
   const terlihat = useMemo(() => {
@@ -161,6 +177,13 @@ export default function ChatPage() {
     }
   }
 
+  // "Ruangnya belum siap" diturunkan, bukan disimpan di state sendiri: kepala
+  // dan isi percakapan selalu datang dari SATU fetch, jadi selama kepala belum
+  // menunjuk ruangan yang dipilih, isinya memang belum ada. Tanpa ini kotaknya
+  // memajang "belum ada pesan" selagi datanya masih jalan — keterangan yang
+  // salah, dan itu yang paling bikin ragu waktu ruangan pertama kali dibuka.
+  const ruangSiap = !!aktif && kepala?.conversation_id === aktif
+
   async function kirimkan(e: React.FormEvent) {
     e.preventDefault()
     const isi = teks.trim()
@@ -179,9 +202,17 @@ export default function ChatPage() {
   }
 
   function pilih(id: string) {
+    // Isi ruangan dikosongkan HANYA kalau ruangannya memang berganti. Kalau
+    // id-nya sama (mis. balik dari daftar lalu membuka ruangan yang itu
+    // juga), efek penariknya TIDAK jalan lagi karena dependensinya tidak
+    // berubah — mengosongkan di sini berarti ruangan blank sampai polling
+    // 10 detik berikutnya. Itu yang bikin obrolan terasa menggantung.
+    if (id !== aktif) {
+      setPesan([])
+      setKepala(null)
+    }
     setAktif(id)
-    setPesan([])
-    setKepala(null)
+    setRuangDiHp(true)
     // Lencana belum-dibaca ikut nol begitu ruangannya dibuka; backend sudah
     // menandainya terbaca, jadi ini cuma menyusulkan tampilannya.
     setDaftar((lama) =>
@@ -210,7 +241,18 @@ export default function ChatPage() {
   }
 
   return (
-    <TukarHalus memuat={memuat} rangka={<TabelSkeleton kolom={3} baris={5} label="Memuat obrolan…" />}>
+    <TukarHalus
+      memuat={memuat}
+      // Rangkanya dibungkus wadah yang SAMA dengan isi halaman. Tanpa itu dia
+      // menempel ke tepi layar — padding halaman pelanggan hidup di dalam
+      // halamannya, bukan di SiteLayout. Satu kolom, bukan tiga: yang dimuat
+      // daftar percakapan, bukan tabel.
+      rangka={
+        <div className="mx-auto max-w-[1330px] px-6 pt-12 pb-20 md:px-12">
+          <TabelSkeleton kolom={1} baris={5} label="Memuat obrolan…" />
+        </div>
+      }
+    >
       {() => (
         <div className="mx-auto max-w-[1330px] px-6 pt-12 pb-20 md:px-12">
           <p className="text-[13px] text-muted">
@@ -257,7 +299,11 @@ export default function ChatPage() {
           ) : (
             <div className="mt-8 grid gap-6 lg:grid-cols-[360px_1fr]">
               {/* --- daftar percakapan --- */}
-              <section className="rounded-lg border border-line bg-white p-4">
+              <section
+                className={`rounded-lg border border-line bg-white p-4 ${
+                  ruangDiHp ? 'hidden lg:block' : ''
+                }`}
+              >
                 <label className="relative block">
                   <span className="sr-only">Cari vendor atau nomor pesanan</span>
                   <SearchIcon className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -333,9 +379,33 @@ export default function ChatPage() {
               </section>
 
               {/* --- ruang obrolan --- */}
-              <section className="flex min-h-[560px] flex-col rounded-lg border border-line bg-white">
-                {kepala && (
-                  <header className="flex flex-wrap items-start justify-between gap-4 border-b border-line p-5">
+              <section
+                className={`min-h-[560px] flex-col rounded-lg border border-line bg-white ${
+                  ruangDiHp ? 'flex' : 'hidden lg:flex'
+                }`}
+              >
+                {/* Header selalu dirender, bahkan selagi isi ruangan dimuat:
+                    tombol kembali ada di dalamnya, dan di HP menyembunyikannya
+                    selama menunggu berarti tidak ada jalan keluar sama sekali. */}
+                <header className="border-b border-line p-5">
+                    <button
+                      type="button"
+                      onClick={() => setRuangDiHp(false)}
+                      className="mb-3 text-[13px] font-medium text-ink/70 hover:text-ink lg:hidden"
+                    >
+                      <span aria-hidden>&larr;</span> Semua obrolan
+                    </button>
+                    {!kepala && (
+                      <div className="flex gap-3">
+                        <div className="shimmer h-11 w-11 shrink-0 rounded-md bg-line/70" />
+                        <div className="flex-1">
+                          <div className="shimmer h-5 w-44 max-w-full rounded-sm bg-line/70" />
+                          <div className="shimmer mt-2 h-3 w-56 max-w-full rounded-sm bg-line/50" />
+                        </div>
+                      </div>
+                    )}
+                    {kepala && (
+                    <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="flex gap-3">
                       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-navy-900 text-[13px] font-semibold text-white">
                         {inisial(lawanBicara(kepala))}
@@ -354,7 +424,7 @@ export default function ChatPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       {kepala.total_price && (
-                        <p className="text-right text-[13px] text-ink/70">
+                        <p className="text-[13px] text-ink/70 sm:text-right">
                           Nilai pesanan
                           <span className="block text-[15px] font-semibold text-ink">
                             {rupiah(Number(kepala.total_price))}
@@ -370,11 +440,29 @@ export default function ChatPage() {
                         </Link>
                       )}
                     </div>
+                    </div>
+                    )}
                   </header>
-                )}
 
-                <div className="flex-1 space-y-4 overflow-y-auto p-5">
-                  {pesan.length === 0 && (
+                <div ref={kotakPesan} className="flex-1 space-y-4 overflow-y-auto p-5">
+                  {!ruangSiap && (
+                    <div className="space-y-4" role="status" aria-live="polite">
+                      <span className="sr-only">Memuat pesan…</span>
+                      {[0, 1, 2].map((i) => (
+                        <div key={i} className={i % 2 ? 'flex justify-end' : 'flex justify-start'}>
+                          <div className="w-[62%] max-w-[300px]">
+                            <div className="shimmer h-3 w-20 rounded-sm bg-line/70" />
+                            <div
+                              className="shimmer mt-2 rounded-lg bg-line/60"
+                              style={{ height: 52 + i * 14 }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {ruangSiap && pesan.length === 0 && (
                     <p className="py-10 text-center text-[13px] text-muted">
                       Belum ada pesan. Sapa vendornya duluan, yuk.
                     </p>
@@ -422,7 +510,6 @@ export default function ChatPage() {
                       </div>
                     )
                   })}
-                  <div ref={bawah} />
                 </div>
 
                 <form onSubmit={kirimkan} className="flex items-end gap-3 border-t border-line p-4">
@@ -448,7 +535,7 @@ export default function ChatPage() {
                   <button
                     type="submit"
                     disabled={kirim || !teks.trim()}
-                    className="h-12 rounded-md bg-amber px-6 text-[14px] font-semibold text-navy-900 disabled:opacity-50"
+                    className="h-12 shrink-0 rounded-md bg-amber px-4 text-[14px] font-semibold text-navy-900 disabled:opacity-50 sm:px-6"
                   >
                     {kirim ? 'Mengirim…' : 'Kirim'}
                   </button>

@@ -191,36 +191,62 @@ async function openConversation(req, res, next) {
 // GET /api/v1/chat/:conversationId
 // Isi percakapan. Membuka = membaca, jadi pesan lawan bicara sekalian ditandai
 // terbaca di sini — tidak ada endpoint "tandai dibaca" tersendiri.
+//
+// Tiga query yang dulu BERURUTAN bikin endpoint ini ~440 ms, sepuluh kali
+// endpoint obrolan lain. Dua hal yang diperbaiki:
+//   1. Kepala dan isi percakapan diambil BERSAMAAN. Keduanya tidak saling
+//      bergantung, jadi menunggunya bergantian cuma menambah satu perjalanan
+//      pulang-pergi ke Supabase.
+//   2. UPDATE penanda terbaca cuma jalan kalau memang ADA yang belum dibaca.
+//      Halaman menarik ulang tiap 10 detik, dan hampir semua tarikan itu tidak
+//      membawa pesan baru — dulu tiap satunya tetap membuka transaksi tulis.
+// Pemeriksaan aksesnya tetap di klausa WHERE kedua query, bukan dipindah ke if.
 async function getMessages(req, res, next) {
   try {
     const { sql, params } = await syaratAkses(req.user, 2);
+    const id = req.params.conversationId;
 
-    const { rows: kepala } = await pool.query(
-      `SELECT ${KOLOM_PERCAKAPAN} ${DARI_PERCAKAPAN}
-        WHERE c.conversation_id = $1 AND ${sql}`,
-      [req.params.conversationId, ...params]
-    );
-    if (kepala.length === 0) {
+    const [kepala, isi] = await Promise.all([
+      pool.query(
+        `SELECT ${KOLOM_PERCAKAPAN} ${DARI_PERCAKAPAN}
+          WHERE c.conversation_id = $1 AND ${sql}`,
+        [id, ...params]
+      ),
+      pool.query(
+        `SELECT m.message_id, m.body, m.created_at, m.read_at, m.sender_user_id,
+                u.name AS nama_pengirim, u.role AS peran_pengirim
+           FROM messages m
+           JOIN users u ON u.user_id = m.sender_user_id
+          WHERE m.conversation_id = $1
+            AND EXISTS (SELECT 1 FROM conversations c
+                         WHERE c.conversation_id = m.conversation_id AND ${sql})
+          ORDER BY m.created_at`,
+        [id, ...params]
+      ),
+    ]);
+
+    if (kepala.rows.length === 0) {
       return res.status(404).json({ message: 'Percakapan tidak ditemukan' });
     }
 
-    await pool.query(
-      `UPDATE messages SET read_at = now()
-        WHERE conversation_id = $1 AND sender_user_id <> $2 AND read_at IS NULL`,
-      [req.params.conversationId, req.user.user_id]
+    const belumDibaca = isi.rows.filter(
+      (m) => !m.read_at && m.sender_user_id !== req.user.user_id
     );
 
-    const { rows } = await pool.query(
-      `SELECT m.message_id, m.body, m.created_at, m.read_at, m.sender_user_id,
-              u.name AS nama_pengirim, u.role AS peran_pengirim
-         FROM messages m
-         JOIN users u ON u.user_id = m.sender_user_id
-        WHERE m.conversation_id = $1
-        ORDER BY m.created_at`,
-      [req.params.conversationId]
-    );
+    if (belumDibaca.length > 0) {
+      await pool.query(
+        `UPDATE messages SET read_at = now()
+          WHERE conversation_id = $1 AND sender_user_id <> $2 AND read_at IS NULL`,
+        [id, req.user.user_id]
+      );
+      // Barisnya sudah terlanjur diambil sebelum UPDATE jalan, jadi tandainya
+      // disusulkan di memori — daripada menembak DB sekali lagi cuma untuk
+      // membaca nilai yang sudah kita tahu.
+      const saat = new Date().toISOString();
+      belumDibaca.forEach((m) => { m.read_at = saat; });
+    }
 
-    res.json({ conversation: kepala[0], data: rows });
+    res.json({ conversation: kepala.rows[0], data: isi.rows });
   } catch (err) {
     next(err);
   }
