@@ -455,6 +455,12 @@ export const ubahLayanan = (serviceId: string, body: Record<string, unknown>) =>
 export const setAktifLayanan = (serviceId: string, is_active: boolean) =>
   ubahLayanan(serviceId, { is_active })
 
+/** Hapus layanan PERMANEN. Balas 409 kalau layanannya pernah dipesan —
+ *  bookings.service_id punya ON DELETE RESTRICT, jadi yang begitu cuma bisa
+ *  disembunyikan lewat setAktifLayanan(). */
+export const hapusLayanan = (serviceId: string) =>
+  kirim<{ message: string }>(`/services/${serviceId}`, 'DELETE')
+
 /** Alamat foto layanan, dipasang langsung sebagai <img src>. Publik, dan
  *  membalas 404 kalau belum ada fotonya — komponen Img sudah jatuh ke emoji
  *  kategori lewat onError.
@@ -544,3 +550,65 @@ export const kirimUlasan = (bookingId: string, rating: number, comment?: string)
 /** Publik: tamu yang belum masuk tetap bisa membaca ulasan di halaman detail. */
 export const listUlasanVendor = (vendorId: string) =>
   get<{ data: ApiUlasan[]; ringkasan: RingkasanUlasan }>(`/vendors/${vendorId}/ulasan`)
+
+// ------------------------------------------------------------
+// OBROLAN (migrasi 015)
+//
+// Tiga jenis percakapan, satu set endpoint. Siapa melihat apa ditentukan
+// backend dari peran di token — frontend tidak pernah mengirim "saya vendor".
+// ------------------------------------------------------------
+
+export type JenisChat = 'klien_vendor' | 'admin_klien' | 'admin_vendor'
+
+export type ApiPercakapan = {
+  conversation_id: string
+  jenis: JenisChat
+  /** null untuk tiket ke admin — dua jenis itu memang di luar konteks pesanan. */
+  booking_id: string | null
+  last_message_at: string
+  user_id: string | null
+  vendor_id: string | null
+  nama_klien: string | null
+  nama_vendor: string | null
+  category: string | null
+  event_date: string | null
+  event_type: string | null
+  payment_status: ApiBooking['payment_status'] | null
+  confirm_status: ApiBooking['confirm_status'] | null
+  total_price: string | null
+  /** Ketiganya null selama percakapannya masih kosong. */
+  pesan_terakhir: string | null
+  pesan_terakhir_at: string | null
+  pesan_terakhir_dari: string | null
+  belum_dibaca: number
+}
+
+export type ApiPesan = {
+  message_id: string
+  body: string
+  created_at: string
+  read_at: string | null
+  sender_user_id: string
+  nama_pengirim: string
+  peran_pengirim: 'customer' | 'vendor_owner' | 'admin'
+}
+
+export const listPercakapan = (jenis?: JenisChat) =>
+  get<{ data: ApiPercakapan[] }>('/chat', { jenis })
+
+/** Buka (atau ambil lagi) satu ruang obrolan. Idempoten di backend, jadi
+ *  tombol "Hubungi" boleh ditekan berkali-kali. */
+export const bukaPercakapan = (body: { booking_id: string } | { jenis: JenisChat; user_id?: string; vendor_id?: string }) =>
+  post<{ conversation: ApiPercakapan }>('/chat', body)
+
+/** Membuka sekalian menandai pesan lawan bicara terbaca — tidak ada endpoint
+ *  "tandai dibaca" tersendiri. */
+export const getPercakapan = (id: string) =>
+  get<{ conversation: ApiPercakapan; data: ApiPesan[] }>(`/chat/${id}`)
+
+export const kirimPesan = (id: string, body: string) =>
+  post<{ message: ApiPesan }>(`/chat/${id}/pesan`, { body })
+
+/** Satu angka untuk lencana. Dipisah dari daftar supaya halaman mana pun bisa
+ *  menanyakannya tanpa menarik seluruh percakapan. */
+export const pesanBelumDibaca = () => get<{ jumlah: number }>('/chat/belum-dibaca')

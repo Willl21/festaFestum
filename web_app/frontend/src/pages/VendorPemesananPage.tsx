@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import TabelSkeleton from '../components/TabelSkeleton'
 import TukarHalus from '../components/TukarHalus'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { VendorPageHeader, StatusPill } from '../components/VendorLayout'
 import { rupiahBulat } from '../lib/format'
-import { listVendorBookings, konfirmasiBooking, type ApiBooking } from '../lib/api'
+import {
+  listVendorBookings, konfirmasiBooking, bukaPercakapan, type ApiBooking,
+} from '../lib/api'
 
 /** Jenis acara di DB pakai snake_case; ini tampilannya. */
 const JENIS: Record<string, string> = {
@@ -38,6 +40,22 @@ export default function VendorPemesananPage() {
   // booking_id yang tombolnya sedang diproses, supaya klik ganda tidak
   // mengirim dua jawaban untuk pesanan yang sama.
   const [sibuk, setSibuk] = useState('')
+  const navigate = useNavigate()
+
+  // Vendor boleh memulai obrolan duluan; ruangannya sama dengan yang dibuka
+  // klien dari /pesanan, karena kuncinya booking_id.
+  async function chatKlien(b: ApiBooking) {
+    setSibuk(b.booking_id)
+    setGalat('')
+    try {
+      const r = await bukaPercakapan({ booking_id: b.booking_id })
+      navigate(`/vendor/pesan?c=${r.conversation.conversation_id}`)
+    } catch (e) {
+      setGalat((e as Error).message)
+    } finally {
+      setSibuk('')
+    }
+  }
 
   async function jawab(b: ApiBooking, action: 'terima' | 'tolak') {
     // ponytail: window.prompt untuk alasan menolak. Jelek dilihat tapi nol
@@ -168,6 +186,15 @@ export default function VendorPemesananPage() {
                               Lihat invoice
                             </Link>
                           </details>
+
+                          <button
+                            type="button"
+                            disabled={sibuk === b.booking_id}
+                            onClick={() => chatKlien(b)}
+                            className="mt-3 block text-[12px] font-semibold text-navy-900 underline underline-offset-4 disabled:opacity-60"
+                          >
+                            Chat klien
+                          </button>
 
                           {b.confirm_status === 'menunggu' && (
                             <div className="mt-3 flex gap-2">

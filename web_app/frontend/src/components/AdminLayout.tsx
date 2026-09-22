@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { GridIcon, ShieldIcon, WalletIcon, UserCircleIcon, BellIcon, MenuIcon } from './icons'
+import { GridIcon, ShieldIcon, WalletIcon, UserCircleIcon, BellIcon, MenuIcon, ChatIcon } from './icons'
 import { cekAkses } from './PenjagaAkses'
 import { clearAuth, usePengguna } from '../lib/api'
 
@@ -8,7 +8,7 @@ import { clearAuth, usePengguna } from '../lib/api'
  *  <Outlet />. Terpisah dari VendorLayout karena menunya beda total dan
  *  tampilannya gelap.
  *
- *  Keempat menunya sudah ada halamannya.
+ *  Kelima menunya sudah ada halamannya.
  *
  *  Penjaga aksesnya di layout ini, bukan di tiap halaman: keempat halaman
  *  admin lewat sini, jadi satu pemeriksaan menutup semuanya — dan halaman
@@ -24,6 +24,7 @@ const menu = [
   { to: '/admin/vendor', label: 'Persetujuan Vendor', icon: ShieldIcon },
   { to: '/admin/escrow', label: 'Pusat Escrow', icon: WalletIcon },
   { to: '/admin/akun', label: 'Akun Pengguna & Vendor', icon: UserCircleIcon },
+  { to: '/admin/pesan', label: 'Pusat Komunikasi', icon: ChatIcon },
 ]
 
 export default function AdminLayout() {

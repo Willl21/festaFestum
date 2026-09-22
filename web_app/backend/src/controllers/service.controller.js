@@ -264,17 +264,23 @@ async function updateService(req, res, next) {
   }
 }
 
-// DELETE /api/v1/services/:serviceId  (soft delete)
-// Sengaja tidak menghapus baris, karena booking lama masih mereferensikan
-// service ini. Cukup nonaktifkan agar tidak muncul di pencarian.
-async function deactivateService(req, res, next) {
+// DELETE /api/v1/services/:serviceId  (hapus permanen, kalau boleh)
+//
+// Menyembunyikan layanan tetap lewat PATCH { is_active: false }; endpoint ini
+// untuk vendor yang memang mau barisnya hilang. bookings.service_id punya
+// ON DELETE RESTRICT, jadi layanan yang pernah dipesan TIDAK bisa dihapus —
+// Postgres sendiri yang menolak (23503) dan kita terjemahkan jadi 409 berisi
+// saran menyembunyikannya. Satu DELETE saja, tanpa hitung pesanan dulu:
+// menghitung lebih dulu bisa meleset kalau ada pesanan masuk di sela-selanya,
+// sedangkan constraint-nya tidak pernah meleset.
+async function deleteService(req, res, next) {
   try {
     const { serviceId } = req.params;
 
     const result = await pool.query(
-      `UPDATE services SET is_active = FALSE, updated_at = now()
-       WHERE service_id = $1
-         AND vendor_id IN (SELECT vendor_id FROM vendors WHERE owner_user_id = $2)
+      `DELETE FROM services
+        WHERE service_id = $1
+          AND vendor_id IN (SELECT vendor_id FROM vendors WHERE owner_user_id = $2)
        RETURNING service_id`,
       [serviceId, req.user.user_id]
     );
@@ -283,8 +289,14 @@ async function deactivateService(req, res, next) {
       return res.status(404).json({ message: 'Layanan tidak ditemukan atau bukan milik Anda' });
     }
 
-    res.json({ message: 'Layanan berhasil dinonaktifkan' });
+    res.json({ message: 'Layanan berhasil dihapus' });
   } catch (err) {
+    if (err.code === '23503') {
+      return res.status(409).json({
+        message:
+          'Layanan ini sudah pernah dipesan, jadi tidak bisa dihapus. Sembunyikan saja supaya tidak muncul lagi di halaman Anda.',
+      });
+    }
     next(err);
   }
 }
@@ -322,6 +334,6 @@ async function getServicePhoto(req, res, next) {
 }
 
 module.exports = {
-  createService, listServices, listMyServices, updateService, deactivateService,
+  createService, listServices, listMyServices, updateService, deleteService,
   getServicePhoto,
 };

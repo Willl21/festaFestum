@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import TabelSkeleton from '../components/TabelSkeleton'
 import TukarHalus from '../components/TukarHalus'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import Img from '../components/Img'
 import { SearchIcon, ChevronDown } from '../components/icons'
 import { categories, namaKota, type CategoryKey } from '../data/categories'
 import { rupiah } from '../lib/format'
-import { getToken, listMyBookings, batalBooking, kirimUlasan, type ApiBooking } from '../lib/api'
+import {
+  getToken, listMyBookings, batalBooking, kirimUlasan, bukaPercakapan, type ApiBooking,
+} from '../lib/api'
 
 const KATEGORI: Record<string, CategoryKey> = {
   florist: 'florist',
@@ -62,6 +64,7 @@ const tanggalPanjang = (s: string) =>
   new Date(s).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 
 export default function PesananSayaPage() {
+  const navigate = useNavigate()
   const [pesanan, setPesanan] = useState<ApiBooking[]>([])
   // Tamu tidak pernah memuat apa pun, jadi berangkat dari false — bukan true
   // lalu dimatikan lagi di dalam efek. Selain menghemat satu render, itu
@@ -77,6 +80,22 @@ export default function PesananSayaPage() {
   const [ulasanUntuk, setUlasanUntuk] = useState('')
   const [nilai, setNilai] = useState(5)
   const [komentar, setKomentar] = useState('')
+
+  // Satu-satunya pintu masuk obrolan pelanggan ke vendor: ruangannya lahir
+  // dari pesanan. Backend idempoten, jadi tombol ini selalu mendarat di
+  // ruangan yang sama walau ditekan berkali-kali.
+  async function chatVendor(p: ApiBooking) {
+    setSibuk(p.booking_id)
+    setGalat('')
+    try {
+      const r = await bukaPercakapan({ booking_id: p.booking_id })
+      navigate(`/pesan?c=${r.conversation.conversation_id}`)
+    } catch (e) {
+      setGalat((e as Error).message)
+    } finally {
+      setSibuk('')
+    }
+  }
 
   async function batalkan(p: ApiBooking) {
     if (!window.confirm('Batalkan pesanan ini? Slotnya akan dilepas untuk orang lain.')) return
@@ -353,6 +372,15 @@ export default function PesananSayaPage() {
                       >
                         LIHAT PROFIL VENDOR
                       </Link>
+
+                      <button
+                        type="button"
+                        onClick={() => chatVendor(p)}
+                        disabled={sibuk === p.booking_id}
+                        className="rounded-sm bg-navy-900 px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                      >
+                        CHAT VENDOR
+                      </button>
 
                       <Link
                         to={`/invoice/${p.booking_id}`}

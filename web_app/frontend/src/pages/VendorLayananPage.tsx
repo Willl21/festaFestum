@@ -4,24 +4,23 @@ import TukarHalus from '../components/TukarHalus'
 import { VendorPageHeader } from '../components/VendorLayout'
 import Img from '../components/Img'
 import {
-  ChevronDown, ClockIcon, EyeIcon, EyeOffIcon, PlusIcon, UploadCloudIcon,
+  ChevronDown, EyeIcon, EyeOffIcon, PlusIcon, UploadCloudIcon,
 } from '../components/icons'
 import { rupiahBulat } from '../lib/format'
 import { categories as katalogKategori } from '../data/categories'
 import { FIELD_LAYANAN, type FieldLayanan } from '../data/layananFields'
 import {
-  getMyVendor, getMyServices, tambahLayanan, ubahLayanan, setAktifLayanan,
+  getMyVendor, getMyServices, tambahLayanan, ubahLayanan, setAktifLayanan, hapusLayanan,
   simpanFotoVendor, urlFotoLayanan, urlFotoVendor, type ApiService,
 } from '../lib/api'
 import { kecilkanGambar, PORTOFOLIO } from '../lib/gambar'
 
 /** Katalog layanan + galeri portofolio milik vendor.
  *
- *  "Waktu Persiapan Minimum" = kolom minimum_notice_days di tabel services.
- *  Di mockup nilainya satu untuk seluruh vendor, padahal di DB tiap layanan
- *  punya nilai sendiri (sewa kebaya butuh fitting lama, buket bisa mendadak).
- *  Field di panel kiri diperlakukan sebagai nilai bawaan untuk layanan baru,
- *  dan form tambah layanan boleh menimpanya per layanan.
+ *  Panel "Konfigurasi Operasional" DIBUANG: isinya cuma nilai bawaan untuk
+ *  form layanan baru, padahal minimum_notice_days memang milik tiap layanan
+ *  (sewa kebaya butuh fitting lama, buket bisa mendadak) dan sudah bisa diisi
+ *  di form itu sendiri. Bawaannya sekarang 14 hari, tetap bisa ditimpa.
  */
 
 /** Nilainya harus persis enum vendor_category di DB; labelnya untuk manusia. */
@@ -86,7 +85,6 @@ function kunciKategori(services: ApiService[], baru: boolean): string | null {
 export default function VendorLayananPage() {
   const [services, setServices] = useState<ApiService[]>([])
   const [vendorId, setVendorId] = useState('')
-  const [defaultNotice, setDefaultNotice] = useState(14)
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
   // Layanan yang formnya sedang terbuka: 'baru' untuk tambah, objeknya untuk
@@ -174,6 +172,20 @@ export default function VendorLayananPage() {
     }
   }
 
+  // Hapus PERMANEN, beda dari tombol mata di sebelahnya. Layanan yang pernah
+  // dipesan ditolak backend (409, ON DELETE RESTRICT) — pesannya sudah
+  // menyarankan menyembunyikan, jadi di sini cukup ditampilkan apa adanya.
+  async function hapus(s: ApiService) {
+    if (!window.confirm(`Hapus "${s.service_name}" permanen? Tindakan ini tidak bisa dibatalkan.`)) return
+    setGalat('')
+    try {
+      await hapusLayanan(s.service_id)
+      setServices((prev) => prev.filter((x) => x.service_id !== s.service_id))
+    } catch (e) {
+      setGalat((e as Error).message)
+    }
+  }
+
   return (
     <TukarHalus memuat={memuat} rangka={<TabelSkeleton kolom={3} baris={5} label="Memuat layanan…" />}>
       {() => (
@@ -198,47 +210,7 @@ export default function VendorLayananPage() {
             </p>
           )}
 
-          <div className="mt-8 grid gap-7 lg:grid-cols-[300px_1fr]">
-            <section className="h-fit rounded-lg border border-line bg-white p-6">
-              <h2 className="flex items-center gap-2.5 font-display text-[21px] font-semibold">
-                <ClockIcon className="h-5 w-5 text-amber" />
-                Konfigurasi Operasional
-              </h2>
-              <p className="mt-3 text-[14px] text-ink/70">
-                Nilai bawaan untuk layanan baru. Tiap layanan tetap menyimpan angkanya
-                sendiri — ubah lewat tombol Ubah di kartunya.
-              </p>
-
-              <div className="mt-6">
-                <label htmlFor="notice" className="block text-[12px] font-semibold text-ink/75">
-                  Waktu Persiapan Minimum
-                </label>
-                <div className="mt-2 flex items-center gap-3">
-                  <input
-                    id="notice"
-                    type="number"
-                    min={0}
-                    value={defaultNotice}
-                    onChange={(e) => setDefaultNotice(Math.max(0, Number(e.target.value)))}
-                    className="h-11 w-20 rounded-sm border border-line bg-lavender/25 px-3 text-center text-[15px] font-semibold outline-none focus:border-navy-900"
-                  />
-                  <span className="text-[14px] text-ink/80">Hari kalender</span>
-                </div>
-                <p className="mt-2 text-[12px] text-muted">
-                  Tanggal dalam rentang ini otomatis mati di kalender pemesanan.
-                </p>
-              </div>
-
-              {/* "Kapasitas Simultan" dan tombol "Simpan Pengaturan" dibuang.
-                  Kapasitas tidak punya kolom di DB sama sekali — ketersediaan
-                  di sini ditentukan per slot jadwal, bukan per jumlah event
-                  bersamaan — jadi apa pun yang dipilih tidak berpengaruh.
-                  Tombol simpannya pun tidak pernah punya handler; angka di atas
-                  langsung terpakai sebagai nilai awal form layanan baru, tidak
-                  ada yang perlu disimpan. */}
-            </section>
-
-            <section>
+          <section className="mt-8">
               <h2 className="border-b border-line pb-3 font-display text-[24px] font-semibold">
                 Katalog Layanan Aktif
               </h2>
@@ -312,6 +284,14 @@ export default function VendorLayananPage() {
                           >
                             {s.is_active ? <EyeIcon /> : <EyeOffIcon />}
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => hapus(s)}
+                            title="Hapus permanen (hanya bisa kalau belum pernah dipesan)"
+                            className="text-[12px] font-medium text-maroon hover:underline"
+                          >
+                            Hapus
+                          </button>
                           </div>
                         </div>
                       </div>
@@ -325,8 +305,7 @@ export default function VendorLayananPage() {
                   </p>
                 )}
               </div>
-            </section>
-          </div>
+          </section>
 
           <section className="mt-11">
             <h2 className="font-display text-[26px] font-semibold">Galeri Portofolio Utama</h2>
@@ -401,7 +380,6 @@ export default function VendorLayananPage() {
             key={formUntuk === 'baru' ? 'baru' : formUntuk?.service_id ?? 'tutup'}
             awal={formUntuk === 'baru' ? null : formUntuk}
             buka={formUntuk !== null}
-            defaultNotice={defaultNotice}
             versiFoto={versiFoto}
             kunciKategori={kunciKategori(services, formUntuk === 'baru')}
             onTutup={() => setFormUntuk(null)}
@@ -425,7 +403,6 @@ export default function VendorLayananPage() {
 function ServiceDialog({
   awal,
   buka,
-  defaultNotice,
   versiFoto,
   kunciKategori: kunci,
   onTutup,
@@ -434,7 +411,6 @@ function ServiceDialog({
   /** null = tambah layanan baru. */
   awal: ApiService | null
   buka: boolean
-  defaultNotice: number
   versiFoto: number
   /** Kategori yang dipaksakan, atau null kalau vendor bebas memilih. */
   kunciKategori: string | null
@@ -663,7 +639,7 @@ function ServiceDialog({
               label="WAKTU PERSIAPAN (HARI)"
               type="number"
               min={0}
-              defaultValue={awal?.minimum_notice_days ?? defaultNotice}
+              defaultValue={awal?.minimum_notice_days ?? 14}
             />
           </div>
 

@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { MenuIcon } from './icons'
-import { clearAuth, usePengguna } from '../lib/api'
+import { ChatIcon, MenuIcon } from './icons'
+import { clearAuth, pesanBelumDibaca, usePengguna } from '../lib/api'
 
 export default function Navbar() {
   const navigate = useNavigate()
@@ -12,6 +12,28 @@ export default function Navbar() {
   // Di bawah md tautan navigasi tidak muat di bilah; tanpa panel ini
   // Beranda/Festa AI/Pesanan Saya sama sekali tidak bisa dijangkau dari HP.
   const [menuBuka, setMenuBuka] = useState(false)
+  const [belumDibaca, setBelumDibaca] = useState(0)
+
+  // Navbar ikut di semua halaman pelanggan, jadi lencananya ditarik di sini —
+  // satu angka lewat /chat/belum-dibaca, bukan seluruh daftar percakapan.
+  // Tamu tidak punya obrolan, jadi tidak ada permintaan sama sekali sebelum
+  // masuk. ponytail: polling 30 detik, sama dengan lencana di dashboard vendor.
+  useEffect(() => {
+    // Tidak perlu menolkan saat keluar: ikonnya cuma dirender kalau ada user,
+    // dan masuk lagi memicu efek ini menarik angka yang segar.
+    if (!user) return
+    let hidup = true
+    const tarik = () =>
+      pesanBelumDibaca()
+        .then((r) => hidup && setBelumDibaca(r.jumlah))
+        .catch(() => {}) // lencana bukan alasan merusak navbar di semua halaman
+    tarik()
+    const t = setInterval(tarik, 30_000)
+    return () => {
+      hidup = false
+      clearInterval(t)
+    }
+  }, [user])
 
   // "Pesanan Saya" hanya untuk yang sudah masuk; tamu tidak punya pesanan.
   const links = [
@@ -78,6 +100,29 @@ export default function Navbar() {
         <div className="flex items-center gap-2 sm:gap-3">
           {user ? (
             <div className="flex items-center gap-3">
+              {/* Vendor yang sedang membuka sisi marketplace tetap dibawa ke
+                  pusat obrolannya sendiri, sama seperti tautan avatar. */}
+              <Link
+                to={user.role === 'vendor_owner' ? '/vendor/pesan' : '/pesan'}
+                aria-label={
+                  belumDibaca > 0
+                    ? `Obrolan, ${belumDibaca} pesan belum dibaca`
+                    : 'Obrolan'
+                }
+                className="relative mr-1 text-ink/75 transition-colors hover:text-ink"
+              >
+                <ChatIcon className="h-[22px] w-[22px]" />
+                {belumDibaca > 0 && (
+                  <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-maroon px-1 text-[10px] font-semibold text-white">
+                    {belumDibaca > 9 ? '9+' : belumDibaca}
+                  </span>
+                )}
+              </Link>
+
+              {/* Pemisah: lencananya menjorok ke kanan (-right-2), jadi tanpa
+                  garis ini ikon obrolan terbaca menempel ke avatar. */}
+              <span aria-hidden className="h-6 w-px bg-line" />
+
               <Link
                 to={user.role === 'vendor_owner' ? '/vendor' : '/profil'}
                 className="flex items-center gap-2.5"

@@ -1,5 +1,5 @@
 const express = require('express');
-const { updateService, deactivateService, getServicePhoto } = require('../controllers/service.controller');
+const { updateService, deleteService, getServicePhoto } = require('../controllers/service.controller');
 const { listAvailability } = require('../controllers/schedule.controller');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
 
@@ -12,6 +12,6 @@ router.get('/:serviceId/availability', listAvailability);
 router.get('/:serviceId/photo', getServicePhoto);
 
 router.patch('/:serviceId', requireAuth, requireRole('vendor_owner'), updateService);
-router.delete('/:serviceId', requireAuth, requireRole('vendor_owner'), deactivateService);
+router.delete('/:serviceId', requireAuth, requireRole('vendor_owner'), deleteService);
 
 module.exports = router;

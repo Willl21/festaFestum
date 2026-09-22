@@ -1,7 +1,9 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { cekAkses } from './PenjagaAkses'
 import { useEffect, useState } from 'react'
-import { clearAuth, getMyVendor, usePengguna, type ApiVendor } from '../lib/api'
+import {
+  clearAuth, getMyVendor, pesanBelumDibaca, usePengguna, type ApiVendor,
+} from '../lib/api'
 import Img from './Img'
 import {
   GridIcon, CalendarIcon, ClockIcon, FolderIcon, WalletIcon,
@@ -30,6 +32,7 @@ const menu = [
   { to: '/vendor/jadwal', label: 'Jadwal & Ketersediaan', icon: ClockIcon },
   { to: '/vendor/layanan', label: 'Layanan & Portofolio', icon: FolderIcon },
   { to: '/vendor/keuangan', label: 'Keuangan & Payout', icon: WalletIcon },
+  { to: '/vendor/pesan', label: 'Pusat Obrolan', icon: ChatIcon },
 ]
 
 export default function VendorLayout() {
@@ -41,6 +44,7 @@ export default function VendorLayout() {
   const user = usePengguna()
   const [vendor, setVendor] = useState<ApiVendor | null>(null)
   const [menuBuka, setMenuBuka] = useState(false)
+  const [belumDibaca, setBelumDibaca] = useState(0)
 
   useEffect(() => {
     // Nama bisnis & status verifikasi tidak ada di objek user — keduanya milik
@@ -48,6 +52,23 @@ export default function VendorLayout() {
     getMyVendor()
       .then((r) => setVendor(r.vendor))
       .catch(() => {}) // vendor baru yang profilnya belum jadi: biarkan kosong
+  }, [])
+
+  // Lencana obrolan ditarik di layout, bukan di halamannya: angkanya harus
+  // terlihat dari halaman vendor mana pun. Satu angka, bukan seluruh daftar.
+  // ponytail: polling 30 detik. Ikut naik ke SSE kalau halaman obrolannya naik.
+  useEffect(() => {
+    let hidup = true
+    const tarik = () =>
+      pesanBelumDibaca()
+        .then((r) => hidup && setBelumDibaca(r.jumlah))
+        .catch(() => {}) // lencana bukan alasan menggagalkan seluruh dashboard
+    tarik()
+    const t = setInterval(tarik, 30_000)
+    return () => {
+      hidup = false
+      clearInterval(t)
+    }
   }, [])
 
   const tolak = cekAkses('vendor_owner', '/vendor/masuk')
@@ -147,16 +168,34 @@ export default function VendorLayout() {
         <header className="flex items-center justify-between gap-4 border-b border-line bg-white px-6 py-4 md:px-10">
           <p className="font-display text-[24px] font-semibold">Festa Marketplace</p>
           <div className="flex items-center gap-4 text-ink/70">
-            {/* Empat hiasan ini tidak muat bareng tombol menu di layar 375px —
+            {/* Hiasan di sini tidak muat bareng tombol menu di layar 375px —
                 header-nya melar 13px dan SELURUH halaman vendor bisa digeser
-                ke samping. Tidak satu pun bisa diklik, jadi yang dikorbankan
-                di HP memang ini, bukan tombol menunya. */}
+                ke samping. Ikon obrolan DIKECUALIKAN: sejak punya halaman
+                sungguhan dia satu-satunya yang bisa diklik, jadi tetap tampil
+                di HP. Lonceng & avatar masih hiasan, itu yang dikorbankan. */}
             <span className="hidden items-center gap-4 sm:flex">
               <span className="rounded-full bg-lavender/50 px-3 py-1 text-[12px] font-semibold text-navy-900">
                 <span className="text-amber">●</span> Status: Aktif
               </span>
               <BellIcon />
+            </span>
+            <Link
+              to="/vendor/pesan"
+              aria-label={
+                belumDibaca > 0
+                  ? `Pusat Obrolan, ${belumDibaca} pesan belum dibaca`
+                  : 'Pusat Obrolan'
+              }
+              className="relative text-ink/70 transition-colors hover:text-navy-900"
+            >
               <ChatIcon />
+              {belumDibaca > 0 && (
+                <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-maroon px-1 text-[10px] font-semibold text-white">
+                  {belumDibaca > 9 ? '9+' : belumDibaca}
+                </span>
+              )}
+            </Link>
+            <span className="hidden sm:flex">
               <UserCircleIcon className="h-6 w-6" />
             </span>
             {/* Tombol Keluar yang dulu di sini dibuang: sidebar sudah punya

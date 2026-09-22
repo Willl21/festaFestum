@@ -21,6 +21,7 @@ import VirtualAccountPage from './pages/VirtualAccountPage'
 import KonfirmasiPage from './pages/KonfirmasiPage'
 import InvoicePage from './pages/InvoicePage'
 import PesananSayaPage from './pages/PesananSayaPage'
+import ChatPage from './pages/ChatPage'
 import FestaAiPage from './pages/FestaAiPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -30,6 +31,7 @@ import VendorPemesananPage from './pages/VendorPemesananPage'
 import VendorJadwalPage from './pages/VendorJadwalPage'
 import VendorLayananPage from './pages/VendorLayananPage'
 import VendorKeuanganPage from './pages/VendorKeuanganPage'
+import VendorPesanPage from './pages/VendorPesanPage'
 import VendorLoginPage from './pages/VendorLoginPage'
 import VendorRegisterPage from './pages/VendorRegisterPage'
 import VendorDokumenPage from './pages/VendorDokumenPage'
@@ -41,6 +43,7 @@ import AdminVendorPage from './pages/AdminVendorPage'
 import AdminRingkasanPage from './pages/AdminRingkasanPage'
 import AdminEscrowPage from './pages/AdminEscrowPage'
 import AdminAkunPage from './pages/AdminAkunPage'
+import AdminPesanPage from './pages/AdminPesanPage'
 
 /** Navbar + Footer hanya untuk halaman situs. Halaman auth full-screen,
  *  jadi dia duduk di luar layout ini.
@@ -112,6 +115,7 @@ export default function App() {
           <Route path="/event-organizer" element={<EoPage />} />
           <Route path="/event-organizer/:id" element={<EoDetailPage />} />
           <Route path="/pesanan" element={<PesananSayaPage />} />
+          <Route path="/pesan" element={<ChatPage />} />
           <Route path="/festa-ai" element={<FestaAiPage />} />
           <Route path="/profil" element={<ProfilPage />} />
         </Route>
@@ -141,6 +145,7 @@ export default function App() {
           <Route path="jadwal" element={<VendorJadwalPage />} />
           <Route path="layanan" element={<VendorLayananPage />} />
           <Route path="keuangan" element={<VendorKeuanganPage />} />
+          <Route path="pesan" element={<VendorPesanPage />} />
         </Route>
 
         {/* Pusat Kendali admin. Tidak ada rute pendaftaran — akun admin
@@ -151,6 +156,7 @@ export default function App() {
           <Route path="vendor" element={<AdminVendorPage />} />
           <Route path="escrow" element={<AdminEscrowPage />} />
           <Route path="akun" element={<AdminAkunPage />} />
+          <Route path="pesan" element={<AdminPesanPage />} />
         </Route>
 
         <Route path="/masuk" element={<LoginPage />} />
