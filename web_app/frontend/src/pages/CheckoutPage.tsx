@@ -114,7 +114,6 @@ export default function CheckoutPage() {
                     <div className="flex flex-wrap items-center gap-8">
                       <Img
                         alt={booking.business_name}
-                        emoji={kat.emoji}
                         tint={kat.tint}
                         className="h-[170px] w-[170px] object-contain"
                       />

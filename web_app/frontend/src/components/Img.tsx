@@ -4,9 +4,6 @@ type Props = {
   src?: string
   alt: string
   className?: string
-  /** Ditampilkan besar di tengah kalau foto belum ada. Foto asli belum turun
-   *  dari PM, dan blok abu polos bikin semua kategori kelihatan kembar. */
-  emoji?: string
   /** Kelas gradien Tailwind untuk latar fallback, mis. 'from-rose-100 to-rose-200'. */
   tint?: string
   /** Matikan lazy-load untuk gambar yang sudah terlihat saat halaman dibuka
@@ -16,26 +13,24 @@ type Props = {
 }
 
 /** Gambar dari /public/img. Kalau filenya belum ada (atau src kosong),
- *  tampilkan emoji kategori di atas latar berwarna supaya layout tetap
- *  terbaca dan tiap kategori langsung kelihatan bedanya. */
-export default function Img({ src, alt, className = '', emoji, tint, prioritas }: Props) {
+ *  yang tampil blok polos seukuran gambarnya — cukup untuk menjaga layout,
+ *  tanpa berpura-pura ada isinya.
+ *
+ *  Emoji kategori DIBUANG (22 September 2026, permintaan user). Dulu dia
+ *  mengisi kekosongan waktu belum ada satu pun foto asli; sesudah 727 foto
+ *  masuk, yang tersisa cuma slot yang memang belum diisi vendornya — dan
+ *  emoji besar di situ terbaca seperti gambar sungguhan, bukan seperti
+ *  kekosongan. */
+export default function Img({ src, alt, className = '', tint, prioritas }: Props) {
   const [failed, setFailed] = useState(false)
 
   if (!src || failed) {
     return (
       <div
-        className={`flex items-center justify-center bg-gradient-to-br ${
-          tint ?? 'from-stone-200 to-stone-300'
-        } ${className}`}
+        className={`bg-gradient-to-br ${tint ?? 'from-stone-100 to-stone-200'} ${className}`}
         role="img"
         aria-label={alt}
-      >
-        {emoji && (
-          <span className="select-none text-[44px] leading-none drop-shadow-sm" aria-hidden="true">
-            {emoji}
-          </span>
-        )}
-      </div>
+      />
     )
   }
 

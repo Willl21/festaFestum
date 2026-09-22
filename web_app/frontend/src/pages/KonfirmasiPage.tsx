@@ -95,7 +95,7 @@ export default function KonfirmasiPage() {
 
                   <div className="p-6">
                     <div className="flex flex-wrap items-center gap-7">
-                      <Img alt={booking.business_name} emoji={kat.emoji} tint={kat.tint} className="h-[130px] w-[130px] object-contain" />
+                      <Img alt={booking.business_name} tint={kat.tint} className="h-[130px] w-[130px] object-contain" />
                       <div>
                         <h2 className="font-display text-[26px] font-semibold">{booking.business_name}</h2>
                         <p className="mt-1.5 text-[15px] text-ink/80">{booking.service_name}</p>

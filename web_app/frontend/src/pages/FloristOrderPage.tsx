@@ -139,7 +139,6 @@ export default function FloristOrderPage() {
               satuan: jumlah > 1 ? `× ${jumlah}` : undefined,
               price: harga,
               dp: Math.round(harga * 0.3),
-              emoji: kat.emoji,
               tint: kat.tint,
               backTo: `/${kat.slug}/${id}`,
             }}

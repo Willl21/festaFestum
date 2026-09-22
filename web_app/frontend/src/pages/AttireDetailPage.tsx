@@ -180,7 +180,6 @@ export default function AttireDetailPage() {
             <Img
               src={fotoSlot.includes(0) ? urlFotoVendor(id, 0) : undefined}
               alt={vendor.business_name}
-              emoji={kat.emoji}
               tint={kat.tint}
               className="h-[400px] w-full object-cover md:h-[640px]"
             />
@@ -190,7 +189,6 @@ export default function AttireDetailPage() {
                   key={n}
                   src={fotoSlot.includes(n) ? urlFotoVendor(id, n) : undefined}
                   alt={`${vendor.business_name} ${n + 1}`}
-                  emoji={kat.emoji}
                   tint={kat.tint}
                   className={`w-full object-cover ${n === 1 ? 'h-[200px] md:h-[310px]' : 'h-[200px] md:h-[318px]'}`}
                 />
@@ -238,7 +236,6 @@ export default function AttireDetailPage() {
                           <Img
                             src={s.has_photo ? urlFotoLayanan(s.service_id) : undefined}
                             alt={s.service_name}
-                            emoji={kat.emoji}
                             tint={kat.tint}
                             className="h-[200px] w-full object-cover"
                           />

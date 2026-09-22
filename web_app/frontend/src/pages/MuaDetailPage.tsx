@@ -110,14 +110,12 @@ export default function MuaDetailPage() {
             <Img
               src={fotoSlot.includes(0) ? urlFotoVendor(id, 0) : undefined}
               alt={vendor.business_name}
-              emoji={kategori.emoji}
               tint={kategori.tint}
               className="h-[300px] w-full object-cover md:col-span-2 md:h-[520px]"
             />
             <Img
               src={fotoSlot.includes(1) ? urlFotoVendor(id, 1) : undefined}
               alt={`${vendor.business_name} 2`}
-              emoji={kategori.emoji}
               tint={kategori.tint}
               className="h-[300px] w-full object-cover md:h-[520px]"
             />

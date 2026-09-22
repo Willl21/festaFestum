@@ -232,7 +232,6 @@ export default function FestaAiPage() {
                         >
                           <Img
                             alt={r.business_name}
-                            emoji={kat.emoji}
                             tint={kat.tint}
                             className="h-[200px] w-full object-cover"
                           />

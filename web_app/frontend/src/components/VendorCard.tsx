@@ -11,9 +11,8 @@ export type Vendor = {
   rating: number
   ratingCount: number
   priceFrom: number
-  /** Kosongkan selama foto vendor belum ada — emoji kategori yang dipakai. */
+  /** Kosongkan selama foto vendor belum ada; yang tampil blok polos. */
   image?: string
-  emoji?: string
   tint?: string
 }
 
@@ -53,7 +52,6 @@ export default function VendorCard({
       <Img
         src={vendor.image}
         alt={vendor.name}
-        emoji={vendor.emoji}
         tint={vendor.tint}
         className="h-[210px] w-full object-cover"
       />

@@ -193,7 +193,6 @@ export default function LandingPage() {
                     <Img
                       src={besar.has_photo ? urlFotoVendor(besar.vendor_id) : undefined}
                       alt={besar.business_name}
-                      emoji={kat.emoji}
                       tint={kat.tint}
                       className="h-[290px] w-full object-cover"
                     />
@@ -228,7 +227,6 @@ export default function LandingPage() {
                       <Img
                         src={v.has_photo ? urlFotoVendor(v.vendor_id) : undefined}
                         alt={v.business_name}
-                        emoji={kat.emoji}
                         tint={kat.tint}
                         className="h-[150px] w-full object-cover"
                       />

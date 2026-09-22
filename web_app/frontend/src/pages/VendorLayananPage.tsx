@@ -229,7 +229,6 @@ export default function VendorLayananPage() {
                         <Img
                           src={s.has_photo ? urlFotoLayanan(s.service_id, versiFoto) : undefined}
                           alt={s.service_name}
-                          emoji={gaya?.emoji}
                           tint={gaya?.tint}
                           className="h-[165px] w-full object-cover"
                         />

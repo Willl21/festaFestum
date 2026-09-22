@@ -93,9 +93,7 @@ export default function FotograferPage() {
             priceFrom: Number(v.price_start_from ?? 0),
             // has_photo cuma penanda; gambarnya diambil dari endpoint terpisah
             // supaya JSON listing tidak membawa data URL tiap vendor. Kalau
-            // kosong, Img jatuh ke emoji kategori di bawah ini.
             image: v.has_photo ? urlFotoVendor(v.vendor_id) : undefined,
-            emoji: kategori.emoji,
             tint: kategori.tint,
           }))
         )
@@ -140,7 +138,6 @@ export default function FotograferPage() {
         <HeroSlideshow
           foto={fotoHero}
           alt="Kamera profesional"
-          emoji={kategori.emoji}
           tint={kategori.tint}
           className="h-[340px] overflow-hidden md:h-[500px]"
         />

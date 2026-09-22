@@ -20,7 +20,6 @@ export default function HeroSlideshow({
   foto,
   alt,
   className = '',
-  emoji,
   tint,
 }: {
   /** Jalur foto di /public/img, ditulis inline oleh halamannya. */
@@ -28,7 +27,6 @@ export default function HeroSlideshow({
   /** Dipakai foto yang sedang tampil; sisanya dianggap hiasan. */
   alt: string
   className?: string
-  emoji?: string
   tint?: string
 }) {
   const [aktif, setAktif] = useState(0)
@@ -91,7 +89,6 @@ export default function HeroSlideshow({
             key={f}
             src={i <= sampai ? f : undefined}
             alt={i === aktif ? alt : ''}
-            emoji={emoji}
             tint={tint}
             prioritas={i === 0}
             className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-[1200ms] ease-in-out motion-reduce:transition-none ${

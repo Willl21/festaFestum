@@ -298,7 +298,6 @@ function Photo({ n, nama, src, className }: {
       <Img
         src={src}
         alt={`${nama} ${n + 1}`}
-        emoji={kategori.emoji}
         tint={kategori.tint}
         className="h-full w-full object-cover"
       />

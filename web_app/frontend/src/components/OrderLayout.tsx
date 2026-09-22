@@ -17,7 +17,6 @@ export type OrderSummary = {
    *  kalau dua-duanya menghitung, angkanya bisa berbeda dan user ditagih
    *  jumlah yang tidak dia lihat. */
   dp: number
-  emoji: string
   tint: string
   backTo: string
 }
@@ -54,7 +53,6 @@ export default function OrderLayout({
         <aside className="h-fit border border-line bg-white lg:sticky lg:top-8">
           <Img
             alt={order.vendor}
-            emoji={order.emoji}
             tint={order.tint}
             className="h-[150px] w-full object-cover"
           />

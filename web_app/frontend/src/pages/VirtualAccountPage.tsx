@@ -327,7 +327,6 @@ export default function VirtualAccountPage() {
                   <div className="flex gap-4 pt-5">
                     <Img
                       alt={payment.business_name}
-                      emoji={kat.emoji}
                       tint={kat.tint}
                       className="h-[90px] w-[90px] shrink-0 object-cover"
                     />

@@ -182,7 +182,6 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
               // DP 30% mengikuti backend. Angka yang MENGIKAT tetap dp_amount yang
               // dikembalikan POST /bookings dan ditampilkan di halaman checkout.
               dp: Math.round(harga * 0.3),
-              emoji: kat.emoji,
               tint: kat.tint,
               backTo: `/${kat.slug}/${id}`,
             }}

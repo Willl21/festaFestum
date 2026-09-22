@@ -464,7 +464,9 @@ export default function ChatPage() {
 
                   {ruangSiap && pesan.length === 0 && (
                     <p className="py-10 text-center text-[13px] text-muted">
-                      Belum ada pesan. Sapa vendornya duluan, yuk.
+                      {kepala?.jenis === 'admin_klien'
+                        ? 'Belum ada pesan. Ceritakan kendala Anda, tim admin akan membalas.'
+                        : 'Belum ada pesan. Sapa vendornya duluan, yuk.'}
                     </p>
                   )}
                   {pesan.map((m, i) => {
@@ -528,7 +530,11 @@ export default function ChatPage() {
                       }}
                       rows={2}
                       maxLength={2000}
-                      placeholder="Tulis pesan untuk vendor…"
+                      placeholder={
+                        kepala?.jenis === 'admin_klien'
+                          ? 'Tulis pesan untuk tim admin…'
+                          : 'Tulis pesan untuk vendor…'
+                      }
                       className="w-full resize-none rounded-md border border-line px-4 py-3 text-[14px] outline-none focus:border-navy-900"
                     />
                   </label>

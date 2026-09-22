@@ -7,7 +7,8 @@ import { SearchIcon, ChevronDown } from '../components/icons'
 import { categories, namaKota, type CategoryKey } from '../data/categories'
 import { rupiah } from '../lib/format'
 import {
-  getToken, listMyBookings, batalBooking, kirimUlasan, bukaPercakapan, type ApiBooking,
+  getToken, listMyBookings, batalBooking, kirimUlasan, bukaPercakapan, urlFotoLayanan,
+  type ApiBooking,
 } from '../lib/api'
 
 const KATEGORI: Record<string, CategoryKey> = {
@@ -288,9 +289,16 @@ export default function PesananSayaPage() {
                   </header>
 
                   <div className="grid gap-6 px-6 pb-5 lg:grid-cols-[210px_1fr_330px]">
+                    {/* Dulu <Img> ini dipasang TANPA src sama sekali, jadi
+                        selamanya jatuh ke fallback — bug yang sama dengan
+                        halaman florist dan kartu rekomendasi di landing.
+                        Fotonya diambil per LAYANAN, bukan per vendor: yang
+                        dipesan layanannya, dan itu yang fotonya dilihat user
+                        waktu memesan. Slot kosong dibalas 404 dan Img jatuh ke
+                        blok polos lewat onError. */}
                     <Img
-                      alt={p.business_name}
-                      emoji={kat.emoji}
+                      src={urlFotoLayanan(p.service_id)}
+                      alt={p.service_name}
                       tint={kat.tint}
                       className="h-[130px] w-full object-cover"
                     />

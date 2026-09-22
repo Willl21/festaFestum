@@ -122,7 +122,6 @@ export default function FloristDetailPage() {
               <Img
                 src={fotoSlot.includes(0) ? urlFotoVendor(id, 0) : undefined}
                 alt={`Portofolio ${vendor.business_name}`}
-                emoji={kategori.emoji}
                 tint={kategori.tint}
                 className="h-[260px] w-full object-cover sm:col-span-2 lg:h-[520px]"
               />
@@ -132,7 +131,6 @@ export default function FloristDetailPage() {
                     key={n}
                     src={fotoSlot.includes(n) ? urlFotoVendor(id, n) : undefined}
                     alt={`Portofolio ${vendor.business_name} ${n}`}
-                    emoji={kategori.emoji}
                     tint={kategori.tint}
                     className="h-[180px] w-full object-cover lg:h-[255px]"
                   />
@@ -169,7 +167,6 @@ export default function FloristDetailPage() {
                       <Img
                         src={s.has_photo ? urlFotoLayanan(s.service_id) : undefined}
                         alt={s.service_name}
-                        emoji={kategori.emoji}
                         tint={kategori.tint}
                         className="h-[180px] w-full object-cover"
                       />
