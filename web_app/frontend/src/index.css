@@ -20,10 +20,39 @@
   --color-star: #f5b301;
 
   --color-line: #e6e4de;
+  /* Batas kotak isian. Diambil dari mockup halaman masuk (Figma memakai abu
+     yang lebih tua untuk input daripada untuk garis pemisah). --color-line
+     di cream cuma 1,27:1 — tepi input praktis hilang. */
+  --color-line-input: #c9c9c9;
+
+  /* Kurva keluar yang tegas (cepat di awal, mendarat halus). Menimpa
+     `ease-out` bawaan Tailwind, jadi semua kelas `ease-out` yang sudah ada
+     ikut memakainya. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 html {
   scroll-behavior: smooth;
+}
+
+/* Cincin fokus keyboard (review 25 Sep). Bawaan browser di tombol navy cuma
+   garis gelap 1px di atas navy — tidak terlihat. Amber kontras di navy
+   (8,4:1) maupun di cream. :focus-visible = hanya saat navigasi keyboard,
+   klik mouse tidak memunculkannya, jadi tampilan mockup tidak berubah.
+   Input sengaja tidak termasuk: dia sudah punya penanda fokus sendiri
+   (garis berubah navy), dan :focus-visible di input ikut menyala waktu diklik. */
+@layer base {
+  :where(a, button, summary, [role='button'], [tabindex]:not([tabindex='-1'])):focus-visible {
+    outline: 2px solid var(--color-amber);
+    outline-offset: 2px;
+  }
+}
+
+/* Batas input yang terlihat, tanpa menyentuh ~35 className input satu per
+   satu. Sengaja DI LUAR @layer supaya menang atas utilitas `border-line`, dan
+   :not(:focus) supaya `focus:border-navy-900` tetap berlaku saat diisi. */
+:is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='hidden']), select, textarea):not(:focus) {
+  border-color: var(--color-line-input);
 }
 
 body {
@@ -59,12 +88,135 @@ body {
 @keyframes ff-masuk {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    /* Jaraknya bisa diatur per pemakai; bawaannya 8px dari bawah seperti
+       sebelumnya, jadi .masuk-halus tidak berubah. */
+    transform: translateY(var(--ff-geser, 8px));
+  }
+}
+
+/* Versi tanpa pergeseran, dipakai saat pengguna memilih gerak minimal:
+   lebih lembut, tapi elemennya tetap tidak muncul menyentak. */
+@keyframes ff-pudar {
+  from {
+    opacity: 0;
   }
 }
 
 .masuk-halus {
   animation: ff-masuk 0.4s ease-out;
+}
+
+/* Carousel ulasan (components/UlasanVendor.tsx): kartu lama mengabur hilang,
+   kartu baru menajam muncul di tempat yang sama, berurutan lewat
+   animation-delay per kartu. `both` menahan kartu yang masih menunggu
+   gilirannya tetap tak terlihat, bukan berkedip tampil dulu. */
+@keyframes ff-blur-keluar {
+  to {
+    opacity: 0;
+    filter: blur(6px);
+  }
+}
+
+@keyframes ff-pudar-keluar {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes ff-blur-masuk {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+  }
+}
+
+.ulasan-keluar {
+  animation: ff-blur-keluar 150ms ease-in both;
+}
+
+.ulasan-masuk {
+  animation: ff-blur-masuk 250ms var(--ease-out) both;
+}
+
+/* Elemen kecil yang muncul di tempat (form ulasan, pesan "jadwal tidak
+   tersedia", menu HP). Keyframe-nya sama dengan .masuk-halus, tapi lebih
+   cepat dan jaraknya pendek: 0,4 detik untuk sepotong pesan terasa lambat.
+   Turun dari ATAS (-4px) karena munculnya di bawah pemicunya — form di bawah
+   tombol "Beri Ulasan", menu di bawah bilah navbar.
+   Di @layer components supaya utilitas seperti [--ff-geser:-8px] (menu HP)
+   masih bisa menimpa jaraknya — di luar layer, kelas ini selalu menang. */
+@layer components {
+  .muncul-halus {
+    --ff-geser: -4px;
+    animation: ff-masuk 200ms var(--ease-out);
+  }
+}
+
+/* Umpan balik tekan (review 25 Sep): sebelumnya tidak ada satu tombol pun
+   yang bereaksi saat ditekan, jadi klik di koneksi lambat terasa tidak kena.
+   Memakai properti `scale`, bukan `transform`, supaya tidak menimpa transform
+   milik library motion atau hover-scale kartu.
+   Sengaja DI LUAR @layer: kelas transition-colors/opacity bawaan tombol
+   menulis ulang transition-property, dan scale harus ikut di daftarnya.
+   Link yang tampil sebagai tombol dikenali dari display flex/inline-flex —
+   tautan teks biasa di paragraf tidak ikut mengecil. */
+:where(button:not(:disabled), [role='button'], a.flex, a.inline-flex) {
+  transition-property: color, background-color, border-color, outline-color,
+    text-decoration-color, opacity, box-shadow, scale;
+  transition-duration: 160ms;
+  transition-timing-function: var(--ease-out);
+}
+
+:where(button:not(:disabled), [role='button'], a.flex, a.inline-flex):active {
+  scale: 0.97;
+}
+
+/* Dialog bawaan browser (form Tambah/Ubah Layanan vendor). Dulu dialog dan
+   latarnya muncul seketika. Cuma MASUK yang dianimasikan: dialognya dipasang
+   ulang lewat `key` begitu ditutup, jadi animasi keluar pasti terpotong — dan
+   menutup memang harus terasa sigap. Tetap di tengah layar, tidak "tumbuh"
+   dari tombolnya: modal bukan popover. */
+dialog.ff-dialog[open] {
+  transition: opacity 200ms var(--ease-out), scale 200ms var(--ease-out);
+}
+dialog.ff-dialog[open]::backdrop {
+  transition: background-color 200ms var(--ease-out);
+}
+@starting-style {
+  dialog.ff-dialog[open] {
+    opacity: 0;
+    scale: 0.97;
+  }
+  dialog.ff-dialog[open]::backdrop {
+    background-color: transparent;
+  }
+}
+
+/* Akordeon <details> (instruksi pembayaran, detail pesanan vendor). Dulu
+   isinya meloncat terbuka dan panahnya diam, jadi status buka/tutup tidak
+   terbaca. ::details-content + interpolate-size baru ada di browser terbaru;
+   di browser lain akordeonnya tetap bekerja, cuma tanpa gerak. 180ms, bukan
+   300ms: vendor membuka "Detail" berkali-kali sehari. */
+details {
+  interpolate-size: allow-keywords;
+}
+details::details-content {
+  height: 0;
+  opacity: 0;
+  overflow: clip;
+  transition: height 180ms var(--ease-out), opacity 180ms var(--ease-out),
+    content-visibility 180ms allow-discrete;
+}
+details[open]::details-content {
+  height: auto;
+  opacity: 1;
+}
+.ff-panah {
+  display: inline-block;
+  transition: rotate 200ms var(--ease-out);
+}
+details[open] > summary .ff-panah {
+  rotate: 180deg;
 }
 
 .shimmer::after {
@@ -95,5 +247,27 @@ body {
 
   .masuk-halus {
     animation: none;
+  }
+
+  /* Ganti halaman ulasan cukup memudar, tanpa blur. */
+  .ulasan-keluar {
+    animation-name: ff-pudar-keluar;
+  }
+  .ulasan-masuk {
+    animation-name: ff-pudar;
+  }
+
+  /* Tetap memudar, tanpa bergeser. Tekanan tombol dibiarkan: skalanya 3%
+     dan cuma 160ms, bukan jenis gerak yang dihindari pengguna ini. */
+  .muncul-halus {
+    animation-name: ff-pudar;
+  }
+
+  /* Dialog & akordeon: memudar saja, tanpa membesar atau memanjang. */
+  dialog.ff-dialog[open] {
+    transition-property: opacity;
+  }
+  details::details-content {
+    transition-property: opacity, content-visibility;
   }
 }

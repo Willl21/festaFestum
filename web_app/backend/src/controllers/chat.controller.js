@@ -4,8 +4,9 @@ const { vendorIdMilik } = require('../lib/saldo');
 // ------------------------------------------------------------
 // OBROLAN
 //
-// Tiga jenis percakapan (lihat migrasi 015): klien<->vendor per pesanan,
-// klien<->admin, dan vendor<->admin. Yang membedakan siapa boleh masuk cuma
+// Empat jenis percakapan: klien<->vendor per pesanan, klien<->admin,
+// vendor<->admin (migrasi 015), dan konsultasi klien<->vendor SEBELUM ada
+// pesanan (migrasi 017). Yang membedakan siapa boleh masuk cuma
 // satu fungsi, syaratAkses(), dan seluruh endpoint di bawah memakainya lewat
 // klausa WHERE — bukan if terpisah — mengikuti pola anti-IDOR di controller
 // lain. Percakapan milik orang lain karena itu dibalas 404, bukan 403.
@@ -121,7 +122,7 @@ async function openConversation(req, res, next) {
       // Kepemilikan pesanan ikut di WHERE: yang boleh membuka obrolan sebuah
       // pesanan cuma pemesannya atau vendor yang dipesan.
       const { rows } = await pool.query(
-        `SELECT b.booking_id, b.user_id, s.vendor_id
+        `SELECT b.booking_id, b.user_id, s.vendor_id, b.konsultasi_id
            FROM bookings b
            JOIN services s ON s.service_id = b.service_id
           WHERE b.booking_id = $1
@@ -131,6 +132,15 @@ async function openConversation(req, res, next) {
       );
       if (rows.length === 0) {
         return res.status(404).json({ message: 'Pesanan tidak ditemukan' });
+      }
+      // Pesanan dari konsultasi tidak dibuatkan ruang kedua: obrolannya
+      // tetap di ruang konsultasi tempat paketnya direkomendasikan.
+      if (rows[0].konsultasi_id) {
+        const { rows: ruang } = await pool.query(
+          `SELECT ${KOLOM_PERCAKAPAN} ${DARI_PERCAKAPAN} WHERE c.conversation_id = $1`,
+          [rows[0].konsultasi_id]
+        );
+        if (ruang.length) return res.json({ conversation: ruang[0] });
       }
       isi = {
         jenis: 'klien_vendor',
@@ -214,9 +224,12 @@ async function getMessages(req, res, next) {
       ),
       pool.query(
         `SELECT m.message_id, m.body, m.created_at, m.read_at, m.sender_user_id,
-                u.name AS nama_pengirim, u.role AS peran_pengirim
+                u.name AS nama_pengirim, u.role AS peran_pengirim,
+                m.service_id, sv.service_name AS paket_nama, sv.price AS paket_harga,
+                sv.category AS paket_kategori, sv.is_active AS paket_aktif
            FROM messages m
            JOIN users u ON u.user_id = m.sender_user_id
+           LEFT JOIN services sv ON sv.service_id = m.service_id
           WHERE m.conversation_id = $1
             AND EXISTS (SELECT 1 FROM conversations c
                          WHERE c.conversation_id = m.conversation_id AND ${sql})
@@ -256,20 +269,40 @@ async function getMessages(req, res, next) {
 // Body: { body }
 async function sendMessage(req, res, next) {
   try {
-    const body = typeof req.body?.body === 'string' ? req.body.body.trim() : '';
-    if (!body) return res.status(400).json({ message: 'Pesan tidak boleh kosong' });
+    let body = typeof req.body?.body === 'string' ? req.body.body.trim() : '';
+    const serviceId = req.body?.service_id || null;
+    if (!body && !serviceId) return res.status(400).json({ message: 'Pesan tidak boleh kosong' });
     if (body.length > 2000) {
       return res.status(400).json({ message: 'Pesan maksimal 2.000 karakter' });
     }
 
     const { sql, params } = await syaratAkses(req.user, 2);
     const { rows: boleh } = await pool.query(
-      `SELECT c.conversation_id FROM conversations c
+      `SELECT c.conversation_id, c.jenis, c.vendor_id FROM conversations c
         WHERE c.conversation_id = $1 AND ${sql}`,
       [req.params.conversationId, ...params]
     );
     if (boleh.length === 0) {
       return res.status(404).json({ message: 'Percakapan tidak ditemukan' });
+    }
+
+    // Rekomendasi paket (migrasi 017): cuma VENDOR ruang itu, cuma di obrolan
+    // dengan klien, dan cuma paketnya sendiri yang masih aktif. Kepemilikan
+    // paket ikut di WHERE — service_id vendor lain dibalas seperti tidak ada.
+    if (serviceId) {
+      const ruang = boleh[0];
+      if (req.user.role !== 'vendor_owner' || !['konsultasi', 'klien_vendor'].includes(ruang.jenis)) {
+        return res.status(403).json({ message: 'Hanya vendor yang bisa merekomendasikan paket' });
+      }
+      const { rows: paket } = await pool.query(
+        `SELECT service_name FROM services
+          WHERE service_id = $1 AND vendor_id = $2 AND is_active = TRUE`,
+        [serviceId, ruang.vendor_id]
+      );
+      if (paket.length === 0) {
+        return res.status(404).json({ message: 'Paket tidak ditemukan atau sudah tidak aktif' });
+      }
+      if (!body) body = `Rekomendasi paket: ${paket[0].service_name}`;
     }
 
     // Bentuknya WAJIB sama persis dengan baris di getMessages, termasuk nama
@@ -278,13 +311,16 @@ async function sendMessage(req, res, next) {
     // bubble menaruhnya di kiri sampai penarikan berikutnya memindahkannya.
     const { rows } = await pool.query(
       `WITH baru AS (
-         INSERT INTO messages (conversation_id, sender_user_id, body)
-         VALUES ($1, $2, $3)
-         RETURNING message_id, body, created_at, read_at, sender_user_id
+         INSERT INTO messages (conversation_id, sender_user_id, body, service_id)
+         VALUES ($1, $2, $3, $4)
+         RETURNING message_id, body, created_at, read_at, sender_user_id, service_id
        )
-       SELECT baru.*, u.name AS nama_pengirim, u.role AS peran_pengirim
-         FROM baru JOIN users u ON u.user_id = baru.sender_user_id`,
-      [req.params.conversationId, req.user.user_id, body]
+       SELECT baru.*, u.name AS nama_pengirim, u.role AS peran_pengirim,
+              sv.service_name AS paket_nama, sv.price AS paket_harga,
+              sv.category AS paket_kategori, sv.is_active AS paket_aktif
+         FROM baru JOIN users u ON u.user_id = baru.sender_user_id
+         LEFT JOIN services sv ON sv.service_id = baru.service_id`,
+      [req.params.conversationId, req.user.user_id, body, serviceId]
     );
 
     await pool.query(
@@ -293,6 +329,89 @@ async function sendMessage(req, res, next) {
     );
 
     res.status(201).json({ message: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/v1/vendors/:vendorId/konsultasi  (role: customer)
+// Body: { nama, perusahaan?, email, jenis_acara, pesan }
+//
+// Form "Mulai Rencanakan Acara Anda" di detail EO (migrasi 017). Membuka ruang
+// konsultasi klien<->vendor — atau melanjutkan yang sudah ada, dijamin indeks
+// unik (user, vendor) — lalu isi formnya jadi pesan pertama. Dari situ semua
+// lewat chat biasa, termasuk rekomendasi paket dari vendor.
+const JENIS_ACARA_KONSULTASI = ['Gala Dinner', 'Konferensi', 'Perayaan Pribadi'];
+
+async function mulaiKonsultasi(req, res, next) {
+  try {
+    const teks = (k, maks) => (typeof req.body?.[k] === 'string' ? req.body[k].trim().slice(0, maks) : '');
+    const nama = teks('nama', 150);
+    const perusahaan = teks('perusahaan', 150);
+    const email = teks('email', 150);
+    const jenisAcara = teks('jenis_acara', 40);
+    const pesan = teks('pesan', 1500);
+
+    if (!nama || !email || !pesan) {
+      return res.status(400).json({ message: 'Nama, email, dan pesan wajib diisi' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: 'Format email tidak valid' });
+    }
+    if (jenisAcara && !JENIS_ACARA_KONSULTASI.includes(jenisAcara)) {
+      return res.status(400).json({ message: 'Jenis acara tidak valid' });
+    }
+
+    const { rows: vendor } = await pool.query(
+      'SELECT vendor_id, owner_user_id FROM vendors WHERE vendor_id = $1',
+      [req.params.vendorId]
+    );
+    if (vendor.length === 0) {
+      return res.status(404).json({ message: 'Vendor tidak ditemukan' });
+    }
+
+    // Kepala berisi data form, lalu satu baris kosong, lalu pesannya.
+    const kepala = [
+      'Permintaan konsultasi',
+      `Nama: ${nama}`,
+      perusahaan && `Perusahaan: ${perusahaan}`,
+      `Email: ${email}`,
+      jenisAcara && `Jenis acara: ${jenisAcara}`,
+    ].filter(Boolean).join('\n');
+    const isiPesan = `${kepala}\n\n${pesan}`;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO conversations (jenis, user_id, vendor_id)
+         VALUES ('konsultasi', $1, $2)
+         ON CONFLICT DO NOTHING`,
+        [req.user.user_id, vendor[0].vendor_id]
+      );
+      const { rows: ruang } = await client.query(
+        `UPDATE conversations SET last_message_at = now()
+          WHERE jenis = 'konsultasi' AND user_id = $1 AND vendor_id = $2
+          RETURNING conversation_id`,
+        [req.user.user_id, vendor[0].vendor_id]
+      );
+      await client.query(
+        'INSERT INTO messages (conversation_id, sender_user_id, body) VALUES ($1, $2, $3)',
+        [ruang[0].conversation_id, req.user.user_id, isiPesan]
+      );
+      await client.query('COMMIT');
+
+      const { rows } = await pool.query(
+        `SELECT ${KOLOM_PERCAKAPAN} ${DARI_PERCAKAPAN} WHERE c.conversation_id = $1`,
+        [ruang[0].conversation_id]
+      );
+      res.status(201).json({ conversation: rows[0] });
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     next(err);
   }
@@ -319,4 +438,5 @@ async function unreadCount(req, res, next) {
 
 module.exports = {
   listConversations, openConversation, getMessages, sendMessage, unreadCount,
+  mulaiKonsultasi,
 };

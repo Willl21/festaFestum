@@ -1,8 +1,8 @@
-import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { GridIcon, ShieldIcon, WalletIcon, UserCircleIcon, BellIcon, MenuIcon, ChatIcon } from './icons'
 import { cekAkses } from './PenjagaAkses'
-import { clearAuth, usePengguna } from '../lib/api'
+import { clearAuth, pesanBelumDibaca, usePengguna } from '../lib/api'
 
 /** Kerangka Pusat Kendali admin: sidebar gelap + topbar, isinya lewat
  *  <Outlet />. Terpisah dari VendorLayout karena menunya beda total dan
@@ -22,7 +22,7 @@ import { clearAuth, usePengguna } from '../lib/api'
 const menu = [
   { to: '/admin', label: 'Ringkasan', icon: GridIcon, end: true },
   { to: '/admin/vendor', label: 'Persetujuan Vendor', icon: ShieldIcon },
-  { to: '/admin/escrow', label: 'Pusat Escrow', icon: WalletIcon },
+  { to: '/admin/escrow', label: 'Escrow & Pencairan', icon: WalletIcon },
   { to: '/admin/akun', label: 'Akun Pengguna & Vendor', icon: UserCircleIcon },
   { to: '/admin/pesan', label: 'Pusat Komunikasi', icon: ChatIcon },
 ]
@@ -33,6 +33,26 @@ export default function AdminLayout() {
   // Sebelum cabang penolakan — sama seperti di VendorLayout, hook di bawah
   // early return bikin jumlahnya berubah saat keluar.
   const [menuBuka, setMenuBuka] = useState(false)
+  // Lonceng di header dulu cuma gambar — kelihatan bisa diklik, tidak ada
+  // apa-apa. Sekarang tautan ke Pusat Komunikasi dengan angka tiket yang
+  // belum dibaca. Pola yang sama dengan ikon chat di Navbar pelanggan:
+  // polling 30 detik, gagal = diam (lencana bukan alasan merusak layout).
+  const [belumDibaca, setBelumDibaca] = useState(0)
+  const bolehMasuk = user?.role === 'admin'
+  useEffect(() => {
+    if (!bolehMasuk) return
+    let hidup = true
+    const tarik = () =>
+      pesanBelumDibaca()
+        .then((r) => hidup && setBelumDibaca(r.jumlah))
+        .catch(() => {})
+    tarik()
+    const t = setInterval(tarik, 30_000)
+    return () => {
+      hidup = false
+      clearInterval(t)
+    }
+  }, [bolehMasuk])
   const tolak = cekAkses('admin', '/admin/masuk')
   if (tolak) return tolak
 
@@ -69,7 +89,7 @@ export default function AdminLayout() {
             <span className="block font-display text-[20px] leading-none font-semibold text-white">
               Festa Festum
             </span>
-            <span className="mt-1 block text-[10px] tracking-[0.18em] text-amber uppercase">
+            <span className="mt-1 block text-[11px] tracking-[0.18em] text-amber uppercase">
               Pusat Kendali
             </span>
           </span>
@@ -101,12 +121,12 @@ export default function AdminLayout() {
             <span className="block truncate text-[13px] font-semibold text-white">
               {user?.name ?? 'Admin'}
             </span>
-            <span className="block text-[10px] tracking-wide text-amber uppercase">Super Admin</span>
+            <span className="block text-[11px] tracking-wide text-amber uppercase">Super Admin</span>
           </span>
           <button
             type="button"
             onClick={keluar}
-            className="text-[12px] font-semibold text-white/60 hover:text-white"
+            className="-mr-2 rounded px-2 py-1.5 text-[12px] font-semibold text-white/60 hover:text-white"
           >
             Keluar
           </button>
@@ -126,16 +146,23 @@ export default function AdminLayout() {
             >
               <MenuIcon />
             </button>
-            <p className="text-[12px] tracking-wide text-muted uppercase">
-              Konsol Marketplace Institusional <span className="mx-2 text-amber">•</span> Hub
-              Sentral Jabodetabek
-            </p>
           </div>
           <div className="flex items-center gap-4">
             <span className="hidden items-center gap-2 text-[12px] text-ink/70 sm:flex">
               <span className="h-2 w-2 rounded-full bg-[#2e6b52]" /> Gateway Escrow: Sandbox
             </span>
-            <BellIcon className="h-5 w-5 text-ink/50" />
+            <Link
+              to="/admin/pesan"
+              aria-label={belumDibaca > 0 ? `Pusat Komunikasi, ${belumDibaca} pesan belum dibaca` : 'Pusat Komunikasi'}
+              className="relative rounded-md p-1.5 text-ink/60 transition-colors hover:text-navy-900"
+            >
+              <BellIcon className="h-5 w-5" />
+              {belumDibaca > 0 && (
+                <span className="absolute -top-0.5 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-maroon px-1 text-[11px] font-semibold text-white">
+                  {belumDibaca > 9 ? '9+' : belumDibaca}
+                </span>
+              )}
+            </Link>
           </div>
         </header>
 

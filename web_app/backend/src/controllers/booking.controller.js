@@ -38,7 +38,7 @@ function isValidDate(s) {
 async function createBooking(req, res, next) {
   const {
     service_id, event_date, start_time, event_type, event_location_detail, quantity,
-    jam_tambahan,
+    jam_tambahan, konsultasi_id,
   } = req.body;
 
   if (!service_id || !event_date || !start_time || !event_type || !event_location_detail) {
@@ -68,23 +68,25 @@ async function createBooking(req, res, next) {
 
   const userId = req.user.user_id;
 
-  // Akun dari login Google lahir tanpa nomor HP (Google tidak memberinya),
-  // padahal vendor butuh nomor itu untuk menghubungi pemesannya. Ditagih di
-  // sini, satu pintu untuk kelima halaman pesan.
-  const hp = await pool.query('SELECT phone FROM users WHERE user_id = $1', [userId]);
-  if (!hp.rows[0]?.phone?.trim()) {
-    return res.status(400).json({
-      message: 'Lengkapi nomor WhatsApp di halaman Profil dulu sebelum memesan.',
-    });
-  }
-
   let vendorId = null;
   let weOwnTheLock = false;
-
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
+
+    // Akun dari login Google lahir tanpa nomor HP (Google tidak memberinya),
+    // padahal vendor butuh nomor itu untuk menghubungi pemesannya. Ditagih di
+    // sini, satu pintu untuk kelima halaman pesan. Di DALAM try: query yang
+    // gagal di luar try tidak tertangkap dan mematikan seluruh proses.
+    const hp = await client.query('SELECT phone FROM users WHERE user_id = $1', [userId]);
+    if (!hp.rows[0]?.phone?.trim()) {
+      return res.status(400).json({
+        message: 'Lengkapi nomor WhatsApp di halaman Profil dulu sebelum memesan.',
+      });
+    }
+
     const svc = await client.query(
-      `SELECT s.vendor_id, s.price, s.minimum_notice_days, s.category,
+      `SELECT s.vendor_id, s.price, s.minimum_notice_days, s.category, s.service_name,
               s.durasi_menit, s.per_orang, s.harga_per_jam_tambahan,
               v.daily_capacity, v.jeda_menit,
               ($2::date >= CURRENT_DATE + s.minimum_notice_days) AS notice_ok
@@ -258,24 +260,62 @@ async function createBooking(req, res, next) {
     ).toFixed(2);
     const dpAmount = (Number(totalPrice) * DP_RATE).toFixed(2);
 
+    // Pesanan dari rekomendasi paket di ruang konsultasi (migrasi 017). Ruangnya
+    // harus milik pemesan DAN dengan vendor yang sama — kalau tidak, pesanan
+    // bisa ditempelkan ke obrolan orang lain. Tidak cocok = ditolak, bukan
+    // diam-diam diabaikan.
+    let konsultasiId = null;
+    if (konsultasi_id) {
+      const ruang = await client.query(
+        `SELECT conversation_id FROM conversations
+          WHERE conversation_id = $1 AND jenis = 'konsultasi'
+            AND user_id = $2 AND vendor_id = $3`,
+        [konsultasi_id, userId, vendor_id]
+      );
+      if (ruang.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'Ruang konsultasi tidak ditemukan' });
+      }
+      konsultasiId = konsultasi_id;
+    }
+
     const booking = await client.query(
       `INSERT INTO bookings
          (user_id, service_id, vendor_id, event_date, start_time, per_tim,
           slot_ke, quantity, event_type, event_location_detail, total_price,
-          dp_amount, soft_lock_expires_at, durasi_menit, jam_tambahan, jeda_menit)
+          dp_amount, soft_lock_expires_at, durasi_menit, jam_tambahan, jeda_menit,
+          konsultasi_id)
        VALUES ($1, $2, $3, $4::date, $5::time, $6, $7, $8, $9, $10, $11, $12,
-               now() + interval '24 hours', $13, $14, $15)
+               now() + interval '24 hours', $13, $14, $15, $16)
        RETURNING *`,
       [userId, service_id, vendor_id, event_date, start_time, perTim,
        slotKe, jumlah, event_type, event_location_detail, totalPrice, dpAmount,
-       durasi, tambahan, perJam ? layanan.jeda_menit : 0]
+       durasi, tambahan, perJam ? layanan.jeda_menit : 0, konsultasiId]
     );
+
+    // Jejak di ruang konsultasi: vendor langsung melihat paket rekomendasinya
+    // benar-benar dipesan, tanpa harus membuka halaman Pemesanan. Satu
+    // transaksi dengan pesanannya — tidak ada pesanan tanpa jejak.
+    if (konsultasiId) {
+      await client.query(
+        `WITH c AS (
+           UPDATE conversations SET last_message_at = now()
+            WHERE conversation_id = $1 RETURNING conversation_id
+         )
+         INSERT INTO messages (conversation_id, sender_user_id, body)
+         SELECT conversation_id, $2,
+                '[Otomatis] Pesanan dibuat: ' || $3::text || ' untuk ' || to_char($4::date, 'DD/MM/YYYY')
+                || ' pukul ' || $5::text || '. Menunggu konfirmasi vendor.'
+           FROM c`,
+        [konsultasiId, userId, layanan.service_name || 'paket', event_date, start_time]
+      );
+    }
 
     await client.query('COMMIT');
 
     res.status(201).json({ booking: booking.rows[0] });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (client) await client.query('ROLLBACK').catch(() => {});
     // 23P01 = constraint EXCLUDE menolak: dua rentang jam bertumpuk lolos dari
     // pengecekan aplikasi (mis. lock bocor). Itu tetap "jadwal bentrok" bagi
     // pemesan, bukan kesalahan server.
@@ -284,7 +324,7 @@ async function createBooking(req, res, next) {
     }
     next(err);
   } finally {
-    client.release();
+    client?.release();
     // Lock dilepas apa pun hasilnya: kalau booking sukses, DB (status 'held')
     // yang jadi penjaga; kalau gagal, slot harus segera bebas untuk user lain.
     if (weOwnTheLock) await releaseLock(vendorId, event_date, userId);
@@ -505,15 +545,15 @@ async function konfirmasiBooking(req, res, next) {
   if (note != null && String(note).length > 500) {
     return res.status(400).json({ message: 'Catatan maksimal 500 karakter' });
   }
-
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     // Kepemilikan ikut di WHERE: vendor lain tidak menemukan baris ini sama
     // sekali, jadi balasannya 404 dan ID pesanan yang valid tidak bocor.
     const bk = await client.query(
-      `SELECT b.booking_id, b.confirm_status, b.payment_status,
+      `SELECT b.booking_id, b.confirm_status, b.payment_status, b.konsultasi_id,
               b.user_id, v.vendor_id, v.business_name, s.service_name,
               -- Tanggal + jam untuk pesan otomatis & email. MUA & fotografer
               -- ikut menyebut rentangnya (migrasi 016).
@@ -597,20 +637,27 @@ async function konfirmasiBooking(req, res, next) {
       note ? `Catatan vendor: ${note}` : '',
     ].filter(Boolean).join('\n');
 
-    await client.query(
-      `INSERT INTO conversations (jenis, booking_id, user_id, vendor_id)
-       VALUES ('klien_vendor', $1, $2, $3)
-       ON CONFLICT DO NOTHING`,
-      [booking.booking_id, booking.user_id, booking.vendor_id]
-    );
+    //    Pesanan dari konsultasi (migrasi 017) diberi tahu di ruang
+    //    konsultasinya — tempat paketnya direkomendasikan — bukan di ruang
+    //    pesanan baru.
+    if (!booking.konsultasi_id) {
+      await client.query(
+        `INSERT INTO conversations (jenis, booking_id, user_id, vendor_id)
+         VALUES ('klien_vendor', $1, $2, $3)
+         ON CONFLICT DO NOTHING`,
+        [booking.booking_id, booking.user_id, booking.vendor_id]
+      );
+    }
     await client.query(
       `WITH c AS (
          UPDATE conversations SET last_message_at = now()
-          WHERE booking_id = $1 RETURNING conversation_id
+          WHERE conversation_id = COALESCE($4::uuid,
+                  (SELECT conversation_id FROM conversations WHERE booking_id = $1))
+          RETURNING conversation_id
        )
        INSERT INTO messages (conversation_id, sender_user_id, body)
        SELECT conversation_id, $2, $3 FROM c`,
-      [booking.booking_id, req.user.user_id, isi]
+      [booking.booking_id, req.user.user_id, isi, booking.konsultasi_id]
     );
 
     await client.query('COMMIT');
@@ -631,10 +678,10 @@ async function konfirmasiBooking(req, res, next) {
     const { rows } = await pool.query(`${BOOKING_SELECT} WHERE b.booking_id = $1`, [booking.booking_id]);
     res.json({ booking: rows[0] });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (client) await client.query('ROLLBACK').catch(() => {});
     next(err);
   } finally {
-    client.release();
+    client?.release();
   }
 }
 
@@ -645,8 +692,9 @@ async function konfirmasiBooking(req, res, next) {
 // lebih baik menolak dengan jujur daripada membatalkan pesanan lalu
 // meninggalkan uang customer menggantung tanpa jalan pulang.
 async function batalBooking(req, res, next) {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     const bk = await client.query(
@@ -684,10 +732,10 @@ async function batalBooking(req, res, next) {
     const { rows } = await pool.query(`${BOOKING_SELECT} WHERE b.booking_id = $1`, [booking.booking_id]);
     res.json({ booking: rows[0] });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (client) await client.query('ROLLBACK').catch(() => {});
     next(err);
   } finally {
-    client.release();
+    client?.release();
   }
 }
 

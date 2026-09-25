@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import TukarHalus from '../components/TukarHalus'
 import TabelSkeleton from '../components/TabelSkeleton'
-import { SearchIcon } from '../components/icons'
+import { SearchIcon, ArrowRight } from '../components/icons'
 import {
   listPercakapan, getPercakapan, kirimPesan, usePengguna,
   type ApiPercakapan, type ApiPesan,
@@ -323,7 +323,7 @@ export default function AdminPesanPage() {
                       onClick={() => setRuangDiHp(false)}
                       className="mb-3 text-[13px] font-medium text-ink/70 hover:text-ink lg:hidden"
                     >
-                      <span aria-hidden>&larr;</span> Semua obrolan
+                      <ArrowRight className="mr-1 inline h-4 w-4 rotate-180 align-[-3px]" /> Semua obrolan
                     </button>
                     {!kepala && (
                       <div>

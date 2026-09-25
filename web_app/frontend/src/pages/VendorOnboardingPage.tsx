@@ -176,7 +176,7 @@ export default function VendorOnboardingPage() {
               required
               rows={4}
               placeholder="Ceritakan keahlian unik layanan Anda…"
-              className="mt-2 w-full rounded border border-line bg-cream px-4 py-3 text-[14px] text-ink outline-none placeholder:text-ink/35 focus:border-navy-900"
+              className="mt-2 w-full rounded border border-line bg-cream px-4 py-3 text-[14px] text-ink outline-none placeholder:text-ink/55 focus:border-navy-900"
             />
 
             <div className="mt-5 grid gap-5 sm:grid-cols-2">

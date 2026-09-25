@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { VendorPageHeader } from '../components/VendorLayout'
-import { ChevronDown } from '../components/icons'
+import { ChevronDown, CheckCircleIcon } from '../components/icons'
 import {
   listMySchedules, tutupTanggal, ubahKapasitas, ubahJeda, getMyVendor, getMyServices, kirim,
 } from '../lib/api'
@@ -233,7 +233,10 @@ export default function VendorJadwalPage() {
                 className="w-16 rounded border border-line text-center font-display text-[24px] font-semibold"
               />
               <p className="text-[12px] text-ink/70">
-                {perJam ? 'tim bersamaan' : 'pesanan/hari'}{simpanKapasitas === 'tersimpan' && ' ✓'}
+                {perJam ? 'tim bersamaan' : 'pesanan/hari'}
+                {simpanKapasitas === 'tersimpan' && (
+                  <CheckCircleIcon className="ml-1 inline h-3.5 w-3.5 align-[-2px] text-[#2e6b52]" />
+                )}
               </p>
             </div>
             {perJam && (
@@ -251,7 +254,10 @@ export default function VendorJadwalPage() {
                   className="w-20 rounded border border-line text-center font-display text-[24px] font-semibold"
                 />
                 <p className="text-[12px] text-ink/70" title="Waktu perjalanan yang ikut dikunci sesudah tiap pesanan. Berlaku untuk pesanan baru.">
-                  menit jeda{simpanJedaStatus === 'tersimpan' && ' ✓'}
+                  menit jeda
+                  {simpanJedaStatus === 'tersimpan' && (
+                    <CheckCircleIcon className="ml-1 inline h-3.5 w-3.5 align-[-2px] text-[#2e6b52]" />
+                  )}
                 </p>
               </div>
             )}
@@ -322,9 +328,9 @@ export default function VendorJadwalPage() {
                           tanpa itu, vendor berkapasitas 10 tidak punya cara
                           melihat berapa yang sudah masuk hari itu. */}
                       {perJam ? hari.jumlahPesanan > 0 && (
-                        <span className="text-[10px] text-ink/60">{hari.jumlahPesanan} pesanan</span>
+                        <span className="text-[11px] text-ink/60">{hari.jumlahPesanan} pesanan</span>
                       ) : hari.terpakai > 0 && (
-                        <span className="text-[10px] text-ink/60">
+                        <span className="text-[11px] text-ink/60">
                           {hari.terpakai}/{kapasitas}
                         </span>
                       )}

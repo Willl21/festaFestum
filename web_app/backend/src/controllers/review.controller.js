@@ -37,9 +37,9 @@ async function buatUlasan(req, res, next) {
   if (comment != null && String(comment).length > KOMENTAR_MAKS) {
     return res.status(400).json({ message: `Komentar maksimal ${KOMENTAR_MAKS} karakter` });
   }
-
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     const bk = await client.query(
@@ -88,10 +88,10 @@ async function buatUlasan(req, res, next) {
 
     res.status(201).json({ review: ins.rows[0] });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (client) await client.query('ROLLBACK').catch(() => {});
     next(err);
   } finally {
-    client.release();
+    client?.release();
   }
 }
 

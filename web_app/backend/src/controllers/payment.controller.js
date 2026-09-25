@@ -109,9 +109,9 @@ async function charge(req, res, next) {
   if (!midtrans.METHOD_IDS.includes(method)) {
     return res.status(400).json({ message: 'metode tidak didukung', allowed: midtrans.METHOD_IDS });
   }
-
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     // Kepemilikan ikut di WHERE, bukan if terpisah — booking milik orang lain
@@ -220,7 +220,7 @@ async function charge(req, res, next) {
     await client.query('COMMIT');
     res.status(201).json({ payment: done.rows[0], simulated: !midtrans.enabled });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (client) await client.query('ROLLBACK').catch(() => {});
     // Kegagalan dari Midtrans bukan bug kita — bedakan supaya frontend bisa
     // menyuruh user coba lagi, bukan menampilkan "terjadi kesalahan".
     if (err.httpStatusCode || err.ApiResponse) {
@@ -229,7 +229,7 @@ async function charge(req, res, next) {
     }
     next(err);
   } finally {
-    client.release();
+    client?.release();
   }
 }
 
@@ -247,9 +247,9 @@ async function webhook(req, res, next) {
   }
 
   const status = midtrans.mapStatus(body.transaction_status, body.fraud_status);
-  const client = await pool.connect();
-
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     const { found } = await applyGatewayStatus(
@@ -262,10 +262,10 @@ async function webhook(req, res, next) {
     // terus untuk order_id yang memang tidak pernah ada di sini.
     res.json({ message: found ? 'OK' : 'Diabaikan, payment tidak dikenal' });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (client) await client.query('ROLLBACK').catch(() => {});
     next(err);
   } finally {
-    client.release();
+    client?.release();
   }
 }
 
@@ -332,9 +332,9 @@ async function refresh(req, res, next) {
       message: 'Midtrans tidak aktif — pakai POST /payments/:id/simulate',
     });
   }
-
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     // Kepemilikan dicek dulu, sebelum menghubungi Midtrans: jangan sampai
     // endpoint ini bisa dipakai menebak payment_id milik orang lain.
     const own = await client.query(
@@ -375,10 +375,10 @@ async function refresh(req, res, next) {
 
     res.json({ payment: fresh.rows[0], gateway_status: trx.transaction_status });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (client) await client.query('ROLLBACK').catch(() => {});
     next(err);
   } finally {
-    client.release();
+    client?.release();
   }
 }
 
@@ -392,9 +392,9 @@ async function simulate(req, res, next) {
       message: 'Midtrans aktif — gunakan simulator di dashboard Midtrans',
     });
   }
-
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     const pay = await client.query(
@@ -416,10 +416,10 @@ async function simulate(req, res, next) {
 
     res.json({ message: result.changed ? 'Pembayaran ditandai lunas' : 'Sudah lunas sebelumnya' });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (client) await client.query('ROLLBACK').catch(() => {});
     next(err);
   } finally {
-    client.release();
+    client?.release();
   }
 }
 

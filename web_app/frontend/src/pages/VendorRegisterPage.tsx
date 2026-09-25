@@ -130,7 +130,7 @@ export default function VendorRegisterPage() {
               </option>
               {Object.values(categories).map((c) => (
                 <option key={c.apiCategory} value={c.apiCategory}>
-                  {c.emoji} {c.label}
+                  {c.label}
                 </option>
               ))}
             </select>

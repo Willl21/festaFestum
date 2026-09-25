@@ -8,7 +8,7 @@ import BackButton from '../components/BackButton'
 import KalenderSlot from '../components/KalenderSlot'
 import DetailSkeleton from '../components/DetailSkeleton'
 import TukarHalus from '../components/TukarHalus'
-import { ArrowRight, ChevronDown, PhotoIcon } from '../components/icons'
+import { ArrowRight, ChevronDown, PhotoIcon, ClockIcon } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
 import { rupiah } from '../lib/format'
 import { hargaPesanan } from '../lib/durasi'
@@ -118,7 +118,7 @@ export default function MuaDetailPage() {
           </span>
 
           {/* GALERI: dua blok, besar di kiri. Foto portofolio asli; slot yang
-              kosong jatuh ke emoji kategori lewat <Img>. */}
+              kosong jatuh ke blok warna lewat <Img>. */}
           <section className="relative mt-6 grid gap-2.5 md:grid-cols-3">
             <Img
               src={fotoSlot.includes(0) ? urlFotoVendor(id, 0) : undefined}
@@ -164,8 +164,8 @@ export default function MuaDetailPage() {
                     {p.description && (
                       <p className="mt-3 text-[12px] leading-relaxed text-ink/75">{p.description}</p>
                     )}
-                    <p className="mt-2 text-[12px] text-ink/75">
-                      ✓ Pesan minimal {p.minimum_notice_days} hari sebelum acara
+                    <p className="mt-2 flex items-center gap-1.5 text-[12px] text-ink/75">
+                      <ClockIcon className="h-3.5 w-3.5 shrink-0" /> Pesan minimal {p.minimum_notice_days} hari sebelum acara
                     </p>
 
                     <RincianLayanan service={p} className="mt-3 border-t border-line pt-3" />
@@ -182,7 +182,7 @@ export default function MuaDetailPage() {
             </div>
 
             {/* PANEL PEMESANAN */}
-            <aside className="h-fit border border-line bg-white p-5 lg:sticky lg:top-[90px]">
+            <aside className="h-fit border border-line bg-white p-5 lg:sticky lg:top-[90px] lg:max-h-[calc(100vh-110px)] lg:overflow-y-auto lg:overscroll-contain">
               <p className="rounded-sm bg-navy-900 py-3.5 text-center text-[15px] font-semibold text-white">
                 Atur Jadwal
               </p>
@@ -237,7 +237,7 @@ export default function MuaDetailPage() {
               </div>
 
               {cek && !cek.ada && (
-                <p className="mt-4 border border-maroon/30 bg-maroon/5 px-3 py-2 text-[13px] text-maroon">
+                <p className="muncul-halus mt-4 border border-maroon/30 bg-maroon/5 px-3 py-2 text-[13px] text-maroon">
                   {cek.alasan || 'Slot tidak tersedia.'}
                 </p>
               )}

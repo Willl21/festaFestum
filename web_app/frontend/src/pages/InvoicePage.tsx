@@ -4,6 +4,7 @@ import { categories, namaKota } from '../data/categories'
 import { rupiahBulat } from '../lib/format'
 import { getBooking, type ApiBooking } from '../lib/api'
 import { rentangJam } from '../lib/durasi'
+import { ArrowRight } from '../components/icons'
 
 /** Invoice satu pesanan, siap dicetak.
  *
@@ -82,8 +83,8 @@ export default function InvoicePage() {
     <div className="min-h-screen bg-cream px-4 py-10 print:bg-white print:p-0">
       {/* Tombol tidak ikut tercetak. */}
       <div className="mx-auto mb-5 flex max-w-[820px] flex-wrap justify-between gap-3 print:hidden">
-        <Link to="/pesanan" className="text-[14px] text-navy-900 hover:underline">
-          ← Kembali ke Pesanan Saya
+        <Link to="/pesanan" className="inline-flex items-center gap-1.5 text-[14px] text-navy-900 hover:underline">
+          <ArrowRight className="h-4 w-4 rotate-180" /> Kembali ke Pesanan Saya
         </Link>
         <button
           type="button"
@@ -152,7 +153,9 @@ export default function InvoicePage() {
             <tr className="border-b border-line">
               <td className="py-4">
                 <p className="font-semibold text-navy-900">
-                  {kategori?.emoji} {booking.service_name}
+                  {/* Tanpa emoji kategori: ini dokumen resmi yang dicetak, dan
+                      kategorinya sudah tertulis di baris bawah. */}
+                  {booking.service_name}
                 </p>
                 <p className="mt-1 text-[13px] text-muted">
                   {kategori?.label ?? booking.category} · {booking.business_name}

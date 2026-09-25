@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import TabelSkeleton from '../components/TabelSkeleton'
+import Bintang from '../components/Bintang'
 import TukarHalus from '../components/TukarHalus'
 import { Link, useNavigate } from 'react-router-dom'
+import { motion } from 'motion/react'
 import Img from '../components/Img'
-import { SearchIcon, ChevronDown } from '../components/icons'
+import { SearchIcon, ChevronDown, StarIcon, HelpIcon } from '../components/icons'
 import { categories, namaKota, type CategoryKey } from '../data/categories'
 import { rupiah } from '../lib/format'
 import {
@@ -208,7 +210,7 @@ export default function PesananSayaPage() {
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Cari nomor pesanan, nama vendor, atau jenis layanan..."
                 aria-label="Cari pesanan"
-                className="h-12 w-full rounded-sm border border-line bg-white pr-4 pl-11 text-[14px] outline-none placeholder:text-ink/40 focus:border-navy-900"
+                className="h-12 w-full rounded-sm border border-line bg-white pr-4 pl-11 text-[14px] outline-none placeholder:text-ink/55 focus:border-navy-900"
               />
             </div>
 
@@ -238,15 +240,25 @@ export default function PesananSayaPage() {
                   onClick={() => setTab(t.id)}
                   aria-pressed={tab === t.id}
                   disabled={n === 0}
-                  className={`rounded-sm px-3.5 py-2 text-[11px] font-semibold tracking-[0.04em] transition-colors ${
+                  className={`relative rounded-sm px-3.5 py-2 text-[11px] font-semibold tracking-[0.04em] transition-colors ${
                     tab === t.id
-                      ? 'bg-ink text-white'
+                      ? 'text-white'
                       : n === 0
                         ? 'bg-lavender/20 text-muted'
                         : 'bg-lavender/40 text-ink hover:bg-lavender/60'
                   }`}
                 >
-                  {t.label} ({n})
+                  {/* Latar tab aktif MELUNCUR ke tab baru, bukan lompat. Pola
+                      yang sama persis dengan garis bawah navbar (layoutId +
+                      spring 380/32), jadi bukan gaya gerak kedua. */}
+                  {tab === t.id && (
+                    <motion.span
+                      layoutId="latar-tab-pesanan"
+                      className="absolute inset-0 rounded-sm bg-ink"
+                      transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                    />
+                  )}
+                  <span className="relative">{t.label} ({n})</span>
                 </button>
               )
             })}
@@ -258,8 +270,11 @@ export default function PesananSayaPage() {
             </p>
           )}
 
-          {/* DAFTAR PESANAN */}
-          <div className="mt-8 space-y-6">
+          {/* DAFTAR PESANAN — key={tab} memasang ulang daftarnya tiap tab
+              diganti, supaya .muncul-halus jalan lagi dan isinya tidak
+              tertukar seketika. Pencarian tidak memasang ulang: mengetik
+              harus terasa instan. */}
+          <div key={tab} className="muncul-halus mt-8 space-y-6">
             {terlihat.map((p) => {
               const kat = categories[KATEGORI[p.category] ?? 'eo']
               const st = statusPesanan(p)
@@ -280,11 +295,11 @@ export default function PesananSayaPage() {
                         #{p.booking_id.slice(0, 8).toUpperCase()}
                       </span>
                       <span className="text-muted">• Dipesan {tanggalPanjang(p.created_at)} •</span>
-                      <span className="rounded-sm bg-lavender/50 px-2.5 py-1 text-[10px] font-semibold tracking-[0.04em] text-navy-700">
+                      <span className="rounded-sm bg-lavender/50 px-2.5 py-1 text-[11px] font-semibold tracking-[0.04em] text-navy-700">
                         {kat.label.toUpperCase()}
                       </span>
                     </div>
-                    <span className={`rounded-sm px-3 py-1.5 text-[10px] font-semibold tracking-[0.04em] ${st.tone}`}>
+                    <span className={`rounded-sm px-3 py-1.5 text-[11px] font-semibold tracking-[0.04em] ${st.tone}`}>
                       {st.badge}
                     </span>
                   </header>
@@ -310,13 +325,13 @@ export default function PesananSayaPage() {
 
                       <dl className="mt-4 flex flex-wrap gap-8 border-y border-line py-3">
                         <div>
-                          <dt className="text-[10px] font-semibold tracking-[0.04em] text-muted">TANGGAL ACARA</dt>
+                          <dt className="text-[11px] font-semibold tracking-[0.04em] text-muted">TANGGAL ACARA</dt>
                           <dd className="mt-1 text-[13px] font-semibold">
                             {tanggalPanjang(p.event_date)} · {rentangJam(p)}
                           </dd>
                         </div>
                         <div>
-                          <dt className="text-[10px] font-semibold tracking-[0.04em] text-muted">KOTA VENDOR</dt>
+                          <dt className="text-[11px] font-semibold tracking-[0.04em] text-muted">KOTA VENDOR</dt>
                           <dd className="mt-1 text-[13px] font-semibold">{namaKota(p.city)}</dd>
                         </div>
                       </dl>
@@ -330,10 +345,10 @@ export default function PesananSayaPage() {
 
                     <div className="h-fit bg-lavender/25 p-4">
                       <div className="flex items-center justify-between gap-3">
-                        <span className="text-[10px] font-semibold tracking-[0.04em] text-ink/70">
+                        <span className="text-[11px] font-semibold tracking-[0.04em] text-ink/70">
                           RINCIAN ESCROW
                         </span>
-                        <span className="text-[9px] font-semibold tracking-[0.04em] text-muted">
+                        <span className="text-[11px] font-semibold tracking-[0.04em] text-muted">
                           TAHAP {lunasPenuh ? '2/2' : lunasDp ? '2/2' : '1/2'}
                         </span>
                       </div>
@@ -377,7 +392,7 @@ export default function PesananSayaPage() {
                     <div className="flex flex-wrap gap-2.5">
                       <Link
                         to={`/${kat.slug}/${p.vendor_id}`}
-                        className="rounded-sm bg-lavender/40 px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] transition-colors hover:bg-lavender/60"
+                        className="rounded-sm bg-lavender/40 px-3.5 py-2 text-[11px] font-semibold tracking-[0.04em] transition-colors hover:bg-lavender/60"
                       >
                         LIHAT PROFIL VENDOR
                       </Link>
@@ -386,14 +401,14 @@ export default function PesananSayaPage() {
                         type="button"
                         onClick={() => chatVendor(p)}
                         disabled={sibuk === p.booking_id}
-                        className="rounded-sm bg-navy-900 px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                        className="rounded-sm bg-navy-900 px-3.5 py-2 text-[11px] font-semibold tracking-[0.04em] text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                       >
                         CHAT VENDOR
                       </button>
 
                       <Link
                         to={`/invoice/${p.booking_id}`}
-                        className="rounded-sm border border-line px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] transition-colors hover:border-navy-900"
+                        className="rounded-sm border border-line px-3.5 py-2 text-[11px] font-semibold tracking-[0.04em] transition-colors hover:border-navy-900"
                       >
                         INVOICE
                       </Link>
@@ -402,7 +417,7 @@ export default function PesananSayaPage() {
                       {tertunda && (
                         <Link
                           to={`/pembayaran/${tertunda.payment_id}`}
-                          className="rounded-sm bg-amber px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] text-navy-900 transition-opacity hover:opacity-90"
+                          className="rounded-sm bg-amber px-3.5 py-2 text-[11px] font-semibold tracking-[0.04em] text-navy-900 transition-opacity hover:opacity-90"
                         >
                           LANJUTKAN PEMBAYARAN
                         </Link>
@@ -411,7 +426,7 @@ export default function PesananSayaPage() {
                       {!tertunda && lunasDp && !lunasPenuh && (
                         <Link
                           to={`/checkout/${p.booking_id}`}
-                          className="rounded-sm bg-amber px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] text-navy-900 transition-opacity hover:opacity-90"
+                          className="rounded-sm bg-amber px-3.5 py-2 text-[11px] font-semibold tracking-[0.04em] text-navy-900 transition-opacity hover:opacity-90"
                         >
                           BAYAR PELUNASAN ({rupiah(harga - dp)})
                         </Link>
@@ -423,7 +438,7 @@ export default function PesananSayaPage() {
                         && p.confirm_status === 'diterima' && (
                         <Link
                           to={`/checkout/${p.booking_id}`}
-                          className="rounded-sm bg-amber px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] text-navy-900 transition-opacity hover:opacity-90"
+                          className="rounded-sm bg-amber px-3.5 py-2 text-[11px] font-semibold tracking-[0.04em] text-navy-900 transition-opacity hover:opacity-90"
                         >
                           BAYAR DP ({rupiah(dp)})
                         </Link>
@@ -436,16 +451,15 @@ export default function PesananSayaPage() {
                           type="button"
                           disabled={sibuk === p.booking_id}
                           onClick={() => batalkan(p)}
-                          className="rounded-sm border border-line px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] text-maroon transition-colors hover:border-maroon disabled:opacity-60"
+                          className="rounded-sm border border-line px-3.5 py-2 text-[11px] font-semibold tracking-[0.04em] text-maroon transition-colors hover:border-maroon disabled:opacity-60"
                         >
                           {sibuk === p.booking_id ? 'MEMPROSES…' : 'BATALKAN'}
                         </button>
                       )}
 
                       {p.review && (
-                        <span className="rounded-sm bg-lavender/40 px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em]">
-                          ULASAN ANDA {'★'.repeat(p.review.rating)}
-                          <span className="text-muted">{'★'.repeat(5 - p.review.rating)}</span>
+                        <span className="rounded-sm bg-lavender/40 px-3.5 py-2 text-[11px] font-semibold tracking-[0.04em]">
+                          ULASAN ANDA <Bintang nilai={p.review.rating} className="h-3 w-3" />
                         </span>
                       )}
 
@@ -458,7 +472,7 @@ export default function PesananSayaPage() {
                           onClick={() =>
                             setUlasanUntuk((v) => (v === p.booking_id ? '' : p.booking_id))
                           }
-                          className="rounded-sm bg-navy-900 px-3.5 py-2 text-[10px] font-semibold tracking-[0.04em] text-white transition-opacity hover:opacity-90"
+                          className="rounded-sm bg-navy-900 px-3.5 py-2 text-[11px] font-semibold tracking-[0.04em] text-white transition-opacity hover:opacity-90"
                         >
                           {ulasanUntuk === p.booking_id ? 'TUTUP' : 'BERI ULASAN'}
                         </button>
@@ -467,7 +481,7 @@ export default function PesananSayaPage() {
                   </footer>
 
                   {ulasanUntuk === p.booking_id && (
-                    <div className="border-t border-line px-6 py-5">
+                    <div className="muncul-halus border-t border-line px-6 py-5">
                       <p className="text-[11px] font-semibold tracking-[0.04em] text-ink/70">
                         BAGAIMANA PENGALAMAN ANDA DENGAN {p.business_name.toUpperCase()}?
                       </p>
@@ -480,11 +494,11 @@ export default function PesananSayaPage() {
                             onClick={() => setNilai(n)}
                             aria-label={`Beri ${n} bintang`}
                             aria-pressed={nilai === n}
-                            className={`text-[26px] leading-none transition-colors ${
-                              n <= nilai ? 'text-amber' : 'text-line'
+                            className={`p-0.5 transition-colors ${
+                              n <= nilai ? 'text-star' : 'text-line hover:text-star/50'
                             }`}
                           >
-                            ★
+                            <StarIcon className="h-7 w-7" />
                           </button>
                         ))}
                       </div>
@@ -524,8 +538,8 @@ export default function PesananSayaPage() {
           {/* BANTUAN */}
           <section className="mt-10 flex flex-wrap items-center justify-between gap-6 border border-line bg-white p-7">
             <div className="flex gap-5">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm bg-navy-900 text-[18px]">
-                🎧
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm bg-navy-900 text-white">
+                <HelpIcon className="h-5 w-5" />
               </span>
               <div className="max-w-[330px]">
                 <p className="text-[11px] font-semibold tracking-[0.04em] text-amber">

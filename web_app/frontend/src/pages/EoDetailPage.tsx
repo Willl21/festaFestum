@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import UlasanVendor from '../components/UlasanVendor'
 import Img from '../components/Img'
 import RincianLayanan from '../components/RincianLayanan'
@@ -10,7 +10,7 @@ import { ArrowRight, MailIcon, MapPinIcon, StarIcon } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
 import { rupiah } from '../lib/format'
 import {
-  getVendor, getVendorServices, urlFotoVendor,
+  getVendor, getVendorServices, urlFotoVendor, getToken, getUser, mulaiKonsultasi,
   type ApiService, type ApiVendor,
 } from '../lib/api'
 
@@ -30,7 +30,18 @@ const eventTypes = ['Gala Dinner', 'Konferensi', 'Perayaan Pribadi']
 
 export default function EoDetailPage() {
   const { id = '' } = useParams()
-  const [eventType, setEventType] = useState(eventTypes[0])
+  const navigate = useNavigate()
+  // Form konsultasi (migrasi 017). Isiannya disimpan sementara di
+  // sessionStorage kalau pemakainya harus masuk dulu — pulang dari halaman
+  // masuk, formnya terisi lagi, tidak perlu mengetik ulang.
+  const kunciDraf = `konsultasi:${id}`
+  const [draf] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(sessionStorage.getItem(kunciDraf) || '{}') } catch { return {} }
+  })
+  const [eventType, setEventType] = useState(draf.jenis_acara || eventTypes[0])
+  const [mengirimKons, setMengirimKons] = useState(false)
+  const [galatKons, setGalatKons] = useState('')
+  const pemakai = getUser()
 
   const [vendor, setVendor] = useState<ApiVendor | null>(null)
   const [fotoSlot, setFotoSlot] = useState<number[]>([])
@@ -48,6 +59,41 @@ export default function EoDetailPage() {
       .catch((e) => setGalat(e.message))
       .finally(() => setMemuat(false))
   }, [id])
+
+  async function kirimKonsultasi(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setGalatKons('')
+    const f = new FormData(e.currentTarget)
+    const isi = {
+      nama: String(f.get('nama') || '').trim(),
+      perusahaan: String(f.get('perusahaan') || '').trim(),
+      email: String(f.get('email') || '').trim(),
+      jenis_acara: eventType,
+      pesan: String(f.get('pesan') || '').trim(),
+    }
+
+    // Belum masuk: simpan isiannya, antar ke /masuk, lalu balik ke sini.
+    if (!getToken()) {
+      try { sessionStorage.setItem(kunciDraf, JSON.stringify(isi)) } catch { /* penyimpanan diblokir: isi ulang saja */ }
+      navigate(`/masuk?lanjut=${encodeURIComponent(`/event-organizer/${id}#konsultasi`)}`)
+      return
+    }
+    if (pemakai && pemakai.role !== 'customer') {
+      setGalatKons('Konsultasi hanya untuk akun pelanggan. Masuk dengan akun pelanggan untuk mengirim.')
+      return
+    }
+
+    setMengirimKons(true)
+    try {
+      const r = await mulaiKonsultasi(id, isi)
+      try { sessionStorage.removeItem(kunciDraf) } catch { /* abaikan */ }
+      navigate(`/pesan?c=${r.conversation.conversation_id}`)
+    } catch (err) {
+      setGalatKons((err as Error).message)
+    } finally {
+      setMengirimKons(false)
+    }
+  }
 
   return (
     <TukarHalus memuat={memuat} rangka={<DetailSkeleton label="Memuat detail event organizer…" />}>
@@ -218,14 +264,19 @@ export default function EoDetailPage() {
               </ul>
             </div>
 
-            {/* Form konsultasi belum ada endpoint-nya di backend. */}
-            <form className="bg-white p-6" onSubmit={(e) => e.preventDefault()}>
+            {/* Kirim = buka ruang chat konsultasi dengan vendor ini, lalu
+                langsung diantar ke sana. Diskusi, rekomendasi paket, dan
+                pesanannya berlanjut di ruang yang sama. */}
+            <form className="bg-white p-6" onSubmit={kirimKonsultasi}>
               <div className="grid gap-4 sm:grid-cols-2">
-                <TextField id="nama" label="Nama Lengkap" placeholder="Masukkan nama Anda" />
-                <TextField id="perusahaan" label="Perusahaan (Opsional)" placeholder="Nama perusahaan" />
+                <TextField id="nama" label="Nama Lengkap" placeholder="Masukkan nama Anda" required
+                  defaultValue={draf.nama ?? pemakai?.name} />
+                <TextField id="perusahaan" label="Perusahaan (Opsional)" placeholder="Nama perusahaan"
+                  defaultValue={draf.perusahaan} />
               </div>
               <div className="mt-4">
-                <TextField id="email" label="Email" placeholder="email@contoh.com" type="email" />
+                <TextField id="email" label="Email" placeholder="email@contoh.com" type="email" required
+                  defaultValue={draf.email ?? pemakai?.email} />
               </div>
 
               <p className="mt-5 text-[11px] font-semibold">Jenis Acara</p>
@@ -252,18 +303,27 @@ export default function EoDetailPage() {
               </label>
               <textarea
                 id="pesan"
+                name="pesan"
                 rows={3}
+                required
+                maxLength={1500}
+                defaultValue={draf.pesan}
                 placeholder="Ceritakan sedikit tentang rencana acara Anda..."
-                className="mt-2 w-full border-b border-line bg-transparent pb-2 text-[13px] outline-none placeholder:text-ink/35 focus:border-navy-900"
+                className="mt-2 w-full border-b border-line bg-transparent pb-2 text-[13px] outline-none placeholder:text-ink/55 focus:border-navy-900"
               />
+
+              {galatKons && (
+                <p role="alert" className="muncul-halus mt-4 text-[13px] text-maroon">{galatKons}</p>
+              )}
 
               <button
                 type="submit"
-                className="mt-6 h-11 w-full rounded-sm bg-navy-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
+                disabled={mengirimKons}
+                className="mt-6 h-11 w-full rounded-sm bg-navy-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
               >
-                Kirim Permintaan Konsultasi
+                {mengirimKons ? 'Mengirim…' : getToken() ? 'Kirim Permintaan Konsultasi' : 'Masuk & Kirim Permintaan Konsultasi'}
               </button>
-              <p className="mt-3 text-center text-[10px] text-muted">
+              <p className="mt-3 text-center text-[11px] text-muted">
                 Informasi Anda aman dan dilindungi oleh Kebijakan Privasi kami.
               </p>
             </form>
@@ -298,11 +358,15 @@ function TextField({
   label,
   placeholder,
   type = 'text',
+  required,
+  defaultValue,
 }: {
   id: string
   label: string
   placeholder: string
   type?: string
+  required?: boolean
+  defaultValue?: string
 }) {
   return (
     <div>
@@ -311,9 +375,13 @@ function TextField({
       </label>
       <input
         id={id}
+        name={id}
         type={type}
+        required={required}
+        defaultValue={defaultValue}
+        maxLength={150}
         placeholder={placeholder}
-        className="mt-1.5 w-full border-b border-line bg-transparent pb-1.5 text-[13px] outline-none placeholder:text-ink/35 focus:border-navy-900"
+        className="mt-1.5 w-full border-b border-line bg-transparent pb-1.5 text-[13px] outline-none placeholder:text-ink/55 focus:border-navy-900"
       />
     </div>
   )

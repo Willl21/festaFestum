@@ -112,7 +112,7 @@ export default function AdminEscrowPage() {
       {() => (
         <>
           <h1 className="font-display text-[32px] font-semibold text-navy-900">
-            Pusat Rekening Bersama &amp; Pencairan
+            Escrow &amp; Pencairan
           </h1>
           <p className="mt-2 max-w-[720px] text-[14px] leading-relaxed text-muted">
             Dana pemesanan ditahan sampai tanggal acara terlampaui, lalu masuk saldo vendor dikurangi
@@ -165,6 +165,17 @@ export default function AdminEscrowPage() {
                   }`}
                 >
                   {t.label}
+                  {/* Cuma tab antrean yang diberi angka: itu satu-satunya yang
+                      menuntut tindakan, dan angkanya sudah ikut di /admin/escrow
+                      — riwayat tidak perlu dihitung per tab. Gaya lencananya sama
+                      dengan tab di Pusat Komunikasi. */}
+                  {t.id === 'pending' && escrow && (
+                    <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                      tab === t.id ? 'bg-white/15 text-white' : 'bg-lavender text-navy-900'
+                    }`}>
+                      {escrow.jumlah_antrean}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -203,7 +214,7 @@ export default function AdminEscrowPage() {
                       </div>
 
                       <div className="text-right">
-                        <p className="font-display text-[24px] font-semibold text-navy-900">
+                        <p className="text-[22px] font-semibold tracking-tight tabular-nums text-navy-900">
                           {rupiahBulat(Number(po.amount))}
                         </p>
                         <span
@@ -281,7 +292,7 @@ function Kartu({
       <p className="flex items-center gap-2 text-[11px] tracking-wide text-muted uppercase">
         {ikon} {label}
       </p>
-      <p className="mt-3 font-display text-[26px] leading-none font-semibold text-navy-900">{nilai}</p>
+      <p className="mt-3 text-[24px] leading-none font-semibold tracking-tight tabular-nums text-navy-900">{nilai}</p>
       <p className="mt-2 text-[12px] text-muted">{catatan}</p>
     </div>
   )

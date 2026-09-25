@@ -89,6 +89,13 @@ export const CheckCircleIcon = ({ className = 'h-4 w-4' }) => (
   </svg>
 )
 
+export const XCircleIcon = ({ className = 'h-4 w-4' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+    <circle cx="12" cy="12" r="9" />
+    <path d="m9 9 6 6m0-6-6 6" strokeLinecap="round" />
+  </svg>
+)
+
 export const PhoneIcon = ({ className = 'h-4 w-4' }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
     <path

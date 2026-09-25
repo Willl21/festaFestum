@@ -5,7 +5,7 @@ import { ArrowRight } from './icons'
 /** Kelas input dipakai bersama halaman masuk & daftar — bingkainya sama,
  *  yang beda cuma gaya labelnya. */
 export const inputClass =
-  'h-11 w-full rounded border border-line bg-white px-4 text-[14px] text-ink outline-none placeholder:text-ink/35 focus:border-navy-900'
+  'h-11 w-full rounded border border-line bg-white px-4 text-[14px] text-ink outline-none placeholder:text-ink/55 focus:border-navy-900'
 
 type Props = {
   /** Foto panel kiri. Kalau file belum ada, Img menampilkan blok netral. */

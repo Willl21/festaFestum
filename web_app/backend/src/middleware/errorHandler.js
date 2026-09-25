@@ -2,6 +2,13 @@
 function errorHandler(err, req, res, next) {
   console.error(err);
 
+  // Koneksi database penuh (Supabase session pooler: 15 klien untuk SEMUA
+  // proses sekaligus — Railway, dev lokal, skrip tes). Bukan salah pemakai dan
+  // biasanya lewat dalam hitungan detik, jadi 503 + ajakan mencoba lagi.
+  if (/EMAXCONNSESSION|max clients reached|too many clients/i.test(err.message || '')) {
+    return res.status(503).json({ message: 'Server sedang sibuk. Coba lagi beberapa saat lagi.' })
+  }
+
   // Duplicate key error dari PostgreSQL (mis. email sudah terdaftar)
   if (err.code === '23505') {
     return res.status(409).json({ message: 'Data sudah terdaftar (duplikat)' });

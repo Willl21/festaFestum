@@ -2,12 +2,26 @@ import { useEffect, useState } from 'react'
 import FormSkeleton from '../components/FormSkeleton'
 import TukarHalus from '../components/TukarHalus'
 import { Link, useParams } from 'react-router-dom'
+import { motion } from 'motion/react'
 import Img from '../components/Img'
 import { CheckCircleIcon } from '../components/icons'
 import { categories, type CategoryKey } from '../data/categories'
 import { rupiah } from '../lib/format'
 import { getBooking, urlFotoLayanan, type ApiBooking } from '../lib/api'
 import { rentangJam } from '../lib/durasi'
+
+/** Satu-satunya momen perayaan di aplikasi ini (review animasi 25 Sep):
+ *  halaman ini dilihat sekali per pesanan, jadi di sinilah "rasa" boleh
+ *  dibelanjakan. Centang memantul pelan, lalu judul & kalimatnya menyusul.
+ *  Jedanya 0,1 detik supaya pantulannya jatuh sesudah fade .masuk-halus dari
+ *  TukarHalus mulai, bukan tertutup olehnya. Pengguna gerak-minimal cuma
+ *  dapat fade-nya — MotionConfig reducedMotion="user" di App.tsx. */
+const KURVA_KELUAR = [0.23, 1, 0.32, 1] as const
+const naik = (delay: number) => ({
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.3, delay, ease: KURVA_KELUAR },
+})
 
 const KATEGORI: Record<string, CategoryKey> = {
   florist: 'florist',
@@ -65,16 +79,21 @@ export default function KonfirmasiPage() {
             <div className="mx-auto max-w-[1030px]">
               <div className="text-center">
                 <span className="inline-flex h-[76px] w-[76px] items-center justify-center rounded-xl bg-lavender/60">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#16a34a] text-white">
+                  <motion.span
+                    initial={{ scale: 0.6, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: 'spring', duration: 0.5, bounce: 0.25, delay: 0.1 }}
+                    className="flex h-11 w-11 items-center justify-center rounded-full bg-[#16a34a] text-white"
+                  >
                     <CheckCircleIcon className="h-6 w-6" />
-                  </span>
+                  </motion.span>
                 </span>
 
-                <h1 className="mt-8 font-display text-[30px] md:text-[42px] font-semibold">Pemesanan Berhasil!</h1>
-                <p className="mx-auto mt-4 max-w-[460px] text-[15px] leading-relaxed text-ink/75">
+                <motion.h1 {...naik(0.16)} className="mt-8 font-display text-[30px] md:text-[42px] font-semibold">Pemesanan Berhasil!</motion.h1>
+                <motion.p {...naik(0.22)} className="mx-auto mt-4 max-w-[460px] text-[15px] leading-relaxed text-ink/75">
                   Terima kasih telah mempercayakan perayaan Anda kepada Festa Festum. Pemesanan Anda telah
                   diamankan.
-                </p>
+                </motion.p>
               </div>
 
               <div className="mt-14 grid gap-8 lg:grid-cols-[1fr_420px]">

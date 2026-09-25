@@ -148,6 +148,10 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
         event_location_detail: detail,
         quantity: qty,
         ...(jamTambah ? { jam_tambahan: jamTambah } : {}),
+        // Datang dari kartu rekomendasi di ruang konsultasi (migrasi 017):
+        // pesanannya ditautkan ke obrolan itu. Backend memeriksa ruangnya
+        // memang milik pemesan dan vendor ini.
+        ...(params.get('konsultasi') ? { konsultasi_id: params.get('konsultasi')! } : {}),
       })
       navigate(`/checkout/${r.booking.booking_id}`)
     } catch (e) {

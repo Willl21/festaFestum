@@ -52,6 +52,17 @@ const statusLabel: Record<string, string> = {
   expired: 'Kedaluwarsa',
 }
 
+/** Nada per status (review 25 Sep). Dulu keempatnya pil lavender yang sama,
+ *  jadi pesanan bermasalah tidak kelihatan tanpa membaca satu per satu.
+ *  Teksnya tetap ada — warna bukan satu-satunya pembeda. Semua >= 4,5:1. */
+const statusNada: Record<string, string> = {
+  pending: 'bg-lavender/60 text-navy-900',
+  dp_paid: 'bg-amber/20 text-navy-900',
+  fully_paid: 'bg-[#2e6b52]/10 text-[#2e6b52]',
+  cancelled: 'bg-ink/5 text-ink/70',
+  expired: 'bg-ink/5 text-ink/70',
+}
+
 const labelKategori = (c: string) =>
   Object.values(categories).find((x) => x.apiCategory === c)?.label ?? c
 
@@ -208,7 +219,7 @@ export default function AdminRingkasanPage() {
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[720px] text-left text-[13px]">
-                    <thead className="bg-cream text-[11px] tracking-wide text-ink/60 uppercase">
+                    <thead className="bg-cream text-[11px] tracking-wide text-ink/70 uppercase">
                       <tr>
                         <th className="px-5 py-3 font-semibold">Klien &amp; Acara</th>
                         <th className="px-5 py-3 font-semibold">Vendor</th>
@@ -236,7 +247,7 @@ export default function AdminRingkasanPage() {
                             })}
                           </td>
                           <td className="px-5 py-4">
-                            <span className="rounded-full bg-lavender/60 px-3 py-1 text-[12px] font-medium text-navy-900">
+                            <span className={`rounded-full px-3 py-1 text-[12px] font-medium ${statusNada[b.payment_status] ?? statusNada.pending}`}>
                               {statusLabel[b.payment_status] ?? b.payment_status}
                             </span>
                           </td>
@@ -273,7 +284,7 @@ function Kartu({
       <p className="flex items-center gap-2 text-[11px] tracking-wide text-muted uppercase">
         {ikon} {label}
       </p>
-      <p className="mt-3 font-display text-[26px] leading-none font-semibold text-navy-900">{nilai}</p>
+      <p className="mt-3 text-[24px] leading-none font-semibold tracking-tight tabular-nums text-navy-900">{nilai}</p>
       <p className="mt-2 text-[12px] text-muted">{catatan}</p>
     </div>
   )

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import TabelSkeleton from '../components/TabelSkeleton'
 import TukarHalus from '../components/TukarHalus'
-import { ShieldIcon, CheckCircleIcon, NoteIcon } from '../components/icons'
+import { ShieldIcon, CheckCircleIcon, NoteIcon, ClockIcon, XCircleIcon } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
 import { get, kirim } from '../lib/api'
 
@@ -55,6 +55,19 @@ const tabs = [
   { id: 'verified', label: 'Terverifikasi' },
   { id: 'all', label: 'Semua' },
 ] as const
+
+/** Status dokumen: BENTUK + warna + kata, bukan warna saja (review 25 Sep).
+ *  Dulu titik amber 1,83:1 dan kata "pending" amber 2,02:1 — kurator buta
+ *  warna tidak bisa membedakan dokumen yang belum dan sudah dicek. Gaya pil
+ *  ini sama dengan status di mockup Figma admin ("Escrow Ditahan"). */
+const STATUS_DOKUMEN: Record<
+  Dokumen['status'],
+  { Ikon: (p: { className?: string }) => React.JSX.Element; label: string; kelas: string }
+> = {
+  pending: { Ikon: ClockIcon, label: 'Menunggu', kelas: 'bg-amber/20 text-navy-900' },
+  approved: { Ikon: CheckCircleIcon, label: 'Diterima', kelas: 'bg-[#2e6b52]/10 text-[#2e6b52]' },
+  rejected: { Ikon: XCircleIcon, label: 'Ditolak', kelas: 'bg-maroon/10 text-maroon' },
+}
 
 const labelDokumen: Record<Dokumen['doc_type'], string> = {
   ktp: 'KTP Penanggung Jawab',
@@ -169,7 +182,7 @@ export default function AdminVendorPage() {
             </p>
           )}
 
-          <div className="mt-7 grid gap-6 xl:grid-cols-[1fr_380px]">
+          <div className="mt-7 grid items-start gap-6 xl:grid-cols-[1fr_380px]">
             <section className="min-w-0 rounded-lg border border-line bg-white">
               <div className="flex flex-wrap gap-2 border-b border-line p-4">
                 {tabs.map((t) => (
@@ -191,7 +204,7 @@ export default function AdminVendorPage() {
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[640px] text-left text-[13px]">
-                    <thead className="bg-cream text-[11px] tracking-wide text-ink/60 uppercase">
+                    <thead className="bg-cream text-[11px] tracking-wide text-ink/70 uppercase">
                       <tr>
                         <th className="px-5 py-3 font-semibold">Entitas Vendor</th>
                         <th className="px-5 py-3 font-semibold">Kategori / Lokasi</th>
@@ -210,35 +223,33 @@ export default function AdminVendorPage() {
                         >
                           <td className="px-5 py-4">
                             <p className="font-semibold text-navy-900">{v.business_name}</p>
-                            <p className="mt-1 text-[12px] text-muted">
+                            <p className="mt-1 text-[12px] text-ink/70">
                               {v.owner_full_name || v.owner_name} · {v.owner_email}
                             </p>
                           </td>
                           <td className="px-5 py-4">
                             <p>{v.categories.map(labelKategori).join(', ') || 'Belum ada layanan'}</p>
-                            <p className="mt-1 text-[12px] text-muted">{namaKota(v.city)}</p>
+                            <p className="mt-1 text-[12px] text-ink/70">{namaKota(v.city)}</p>
                           </td>
                           <td className="px-5 py-4">
                             {v.documents.length === 0 ? (
                               <span className="text-muted">Belum diunggah</span>
                             ) : (
-                              v.documents.map((d) => (
-                                <span key={d.doc_type} className="mr-2 text-[12px]">
-                                  {d.doc_type.toUpperCase()}
-                                  <span
-                                    className={
-                                      d.status === 'approved'
-                                        ? 'text-[#2e6b52]'
-                                        : d.status === 'rejected'
-                                          ? 'text-maroon'
-                                          : 'text-amber'
-                                    }
-                                  >
-                                    {' '}
-                                    ●
-                                  </span>
-                                </span>
-                              ))
+                              <span className="flex flex-wrap gap-1.5">
+                                {v.documents.map((d) => {
+                                  const st = STATUS_DOKUMEN[d.status]
+                                  return (
+                                    <span
+                                      key={d.doc_type}
+                                      title={`${labelDokumen[d.doc_type]}: ${st.label}`}
+                                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st.kelas}`}
+                                    >
+                                      {d.doc_type.toUpperCase()} <st.Ikon className="h-3.5 w-3.5" />
+                                      <span className="sr-only">{st.label}</span>
+                                    </span>
+                                  )
+                                })}
+                              </span>
                             )}
                           </td>
                           <td className="px-5 py-4">
@@ -275,7 +286,6 @@ export default function AdminVendorPage() {
                   <h2 className="mt-1 font-display text-[24px] font-semibold text-navy-900">
                     {vendor.business_name}
                   </h2>
-                  <p className="mt-1 text-[12px] text-muted">UUID: {vendor.vendor_id.slice(0, 8)}…</p>
 
                   <dl className="mt-5 space-y-2 text-[13px]">
                     <Baris label="Penanggung jawab" nilai={vendor.owner_full_name || vendor.owner_name} />
@@ -310,21 +320,18 @@ export default function AdminVendorPage() {
                           <NoteIcon className="h-4 w-4 shrink-0 text-ink/50" />
                           <span className="min-w-0 flex-1">
                             <span className="block font-semibold text-navy-900">{labelDokumen[jenis]}</span>
-                            <span className="block truncate text-[12px] text-muted">
-                              {d ? d.file_name : 'Belum diunggah'}
+                            <span className="block truncate text-[12px] text-muted" title={d?.file_name}>
+                              {d
+                                ? `Diunggah ${new Date(d.uploaded_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                                : 'Belum diunggah'}
                             </span>
                           </span>
                           {d && (
                             <span
-                              className={`text-[11px] font-semibold tracking-wide uppercase ${
-                                d.status === 'approved'
-                                  ? 'text-[#2e6b52]'
-                                  : d.status === 'rejected'
-                                    ? 'text-maroon'
-                                    : 'text-amber'
-                              }`}
+                              className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATUS_DOKUMEN[d.status].kelas}`}
                             >
-                              {d.status}
+                              {(() => { const { Ikon } = STATUS_DOKUMEN[d.status]; return <Ikon className="h-3.5 w-3.5" /> })()}
+                              {STATUS_DOKUMEN[d.status].label}
                             </span>
                           )}
                         </div>
@@ -332,7 +339,7 @@ export default function AdminVendorPage() {
                     })}
                   </div>
                   <p className="mt-2 text-[11px] leading-relaxed text-muted">
-                    Yang tersimpan baru nama berkasnya — isi file belum diunggah ke penyimpanan mana pun.
+                    Pratinjau isi berkas belum tersedia — yang tercatat baru nama dan tanggal unggahnya.
                   </p>
 
                   {vendor.verification_note && (
@@ -353,7 +360,7 @@ export default function AdminVendorPage() {
                     value={catatan}
                     onChange={(e) => setCatatan(e.target.value)}
                     placeholder="Wajib diisi kalau menolak — sebutkan apa yang harus diperbaiki."
-                    className="mt-2 w-full rounded border border-line bg-cream px-4 py-3 text-[13px] text-ink outline-none placeholder:text-ink/35 focus:border-navy-900"
+                    className="mt-2 w-full rounded border border-line bg-cream px-4 py-3 text-[13px] text-ink outline-none placeholder:text-ink/55 focus:border-navy-900"
                   />
 
                   <button
@@ -387,7 +394,7 @@ function Kartu({ label, nilai, catatan }: { label: string; nilai: string; catata
   return (
     <div className="rounded-lg border border-line bg-white p-5">
       <p className="text-[11px] tracking-wide text-muted uppercase">{label}</p>
-      <p className="mt-2 font-display text-[28px] leading-none font-semibold text-navy-900">{nilai}</p>
+      <p className="mt-2 text-[24px] leading-none font-semibold tracking-tight tabular-nums text-navy-900">{nilai}</p>
       <p className="mt-2 text-[12px] text-muted">{catatan}</p>
     </div>
   )

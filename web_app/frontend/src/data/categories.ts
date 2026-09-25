@@ -3,9 +3,8 @@
  *  backend — kalau `apiCategory` meleset sedikit saja, halamannya kosong
  *  tanpa error yang jelas.
  *
- *  `emoji` dipakai sebagai pengganti foto: file di /public/img belum ada, dan
- *  blok abu-abu bikin kelima halaman kelihatan kembar saat didemokan.
- *  Ganti ke foto asli begitu materinya turun dari PM. */
+ *  Emoji kategori dibuang seluruhnya (22 & 25 Sep 2026, permintaan user).
+ *  Slot foto yang kosong tampil sebagai blok berwarna `tint`. */
 export type CategoryKey = 'florist' | 'mua' | 'attire' | 'fotografer' | 'eo'
 
 export type CategoryInfo = {
@@ -14,7 +13,6 @@ export type CategoryInfo = {
   /** Segmen URL di App.tsx. */
   slug: string
   label: string
-  emoji: string
   /** Latar kartu, sengaja beda per kategori supaya tidak kembar. */
   tint: string
 }
@@ -24,35 +22,30 @@ export const categories: Record<CategoryKey, CategoryInfo> = {
     apiCategory: 'florist',
     slug: 'florist',
     label: 'Florist',
-    emoji: '💐',
     tint: 'from-rose-100 to-rose-200',
   },
   mua: {
     apiCategory: 'makeup_artist',
     slug: 'mua',
     label: 'Makeup Artist',
-    emoji: '💄',
     tint: 'from-fuchsia-100 to-fuchsia-200',
   },
   attire: {
     apiCategory: 'attire_rental',
     slug: 'jas-kebaya',
     label: 'Sewa Jas & Kebaya',
-    emoji: '👔',
     tint: 'from-amber-100 to-amber-200',
   },
   fotografer: {
     apiCategory: 'photographer',
     slug: 'fotografer',
     label: 'Fotografer',
-    emoji: '📸',
     tint: 'from-slate-200 to-slate-300',
   },
   eo: {
     apiCategory: 'event_organizer',
     slug: 'event-organizer',
     label: 'Event Organizer',
-    emoji: '🎊',
     tint: 'from-sky-100 to-sky-200',
   },
 }

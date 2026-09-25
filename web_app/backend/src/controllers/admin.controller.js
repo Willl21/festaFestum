@@ -83,8 +83,9 @@ async function vendorReviewStats(req, res, next) {
 // Menyetujui vendor sekaligus menandai dokumennya, supaya vendor tidak
 // melihat "terverifikasi" tapi dokumennya masih 'pending'.
 async function reviewVendor(req, res, next) {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     const { vendorId } = req.params;
     const { action, note } = req.body;
 
@@ -128,10 +129,10 @@ async function reviewVendor(req, res, next) {
 
     res.json({ vendor: v.rows[0], dokumen_diperbarui: d.rows.length });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (client) await client.query('ROLLBACK').catch(() => {});
     next(err);
   } finally {
-    client.release();
+    client?.release();
   }
 }
 

@@ -175,7 +175,7 @@ export default function VendorLayout() {
                 di HP. Lonceng & avatar masih hiasan, itu yang dikorbankan. */}
             <span className="hidden items-center gap-4 sm:flex">
               <span className="rounded-full bg-lavender/50 px-3 py-1 text-[12px] font-semibold text-navy-900">
-                <span className="text-amber">●</span> Status: Aktif
+                <span className="mr-1 inline-block h-2 w-2 rounded-full bg-amber align-middle" aria-hidden /> Status: Aktif
               </span>
               <BellIcon />
             </span>
@@ -190,7 +190,7 @@ export default function VendorLayout() {
             >
               <ChatIcon />
               {belumDibaca > 0 && (
-                <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-maroon px-1 text-[10px] font-semibold text-white">
+                <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-maroon px-1 text-[11px] font-semibold text-white">
                   {belumDibaca > 9 ? '9+' : belumDibaca}
                 </span>
               )}

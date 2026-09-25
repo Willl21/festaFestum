@@ -152,7 +152,10 @@ export default function VendorDashboardPage() {
                           </td>
                           <td className="px-6 py-4">{o.service_name}</td>
                           <td className="px-6 py-4">
-                            <StatusPill tone={st.tone}>● {st.teks}</StatusPill>
+                            <StatusPill tone={st.tone}>
+                              <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current align-middle" aria-hidden />
+                              {st.teks}
+                            </StatusPill>
                           </td>
                         </tr>
                       )

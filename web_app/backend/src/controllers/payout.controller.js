@@ -12,8 +12,9 @@ const { hitungSaldo, vendorIdMilik } = require('../lib/saldo');
 // POST /api/v1/payouts  (vendor_owner)
 // Body: { amount }
 async function requestPayout(req, res, next) {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     const amount = Number(req.body.amount);
 
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -53,10 +54,10 @@ async function requestPayout(req, res, next) {
     await client.query('COMMIT');
     res.status(201).json({ payout: rows[0], sisa_saldo: saldo.saldo_tersedia - amount });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (client) await client.query('ROLLBACK').catch(() => {});
     next(err);
   } finally {
-    client.release();
+    client?.release();
   }
 }
 

@@ -351,6 +351,8 @@ export const buatBooking = (body: {
   service_id: string; event_date: string; start_time: string
   event_type: string; event_location_detail: string; quantity?: number
   jam_tambahan?: number
+  /** Ruang konsultasi asal rekomendasi paketnya, kalau ada (migrasi 017). */
+  konsultasi_id?: string
 }) => post<{ booking: ApiBooking }>('/bookings', body)
 
 /** Vendor menjawab pesanan yang masuk. `note` opsional — dipakai untuk
@@ -503,7 +505,7 @@ export const hapusLayanan = (serviceId: string) =>
   kirim<{ message: string }>(`/services/${serviceId}`, 'DELETE')
 
 /** Alamat foto layanan, dipasang langsung sebagai <img src>. Publik, dan
- *  membalas 404 kalau belum ada fotonya — komponen Img sudah jatuh ke emoji
+ *  membalas 404 kalau belum ada fotonya — komponen Img sudah jatuh ke blok warna
  *  kategori lewat onError.
  *
  *  `v` memaksa browser mengambil ulang sesudah fotonya diganti: URL-nya tetap
@@ -519,7 +521,7 @@ export const simpanFotoVendor = (slot: number, image: string) =>
 
 /** Alamat gambar portofolio, dipasang langsung sebagai <img src>. Endpoint-nya
  *  publik dan membalas 404 kalau slotnya kosong — komponen Img sudah jatuh ke
- *  emoji kategori saat gambarnya gagal dimuat.
+ *  blok warna kategori saat gambarnya gagal dimuat.
  *
  *  `v` memaksa browser mengambil ulang setelah foto diganti: URL-nya tetap
  *  sama, jadi tanpa penanda ini cache HTTP menyajikan foto lama. */
@@ -604,7 +606,9 @@ export const listUlasanVendor = (vendorId: string) =>
 // backend dari peran di token — frontend tidak pernah mengirim "saya vendor".
 // ------------------------------------------------------------
 
-export type JenisChat = 'klien_vendor' | 'admin_klien' | 'admin_vendor'
+/** 'konsultasi' (migrasi 017): klien <-> vendor SEBELUM ada pesanan, dari form
+ *  di detail EO. Pesanan yang lahir dari situ tetap mengobrol di ruang ini. */
+export type JenisChat = 'klien_vendor' | 'admin_klien' | 'admin_vendor' | 'konsultasi'
 
 export type ApiPercakapan = {
   conversation_id: string
@@ -637,6 +641,13 @@ export type ApiPesan = {
   sender_user_id: string
   nama_pengirim: string
   peran_pengirim: 'customer' | 'vendor_owner' | 'admin'
+  /** Terisi kalau pesan ini REKOMENDASI PAKET dari vendor (migrasi 017).
+   *  paket_* ikut supaya kartunya bisa digambar tanpa request susulan. */
+  service_id?: string | null
+  paket_nama?: string | null
+  paket_harga?: string | null
+  paket_kategori?: string | null
+  paket_aktif?: boolean | null
 }
 
 export const listPercakapan = (jenis?: JenisChat) =>
@@ -652,8 +663,14 @@ export const bukaPercakapan = (body: { booking_id: string } | { jenis: JenisChat
 export const getPercakapan = (id: string) =>
   get<{ conversation: ApiPercakapan; data: ApiPesan[] }>(`/chat/${id}`)
 
-export const kirimPesan = (id: string, body: string) =>
-  post<{ message: ApiPesan }>(`/chat/${id}/pesan`, { body })
+export const kirimPesan = (id: string, body: string, serviceId?: string) =>
+  post<{ message: ApiPesan }>(`/chat/${id}/pesan`, { body, ...(serviceId ? { service_id: serviceId } : {}) })
+
+/** Form "Mulai Rencanakan Acara Anda" di detail EO. Membuka (atau melanjutkan)
+ *  ruang konsultasi dengan vendor itu; isi formnya jadi pesan pertama. */
+export const mulaiKonsultasi = (vendorId: string, body: {
+  nama: string; perusahaan?: string; email: string; jenis_acara: string; pesan: string
+}) => post<{ conversation: ApiPercakapan }>(`/vendors/${vendorId}/konsultasi`, body)
 
 /** Satu angka untuk lencana. Dipisah dari daftar supaya halaman mana pun bisa
  *  menanyakannya tanpa menarik seluruh percakapan. */

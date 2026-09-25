@@ -125,7 +125,7 @@ export default function FotograferDetailPage() {
             {vendor.description || 'Vendor ini belum menuliskan deskripsi.'}
           </p>
 
-          {/* PORTOFOLIO — foto belum ada, semuanya jatuh ke emoji kategori. */}
+          {/* PORTOFOLIO — foto belum ada, semuanya jatuh ke blok warna. */}
           <section className="mt-10">
             <h2 className="font-display text-[19px] font-semibold">Portofolio</h2>
 
@@ -170,7 +170,7 @@ export default function FotograferDetailPage() {
                     }`}
                   >
                     {populer && (
-                      <span className="absolute -top-3 right-5 rounded-full bg-amber px-3 py-0.5 text-[10px] font-semibold text-navy-900">
+                      <span className="absolute -top-3 right-5 rounded-full bg-amber px-3 py-0.5 text-[11px] font-semibold text-navy-900">
                         Terpopuler
                       </span>
                     )}
@@ -272,7 +272,7 @@ export default function FotograferDetailPage() {
               )}
 
               {cek && !cek.ada && (
-                <p className="mt-5 max-w-[420px] border border-maroon/30 bg-maroon/5 px-3 py-2 text-[13px] text-maroon">
+                <p className="muncul-halus mt-5 max-w-[420px] border border-maroon/30 bg-maroon/5 px-3 py-2 text-[13px] text-maroon">
                   {cek.alasan || 'Slot tidak tersedia.'}
                 </p>
               )}
@@ -307,7 +307,7 @@ export default function FotograferDetailPage() {
 
 /** Slot 3 sengaja tidak pernah punya foto: portofolio cuma tiga slot
  *  (SLOT_FOTO 0-2), sementara mockup fotografer menggambar empat kotak.
- *  Yang keempat jatuh ke emoji kategori. */
+ *  Yang keempat jatuh ke blok warna. */
 function Photo({ n, nama, src, className }: {
   n: number; nama: string; src?: string; className: string
 }) {

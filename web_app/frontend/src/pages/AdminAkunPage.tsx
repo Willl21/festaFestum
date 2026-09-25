@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import TabelSkeleton from '../components/TabelSkeleton'
 import TukarHalus from '../components/TukarHalus'
-import { UserCircleIcon, SearchIcon } from '../components/icons'
+import { UserCircleIcon, SearchIcon, CheckCircleIcon, StarIcon } from '../components/icons'
 import { namaKota } from '../data/categories'
 import { rupiahBulat } from '../lib/format'
 import { get, kirim } from '../lib/api'
@@ -151,7 +151,7 @@ export default function AdminAkunPage() {
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[860px] text-left text-[13px]">
-                  <thead className="bg-cream text-[11px] tracking-wide text-ink/60 uppercase">
+                  <thead className="bg-cream text-[11px] tracking-wide text-ink/70 uppercase">
                     <tr>
                       <th className="px-5 py-3 font-semibold">Akun</th>
                       <th className="px-5 py-3 font-semibold">Peran</th>
@@ -173,11 +173,22 @@ export default function AdminAkunPage() {
                             <span className="min-w-0">
                               <span className="block font-semibold text-navy-900">
                                 {a.business_name || a.full_name || a.name}
-                                {a.is_verified && <span className="ml-1 text-[#2e6b52]">✔</span>}
+                                {a.is_verified && (
+                                  <span className="ml-1 inline-flex align-[-3px] text-[#2e6b52]" title="Vendor terverifikasi">
+                                    <CheckCircleIcon className="h-4 w-4" />
+                                    <span className="sr-only">Vendor terverifikasi</span>
+                                  </span>
+                                )}
                               </span>
                               <span className="block text-[12px] text-muted">
                                 #{a.user_id.slice(0, 8).toUpperCase()}
-                                {a.rating_count ? ` · ${a.rating_avg}★ (${a.rating_count})` : ''}
+                                {a.rating_count ? (
+                                  <>
+                                    {' · '}{a.rating_avg}
+                                    <StarIcon className="mx-0.5 inline h-3 w-3 align-[-1px] text-star" />
+                                    ({a.rating_count})
+                                  </>
+                                ) : null}
                               </span>
                             </span>
                           </div>
@@ -204,22 +215,38 @@ export default function AdminAkunPage() {
                           <p className="mt-1 text-[12px] text-muted">{a.jumlah_pesanan} pesanan</p>
                         </td>
                         <td className="px-5 py-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => ubahVerifikasi(a)}
-                            disabled={sibuk === a.user_id}
-                            className={`rounded px-3 py-1.5 text-[12px] font-semibold transition-opacity hover:opacity-85 disabled:opacity-50 ${
-                              a.akun_terverifikasi
-                                ? 'bg-lavender text-navy-900'
-                                : 'bg-navy-900 text-white'
-                            }`}
-                          >
-                            {sibuk === a.user_id
-                              ? '…'
-                              : a.akun_terverifikasi
-                                ? 'Terverifikasi ✔'
-                                : 'Verifikasi'}
-                          </button>
+                          {/* Status dan aksinya dipisah (review 25 Sep). Dulu akun
+                              terverifikasi menampilkan TOMBOL "Terverifikasi"
+                              yang kalau diklik justru mencabutnya — aksinya
+                              menyamar jadi status. Tombolnya juga dulu navy penuh
+                              di tiap baris, jadi dua puluhan tombol utama
+                              berebut perhatian; sekarang garis tipis. */}
+                          {a.akun_terverifikasi ? (
+                            // Bertumpuk, bukan berdampingan: berdampingan melebarkan
+                            // kolom sampai tabelnya terdorong keluar layar.
+                            <span className="inline-flex flex-col items-end">
+                              <span className="inline-flex items-center gap-1 whitespace-nowrap text-[12px] font-semibold text-[#2e6b52]">
+                                <CheckCircleIcon className="h-4 w-4" /> Terverifikasi
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => ubahVerifikasi(a)}
+                                disabled={sibuk === a.user_id}
+                                className="rounded px-2 py-1.5 text-[12px] font-medium text-ink/70 underline-offset-2 hover:text-maroon hover:underline disabled:opacity-50"
+                              >
+                                {sibuk === a.user_id ? '…' : 'Cabut'}
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => ubahVerifikasi(a)}
+                              disabled={sibuk === a.user_id}
+                              className="rounded border border-navy-900/30 px-3 py-1.5 text-[12px] font-semibold text-navy-900 transition-colors hover:border-navy-900 hover:bg-lavender/40 disabled:opacity-50"
+                            >
+                              {sibuk === a.user_id ? '…' : 'Verifikasi'}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -230,8 +257,8 @@ export default function AdminAkunPage() {
 
             <p className="flex gap-3 border-t border-line bg-cream px-5 py-4 text-[12px] leading-relaxed text-muted">
               <UserCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
-              Selain verifikasi akun, halaman ini hanya membaca. Sanksi, penangguhan akun, dan
-              reset 2FA yang ada di mockup belum dibuat — tabel users belum punya kolom statusnya.
+              Selain verifikasi akun, halaman ini hanya untuk melihat data. Verifikasi menyalakan
+              lencana "Pengguna Terverifikasi" di profil pengguna, dan bisa dicabut kapan saja.
             </p>
           </section>
         </>
@@ -244,7 +271,7 @@ function Kartu({ label, nilai, catatan }: { label: string; nilai: number | strin
   return (
     <div className="rounded-lg border border-line bg-white p-5">
       <p className="text-[11px] tracking-wide text-muted uppercase">{label}</p>
-      <p className="mt-2 font-display text-[28px] leading-none font-semibold text-navy-900">{nilai}</p>
+      <p className="mt-2 text-[24px] leading-none font-semibold tracking-tight tabular-nums text-navy-900">{nilai}</p>
       <p className="mt-2 text-[12px] text-muted">{catatan}</p>
     </div>
   )

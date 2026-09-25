@@ -1,5 +1,14 @@
+import Bintang from './Bintang'
 import { useEffect, useState } from 'react'
 import { listUlasanVendor, type ApiUlasan, type RingkasanUlasan } from '../lib/api'
+import { ChevronDown, StarIcon } from './icons'
+
+/* Tiga kartu per halaman, ganti halaman pakai blur-out lalu blur-in per kartu
+   berurutan (meniru rekaman referensi 25 Sep). KELUAR = 150ms + jeda
+   terakhir, jadi halaman baru dipasang sesudah kartu ketiga hilang. */
+const PER_HALAMAN = 3
+const JEDA = 70
+const KELUAR = 150 + JEDA * (PER_HALAMAN - 1)
 
 /** Satu komponen dipakai lima halaman detail vendor.
  *
@@ -12,6 +21,8 @@ export default function UlasanVendor({ vendorId }: { vendorId: string }) {
   const [ulasan, setUlasan] = useState<ApiUlasan[]>([])
   const [ringkasan, setRingkasan] = useState<RingkasanUlasan | null>(null)
   const [memuat, setMemuat] = useState(true)
+  const [halaman, setHalaman] = useState(0)
+  const [keluar, setKeluar] = useState(false)
 
   useEffect(() => {
     if (!vendorId) return
@@ -30,10 +41,42 @@ export default function UlasanVendor({ vendorId }: { vendorId: string }) {
   if (memuat) return null
 
   const jumlah = ringkasan?.jumlah ?? 0
+  const totalHalaman = Math.ceil(ulasan.length / PER_HALAMAN)
+  const tampil = ulasan.slice(halaman * PER_HALAMAN, (halaman + 1) * PER_HALAMAN)
+
+  // Klik saat transisi berjalan diabaikan; kalau tidak, halaman bisa loncat
+  // dua kali dan animasi keluarnya terpotong.
+  const geser = (arah: 1 | -1) => {
+    if (keluar) return
+    setKeluar(true)
+    setTimeout(() => {
+      setHalaman((h) => (h + arah + totalHalaman) % totalHalaman)
+      setKeluar(false)
+    }, KELUAR)
+  }
 
   return (
     <section>
-      <h2 className="font-display text-[26px] font-semibold text-navy-900">Ulasan Klien</h2>
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="font-display text-[26px] font-semibold text-navy-900">Ulasan Klien</h2>
+        {totalHalaman > 1 && (
+          <div className="flex gap-2">
+            {([[-1, 'Ulasan sebelumnya', 'rotate-90'], [1, 'Ulasan berikutnya', '-rotate-90']] as const).map(
+              ([arah, label, putar]) => (
+                <button
+                  key={arah}
+                  type="button"
+                  onClick={() => geser(arah)}
+                  aria-label={label}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-line bg-white text-navy-900 transition-colors hover:bg-lavender/60"
+                >
+                  <ChevronDown className={`h-4 w-4 ${putar}`} />
+                </button>
+              ),
+            )}
+          </div>
+        )}
+      </div>
 
       {jumlah === 0 ? (
         <p className="mt-3 text-[15px] text-muted">
@@ -57,7 +100,9 @@ export default function UlasanVendor({ vendorId }: { vendorId: string }) {
                 const nilai = ringkasan?.[`b${n}` as const] ?? 0
                 return (
                   <div key={n} className="flex items-center gap-2">
-                    <dt className="w-8 text-[12px] text-muted">{n} ★</dt>
+                    <dt className="flex w-8 items-center gap-1 text-[12px] text-muted">
+                      {n} <StarIcon className="h-3 w-3 text-star" />
+                    </dt>
                     <dd className="flex-1">
                       <span className="block h-1.5 rounded-full bg-lavender/60">
                         <span
@@ -73,24 +118,33 @@ export default function UlasanVendor({ vendorId }: { vendorId: string }) {
             </dl>
           </div>
 
-          <ul className="mt-7 space-y-4">
-            {ulasan.map((u) => (
-              <li key={u.review_id} className="rounded-sm border border-line bg-white p-5">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="font-semibold">{u.user_name}</p>
-                  <p className="text-[12px] text-muted">
-                    {new Date(u.created_at).toLocaleDateString('id-ID', {
-                      day: 'numeric', month: 'long', year: 'numeric',
-                    })}
-                  </p>
-                </div>
-                <p className="mt-1 text-[14px] text-amber">
-                  {'★'.repeat(u.rating)}
-                  <span className="text-line">{'★'.repeat(5 - u.rating)}</span>
+          <ul className="mt-7 grid gap-4 md:grid-cols-3">
+            {tampil.map((u, i) => (
+              <li
+                // Kunci ikut halaman: kartu dipasang ulang, jadi animasi masuknya jalan lagi.
+                key={`${halaman}-${u.review_id}`}
+                className={`flex min-h-[190px] flex-col justify-between rounded-sm border border-line bg-white p-5 ${
+                  keluar ? 'ulasan-keluar' : 'ulasan-masuk'
+                }`}
+                style={{ animationDelay: `${i * JEDA}ms` }}
+              >
+                <p className={`text-[15px] leading-relaxed ${u.comment ? 'text-ink/80' : 'text-muted italic'}`}>
+                  {u.comment || 'Tanpa komentar.'}
                 </p>
-                {u.comment && (
-                  <p className="mt-2 text-[14px] leading-relaxed text-ink/80">{u.comment}</p>
-                )}
+                <div className="mt-5 flex items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lavender text-[14px] font-semibold text-navy-900">
+                    {u.user_name.trim().charAt(0).toUpperCase()}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-[14px] font-semibold">{u.user_name}</p>
+                    <p className="flex flex-wrap items-center gap-x-2 text-[12px] text-muted">
+                      <Bintang nilai={u.rating} className="h-3 w-3" />
+                      {new Date(u.created_at).toLocaleDateString('id-ID', {
+                        day: 'numeric', month: 'short', year: 'numeric',
+                      })}
+                    </p>
+                  </div>
+                </div>
               </li>
             ))}
           </ul>

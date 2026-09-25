@@ -20,7 +20,7 @@ import {
 const kategori = categories.florist
 
 /** Hiasan yang TIDAK ada di database: headline dan ikon layanan.
- *  Galerinya memakai foto portofolio asli; slot yang kosong jatuh ke emoji
+ *  Galerinya memakai foto portofolio asli; slot yang kosong jatuh ke blok warna
  *  kategori lewat <Img>. Sisanya — nama, kota, deskripsi, daftar layanan,
  *  harga — datang dari API. */
 const HEADLINE = 'The Art Of Floristry'
@@ -107,7 +107,7 @@ export default function FloristDetailPage() {
           </span>
 
           {/* GALERI: satu blok besar + empat kecil, seperti mockup. Foto vendor
-              belum ada di /public/img, jadi semuanya jatuh ke emoji kategori. */}
+              belum ada di /public/img, jadi semuanya jatuh ke blok warna. */}
           <section className="mt-6">
             <p className="mb-2 text-[11px] text-muted">
               <Link to={`/${kategori.slug}`} className="hover:underline">
@@ -117,7 +117,7 @@ export default function FloristDetailPage() {
             </p>
 
             {/* Dulu lima kotak, padahal slot foto vendor cuma tiga — dua di
-                antaranya dijamin jatuh ke emoji apa pun isinya. */}
+                antaranya dijamin jatuh ke blok warna apa pun isinya. */}
             <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
               <Img
                 src={fotoSlot.includes(0) ? urlFotoVendor(id, 0) : undefined}
@@ -163,7 +163,7 @@ export default function FloristDetailPage() {
                           `services.image_url` sejak migrasi 011 — halaman ini
                           cuma belum pernah menampilkannya, jadi buket dan
                           dekorasi tampil sebagai ikon yang sama semua.
-                          Slot kosong jatuh ke emoji kategori lewat <Img>. */}
+                          Slot kosong jatuh ke blok warna lewat <Img>. */}
                       <Img
                         src={s.has_photo ? urlFotoLayanan(s.service_id) : undefined}
                         alt={s.service_name}
@@ -190,7 +190,7 @@ export default function FloristDetailPage() {
             </div>
 
             {/* PANEL PEMESANAN */}
-            <aside className="h-fit border border-line bg-white p-5 lg:sticky lg:top-[90px]">
+            <aside className="h-fit border border-line bg-white p-5 lg:sticky lg:top-[90px] lg:max-h-[calc(100vh-110px)] lg:overflow-y-auto lg:overscroll-contain">
               <p className="rounded-sm bg-navy-900 py-3.5 text-center text-[15px] font-semibold text-white">
                 Detail Informasi
               </p>
@@ -225,7 +225,7 @@ export default function FloristDetailPage() {
               {/* Ketersediaan dicek ke backend dulu. Kalau slotnya penuh atau lead
                   time belum terpenuhi, user tahu di sini — bukan setelah isi form. */}
               {cek && !cek.ada && (
-                <p className="mt-4 border border-maroon/30 bg-maroon/5 px-3 py-2 text-[13px] text-maroon">
+                <p className="muncul-halus mt-4 border border-maroon/30 bg-maroon/5 px-3 py-2 text-[13px] text-maroon">
                   {cek.alasan || 'Slot tidak tersedia.'}
                 </p>
               )}

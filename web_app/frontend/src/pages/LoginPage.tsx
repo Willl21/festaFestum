@@ -17,7 +17,7 @@ export default function LoginPage() {
   // dilempar WajibMasuk dari halaman pesan. Bukan galat, jadi warnanya beda.
   const info = new URLSearchParams(window.location.search).get('terdaftar')
     ? 'Akun berhasil dibuat. Silakan masuk untuk melanjutkan.'
-    : lanjut ? 'Masuk dulu untuk melanjutkan pemesanan.' : ''
+    : lanjut ? 'Masuk dulu untuk melanjutkan.' : ''
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -129,7 +129,7 @@ export default function LoginPage() {
         </Link>
       </p>
 
-      <p className="mt-7 text-center text-[10px] tracking-[0.06em] text-muted">
+      <p className="mt-7 text-center text-[11px] tracking-[0.06em] text-muted">
         BY SIGNING IN, YOU AGREE TO OUR TERMS OF SERVICE & PRIVACY POLICY.
       </p>
     </AuthLayout>

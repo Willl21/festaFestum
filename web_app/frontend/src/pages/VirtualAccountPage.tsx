@@ -4,7 +4,7 @@ import TukarHalus from '../components/TukarHalus'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Img from '../components/Img'
 import FlowLayout from '../components/FlowLayout'
-import { CopyIcon } from '../components/icons'
+import { CopyIcon, ChevronDown } from '../components/icons'
 import { categories, type CategoryKey } from '../data/categories'
 import { cariMetode } from '../data/payments'
 import { rupiah } from '../lib/format'
@@ -278,7 +278,7 @@ export default function VirtualAccountPage() {
                       >
                         <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3.5 text-[15px]">
                           Cara bayar lewat {metode.label}
-                          <span className="text-ink/50">▾</span>
+                          <ChevronDown className="ff-panah h-4 w-4 text-ink/50" />
                         </summary>
                         <ol className="list-decimal space-y-2.5 border-t border-line px-8 py-4 text-[14px] leading-relaxed text-ink/80">
                           {metode.petunjuk.map((s) => (

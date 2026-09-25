@@ -3,12 +3,13 @@ import { Link, useSearchParams } from 'react-router-dom'
 import TukarHalus from '../components/TukarHalus'
 import TabelSkeleton from '../components/TabelSkeleton'
 import { VendorPageHeader } from '../components/VendorLayout'
-import { SearchIcon } from '../components/icons'
+import { SearchIcon, ArrowRight } from '../components/icons'
 import { rupiah } from '../lib/format'
 import {
-  listPercakapan, getPercakapan, kirimPesan, bukaPercakapan, usePengguna,
-  type ApiPercakapan, type ApiPesan, type JenisChat,
+  listPercakapan, getPercakapan, kirimPesan, bukaPercakapan, usePengguna, getMyServices,
+  type ApiPercakapan, type ApiPesan, type ApiService, type JenisChat,
 } from '../lib/api'
+import KartuRekomendasi from '../components/KartuRekomendasi'
 
 /** Pusat Obrolan vendor (mockup "Portal Vendor — Chat Klien & Admin").
  *
@@ -63,6 +64,15 @@ export default function VendorPesanPage() {
   const [aktif, setAktif] = useState('')
   const [pesan, setPesan] = useState<ApiPesan[]>([])
   const [kepala, setKepala] = useState<ApiPercakapan | null>(null)
+  // Paket aktif milik vendor ini — pilihan untuk "Rekomendasikan Paket" di
+  // ruang klien (migrasi 017). Diambil sekali; gagal = fitur itu disembunyikan.
+  const [paketSaya, setPaketSaya] = useState<ApiService[]>([])
+  const [paketDipilih, setPaketDipilih] = useState('')
+  useEffect(() => {
+    getMyServices()
+      .then((r) => setPaketSaya(r.data.filter((x) => x.is_active)))
+      .catch(() => {})
+  }, [])
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
   const [teks, setTeks] = useState('')
@@ -79,16 +89,17 @@ export default function VendorPesanPage() {
     let hidup = true
 
     const tarik = () =>
-      listPercakapan(tab)
+      listPercakapan(tab === 'admin_vendor' ? 'admin_vendor' : undefined)
         .then((r) => {
           if (!hidup) return
-          setDaftar(r.data)
+          const data = tab === 'admin_vendor' ? r.data : r.data.filter((c) => c.jenis !== 'admin_vendor')
+          setDaftar(data)
           setAktif((lama) => {
             // Pilihan lama dipertahankan hanya kalau masih ada di tab ini —
             // kalau tidak, ruangannya milik tab sebelah dan kepalanya akan
             // menampilkan konteks yang salah.
-            const masihAda = r.data.some((c) => c.conversation_id === lama)
-            return masihAda ? lama : dariUrl || r.data[0]?.conversation_id || ''
+            const masihAda = data.some((c) => c.conversation_id === lama)
+            return masihAda ? lama : dariUrl || data[0]?.conversation_id || ''
           })
         })
         .catch((e) => hidup && setGalat(e.message))
@@ -161,6 +172,22 @@ export default function VendorPesanPage() {
       const r = await kirimPesan(aktif, isi)
       setPesan((lama) => [...lama, r.message])
       setTeks('')
+    } catch (err) {
+      setGalat((err as Error).message)
+    } finally {
+      setKirim(false)
+    }
+  }
+
+  async function kirimRekomendasi() {
+    if (!paketDipilih || !aktif) return
+    setKirim(true)
+    setGalat('')
+    try {
+      const r = await kirimPesan(aktif, teks.trim(), paketDipilih)
+      setPesan((lama) => [...lama, r.message])
+      setTeks('')
+      setPaketDipilih('')
     } catch (err) {
       setGalat((err as Error).message)
     } finally {
@@ -332,6 +359,9 @@ export default function VendorPesanPage() {
                                 {c.event_date && ` • ${tanggal(c.event_date)}`}
                               </span>
                             )}
+                            {c.jenis === 'konsultasi' && (
+                              <span className="mt-0.5 block truncate text-[12px] text-muted">Konsultasi</span>
+                            )}
                             <span className="mt-1.5 block truncate text-[13px] text-ink/70">
                               {c.pesan_terakhir || 'Belum ada pesan'}
                             </span>
@@ -375,7 +405,7 @@ export default function VendorPesanPage() {
                       onClick={() => setRuangDiHp(false)}
                       className="mb-3 text-[13px] font-medium text-ink/70 hover:text-ink lg:hidden"
                     >
-                      <span aria-hidden>&larr;</span> Semua obrolan
+                      <ArrowRight className="mr-1 inline h-4 w-4 rotate-180 align-[-3px]" /> Semua obrolan
                     </button>
                     {!kepala && (
                       <div>
@@ -394,7 +424,9 @@ export default function VendorPesanPage() {
                       <p className="text-[13px] text-ink/70">
                         {kepala.booking_id
                           ? `#${kepala.booking_id.slice(0, 8).toUpperCase()}`
-                          : 'Koordinasi operasional'}
+                          : kepala.jenis === 'konsultasi'
+                            ? 'Konsultasi sebelum pemesanan — rekomendasikan paket di bawah'
+                            : 'Koordinasi operasional'}
                         {kepala.event_date && ` • ${tanggal(kepala.event_date)}`}
                         {kepala.category && ` • ${KATEGORI[kepala.category] || kepala.category}`}
                       </p>
@@ -461,15 +493,19 @@ export default function VendorPesanPage() {
                               {dariSaya ? 'Anda' : m.nama_pengirim}
                               {m.peran_pengirim === 'admin' && ' • Admin'}
                             </p>
-                            <p
-                              className={`rounded-lg px-4 py-3 text-[14px] leading-relaxed whitespace-pre-wrap ${
-                                dariSaya
-                                  ? 'bg-navy-900 text-white'
-                                  : 'border border-line bg-cream text-ink'
-                              }`}
-                            >
-                              {m.body}
-                            </p>
+                            {m.service_id ? (
+                              <KartuRekomendasi pesan={m} vendorId={kepala?.vendor_id ?? null} untukKlien={false} />
+                            ) : (
+                              <p
+                                className={`rounded-lg px-4 py-3 text-[14px] leading-relaxed whitespace-pre-wrap ${
+                                  dariSaya
+                                    ? 'bg-navy-900 text-white'
+                                    : 'border border-line bg-cream text-ink'
+                                }`}
+                              >
+                                {m.body}
+                              </p>
+                            )}
                             <p className={`mt-1 text-[11px] text-muted ${dariSaya ? 'text-right' : ''}`}>
                               {jam(m.created_at)}
                             </p>
@@ -479,6 +515,34 @@ export default function VendorPesanPage() {
                     )
                   })}
                 </div>
+
+                {kepala && kepala.jenis !== 'admin_vendor' && paketSaya.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 pt-3">
+                    <label htmlFor="paket-rekomendasi" className="text-[12px] font-semibold text-ink/70">
+                      Rekomendasikan paket
+                    </label>
+                    <select
+                      id="paket-rekomendasi"
+                      value={paketDipilih}
+                      onChange={(e) => setPaketDipilih(e.target.value)}
+                      className="h-9 min-w-0 flex-1 rounded-md border border-line bg-white px-2 text-[13px] outline-none focus:border-navy-900"
+                    >
+                      <option value="">Pilih paket…</option>
+                      {paketSaya.map((x) => (
+                        <option key={x.service_id} value={x.service_id}>{x.service_name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={kirimRekomendasi}
+                      disabled={!paketDipilih || kirim}
+                      title="Teks di kotak pesan ikut terkirim sebagai catatan"
+                      className="h-9 shrink-0 rounded-md border border-navy-900/30 px-3 text-[13px] font-semibold text-navy-900 hover:border-navy-900 disabled:opacity-50"
+                    >
+                      Kirim Rekomendasi
+                    </button>
+                  </div>
+                )}
 
                 <form onSubmit={kirimkan} className="flex items-end gap-3 border-t border-line p-4">
                   <label className="flex-1">

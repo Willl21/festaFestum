@@ -5,6 +5,7 @@ const {
 } = require('../controllers/vendor.controller');
 const { createService, listServices, listMyServices } = require('../controllers/service.controller');
 const { listUlasanVendor } = require('../controllers/review.controller');
+const { mulaiKonsultasi } = require('../controllers/chat.controller');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -25,6 +26,9 @@ router.get('/:vendorId/services', listServices);
 
 // Publik: bintang di halaman detail harus bisa dilihat tamu yang belum masuk.
 router.get('/:vendorId/ulasan', listUlasanVendor);
+// Form konsultasi di detail EO (migrasi 017). Hanya pelanggan: vendor dan
+// admin punya jalur obrolan sendiri.
+router.post('/:vendorId/konsultasi', requireAuth, requireRole('customer'), mulaiKonsultasi);
 // Publik: dipasang langsung sebagai <img src>, jadi tidak boleh butuh token.
 router.get('/:vendorId/photo/:slot', getVendorPhoto);
 

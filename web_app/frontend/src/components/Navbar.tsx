@@ -62,7 +62,7 @@ export default function Navbar() {
     n ? (
       <span
         title={`${n} pesanan sudah diterima vendor dan menunggu pembayaran DP`}
-        className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-maroon px-1 align-top text-[10px] font-semibold text-white"
+        className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-maroon px-1 align-top text-[11px] font-semibold text-white"
       >
         {n > 9 ? '9+' : n}
       </span>
@@ -140,7 +140,7 @@ export default function Navbar() {
               >
                 <ChatIcon className="h-[22px] w-[22px]" />
                 {belumDibaca > 0 && (
-                  <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-maroon px-1 text-[10px] font-semibold text-white">
+                  <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-maroon px-1 text-[11px] font-semibold text-white">
                     {belumDibaca > 9 ? '9+' : belumDibaca}
                   </span>
                 )}
@@ -207,7 +207,7 @@ export default function Navbar() {
         <nav
           id="menu-utama"
           onClick={() => setMenuBuka(false)}
-          className="border-t border-line bg-cream px-4 py-2 sm:px-6 md:hidden"
+          className="muncul-halus border-t border-line bg-cream px-4 py-2 [--ff-geser:-8px] sm:px-6 md:hidden"
         >
           {links.map((l) => (
             <NavLink

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import TukarHalus from '../components/TukarHalus'
 import TabelSkeleton from '../components/TabelSkeleton'
-import { SearchIcon } from '../components/icons'
+import { SearchIcon, ArrowRight } from '../components/icons'
+import KartuRekomendasi from '../components/KartuRekomendasi'
 import { rupiah } from '../lib/format'
 import {
   getToken, listPercakapan, getPercakapan, kirimPesan, bukaPercakapan,
@@ -347,7 +348,9 @@ export default function ChatPage() {
                             <span className="mt-0.5 block truncate text-[12px] text-muted">
                               {c.jenis === 'admin_klien'
                                 ? 'Bantuan & kendala pesanan'
-                                : KATEGORI[c.category || ''] || 'Vendor'}
+                                : c.jenis === 'konsultasi'
+                                  ? 'Konsultasi'
+                                  : KATEGORI[c.category || ''] || 'Vendor'}
                               {c.booking_id && ` • #${c.booking_id.slice(0, 8).toUpperCase()}`}
                             </span>
                             <span className="mt-1.5 block truncate text-[13px] text-ink/70">
@@ -393,7 +396,7 @@ export default function ChatPage() {
                       onClick={() => setRuangDiHp(false)}
                       className="mb-3 text-[13px] font-medium text-ink/70 hover:text-ink lg:hidden"
                     >
-                      <span aria-hidden>&larr;</span> Semua obrolan
+                      <ArrowRight className="mr-1 inline h-4 w-4 rotate-180 align-[-3px]" /> Semua obrolan
                     </button>
                     {!kepala && (
                       <div className="flex gap-3">
@@ -417,7 +420,9 @@ export default function ChatPage() {
                         <p className="text-[13px] text-ink/70">
                           {kepala.jenis === 'admin_klien'
                             ? 'Bantuan & kendala pesanan'
-                            : KATEGORI[kepala.category || ''] || 'Vendor'}
+                            : kepala.jenis === 'konsultasi'
+                              ? 'Konsultasi — vendor bisa merekomendasikan paket di sini'
+                              : KATEGORI[kepala.category || ''] || 'Vendor'}
                           {kepala.event_date && ` • ${tanggal(kepala.event_date)}`}
                         </p>
                       </div>
@@ -491,15 +496,24 @@ export default function ChatPage() {
                                 {m.nama_pengirim}
                               </p>
                             )}
-                            <p
-                              className={`rounded-lg px-4 py-3 text-[14px] leading-relaxed whitespace-pre-wrap ${
-                                dariSaya
-                                  ? 'bg-navy-900 text-white'
-                                  : 'border border-line bg-cream text-ink'
-                              }`}
-                            >
-                              {m.body}
-                            </p>
+                            {m.service_id ? (
+                              <KartuRekomendasi
+                                pesan={m}
+                                vendorId={kepala?.vendor_id ?? null}
+                                konsultasiId={kepala?.jenis === 'konsultasi' ? kepala.conversation_id : undefined}
+                                untukKlien
+                              />
+                            ) : (
+                              <p
+                                className={`rounded-lg px-4 py-3 text-[14px] leading-relaxed whitespace-pre-wrap ${
+                                  dariSaya
+                                    ? 'bg-navy-900 text-white'
+                                    : 'border border-line bg-cream text-ink'
+                                }`}
+                              >
+                                {m.body}
+                              </p>
+                            )}
                             <p
                               className={`mt-1 text-[11px] text-muted ${
                                 dariSaya ? 'text-right' : ''

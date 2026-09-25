@@ -333,7 +333,7 @@ export default function AttireDetailPage() {
             </div>
 
             {/* PANEL PEMESANAN */}
-            <aside className="h-fit border border-line bg-white p-5 lg:sticky lg:top-[90px]">
+            <aside className="h-fit border border-line bg-white p-5 lg:sticky lg:top-[90px] lg:max-h-[calc(100vh-110px)] lg:overflow-y-auto lg:overscroll-contain">
               <p className="rounded-sm bg-navy-900 px-4 py-3.5 text-[15px] font-semibold text-white">
                 Detail Informasi
               </p>
@@ -459,7 +459,7 @@ export default function AttireDetailPage() {
               </div>
 
               {cek && !cek.ada && (
-                <p className="mt-4 border border-maroon/30 bg-maroon/5 px-3 py-2 text-[13px] text-maroon">
+                <p className="muncul-halus mt-4 border border-maroon/30 bg-maroon/5 px-3 py-2 text-[13px] text-maroon">
                   {cek.alasan || 'Slot tidak tersedia.'}
                 </p>
               )}

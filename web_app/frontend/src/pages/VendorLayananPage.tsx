@@ -55,8 +55,8 @@ type BaruLayanan = {
  *  backend/src/lib/kategori.js. */
 const KATEGORI_JAM = ['makeup_artist', 'photographer']
 
-/** Emoji per kategori, dipakai sebagai pengganti foto layanan. */
-const EMOJI: Record<string, { emoji: string; tint: string }> = {
+/** Warna latar per kategori, tampil saat layanan belum punya foto. */
+const WARNA: Record<string, { tint: string }> = {
   event_organizer: katalogKategori.eo,
   florist: katalogKategori.florist,
   attire_rental: katalogKategori.attire,
@@ -226,7 +226,7 @@ export default function VendorLayananPage() {
 
               <div className="mt-6 grid gap-6 sm:grid-cols-2">
                 {services.map((s) => {
-                  const gaya = EMOJI[s.category]
+                  const gaya = WARNA[s.category]
                   return (
                     <article
                       key={s.service_id}
@@ -338,7 +338,7 @@ export default function VendorLayananPage() {
                         className="h-[150px] w-full object-cover"
                       />
                       {slot === 0 && (
-                        <span className="absolute top-2 left-2 rounded bg-navy-900/85 px-2 py-0.5 text-[10px] font-semibold text-white">
+                        <span className="absolute top-2 left-2 rounded bg-navy-900/85 px-2 py-0.5 text-[11px] font-semibold text-white">
                           FOTO UTAMA
                         </span>
                       )}
@@ -376,8 +376,8 @@ export default function VendorLayananPage() {
               </div>
 
               <p className="mt-5 text-[12px] text-muted">
-                Dipotong otomatis jadi 900×600. Slot yang kosong akan tampil sebagai emoji
-                kategori di halaman pelanggan.
+                Dipotong otomatis jadi 900×600. Slot yang kosong akan tampil sebagai blok
+                warna di halaman pelanggan.
               </p>
             </div>
           </section>
@@ -542,7 +542,7 @@ function ServiceDialog({
     <dialog
       ref={ref}
       onClose={onTutup}
-      className="m-auto w-[min(560px,92vw)] rounded-lg border border-line bg-white p-0 backdrop:bg-navy-900/40"
+      className="ff-dialog m-auto w-[min(560px,92vw)] rounded-lg border border-line bg-white p-0 backdrop:bg-navy-900/40"
     >
       <form onSubmit={handleSubmit} className="max-h-[86vh] overflow-y-auto p-7">
         <h2 className="font-display text-[26px] font-semibold">
@@ -586,7 +586,7 @@ function ServiceDialog({
                   </button>
                 )}
                 <p className="mt-1.5 text-[12px] text-muted">
-                  Dipotong otomatis jadi 900×600. Kosong = pakai emoji kategori.
+                  Dipotong otomatis jadi 900×600. Kosong = tampil blok warna.
                 </p>
               </div>
             </div>
@@ -686,7 +686,7 @@ function ServiceDialog({
               rows={4}
               defaultValue={awal?.description ?? ''}
               placeholder="Jelaskan cakupan layanan, durasi, dan apa saja yang klien dapatkan."
-              className="mt-2 w-full rounded-sm border border-line bg-white px-3 py-2.5 text-[14px] outline-none placeholder:text-ink/35 focus:border-navy-900"
+              className="mt-2 w-full rounded-sm border border-line bg-white px-3 py-2.5 text-[14px] outline-none placeholder:text-ink/55 focus:border-navy-900"
             />
           </div>
 
@@ -816,7 +816,7 @@ function FieldTambahan({
   const id = `d_${field.nama}`
   const kelas =
     'mt-2 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none'
-    + ' placeholder:text-ink/35 focus:border-navy-900'
+    + ' placeholder:text-ink/55 focus:border-navy-900'
 
   return (
     <div className={field.panjang ? 'sm:col-span-2' : undefined}>
@@ -893,7 +893,7 @@ function Field({
         required
         placeholder={placeholder}
         defaultValue={defaultValue}
-        className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none placeholder:text-ink/35 focus:border-navy-900"
+        className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none placeholder:text-ink/55 focus:border-navy-900"
       />
     </div>
   )
