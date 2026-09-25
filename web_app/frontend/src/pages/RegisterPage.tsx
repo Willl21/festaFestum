@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import AuthLayout, { inputClass } from '../components/AuthLayout'
-import { GoogleIcon } from '../components/icons'
-import { post, saveAuth, type AuthResponse } from '../lib/api'
+import TombolGoogle from '../components/TombolGoogle'
+import { post, tujuanLanjut } from '../lib/api'
 
 const fields = [
   { name: 'name', label: 'Nama Lengkap', type: 'text', placeholder: 'John Doe', autoComplete: 'name' },
@@ -23,9 +23,13 @@ export default function RegisterPage() {
 
     const form = new FormData(e.currentTarget)
     try {
-      const auth = await post<AuthResponse>('/auth/register', Object.fromEntries(form))
-      saveAuth(auth)
-      navigate('/')
+      // Sengaja TIDAK langsung masuk (revisi PM): akun dibuat, lalu orangnya
+      // diantar ke /masuk dan login sendiri. Token dari balasan register
+      // dibuang. `lanjut` diteruskan supaya yang daftar di tengah memesan
+      // tetap dibawa balik ke halaman pesannya.
+      await post('/auth/register', Object.fromEntries(form))
+      const lanjut = tujuanLanjut()
+      navigate(`/masuk?terdaftar=1${lanjut ? `&lanjut=${encodeURIComponent(lanjut)}` : ''}`)
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -42,16 +46,9 @@ export default function RegisterPage() {
       <p className="font-display text-[22px] font-semibold text-navy-900">Festa Festum</p>
       <h1 className="mt-4 font-display text-[26px] font-semibold text-navy-900">Buat Akun</h1>
 
-      {/* Backend belum punya OAuth — tombolnya sengaja mati, bukan tombol bohong. */}
-      <button
-        type="button"
-        disabled
-        title="Daftar dengan Google belum tersedia"
-        className="mt-6 flex h-11 w-full items-center justify-center gap-3 rounded border border-line bg-white text-[14px] text-ink disabled:opacity-60"
-      >
-        <GoogleIcon />
-        Sign up with Google
-      </button>
+      <div className="mt-6">
+        <TombolGoogle teks="signup_with" />
+      </div>
 
       <div className="mt-6 flex items-center gap-4">
         <span className="h-px flex-1 bg-line" />
@@ -96,7 +93,8 @@ export default function RegisterPage() {
 
       <p className="mt-5 text-center text-[14px] text-ink">
         Already have an account?{' '}
-        <Link to="/masuk" className="font-semibold hover:underline">
+        {/* Query-nya (?lanjut=) diteruskan apa adanya ke /masuk. */}
+        <Link to={`/masuk${window.location.search}`} className="font-semibold hover:underline">
           Sign In
         </Link>
       </p>

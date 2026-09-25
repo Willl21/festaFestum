@@ -1,7 +1,8 @@
-import { BrowserRouter, Routes, Route, Outlet, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
+import { getToken } from './lib/api'
 import LandingPage from './pages/LandingPage'
 import FloristPage from './pages/FloristPage'
 import MuaPage from './pages/MuaPage'
@@ -97,6 +98,18 @@ function SiteLayout() {
   )
 }
 
+/** Penjaga rute pemesanan & pembayaran pelanggan. Dulu tamu bisa mengisi form
+ *  pesan sampai habis lalu disambut "Token tidak ditemukan" dari backend.
+ *  Sekarang dia diantar ke /masuk lebih dulu, dan `lanjut` membawanya balik ke
+ *  halaman yang sama — query-nya (paket, tanggal, jam) ikut, jadi pilihan di
+ *  halaman detail tidak hilang. Sama seperti cekAkses di
+ *  PenjagaAkses.tsx: penjaga tampilan saja, keamanannya di backend. */
+function WajibMasuk() {
+  const { pathname, search } = useLocation()
+  if (getToken()) return <Outlet />
+  return <Navigate to={`/masuk?lanjut=${encodeURIComponent(pathname + search)}`} replace />
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -120,17 +133,20 @@ export default function App() {
           <Route path="/profil" element={<ProfilPage />} />
         </Route>
         {/* Halaman pengisian pesanan punya header/footer sendiri (tanpa
-            navigasi) supaya user tidak keluar alur di tengah pengisian. */}
-        <Route path="/florist/:id/pesan" element={<FloristOrderPage />} />
-        <Route path="/jas-kebaya/:id/pesan" element={<AttireOrderPage />} />
-        <Route path="/mua/:id/pesan" element={<VenueOrderPage kind="mua" />} />
-        <Route path="/fotografer/:id/pesan" element={<VenueOrderPage kind="fotografer" />} />
-        <Route path="/event-organizer/:id/pesan" element={<VenueOrderPage kind="eo" />} />
-        <Route path="/checkout/:bookingId" element={<CheckoutPage />} />
-        <Route path="/pembayaran/:paymentId" element={<VirtualAccountPage />} />
-        <Route path="/pesanan/selesai/:bookingId" element={<KonfirmasiPage />} />
-        {/* Invoice punya tata letak cetak sendiri, jadi di luar SiteLayout. */}
-        <Route path="/invoice/:bookingId" element={<InvoicePage />} />
+            navigasi) supaya user tidak keluar alur di tengah pengisian.
+            Semuanya butuh login — tamu diantar ke /masuk lalu dibawa balik. */}
+        <Route element={<WajibMasuk />}>
+          <Route path="/florist/:id/pesan" element={<FloristOrderPage />} />
+          <Route path="/jas-kebaya/:id/pesan" element={<AttireOrderPage />} />
+          <Route path="/mua/:id/pesan" element={<VenueOrderPage kind="mua" />} />
+          <Route path="/fotografer/:id/pesan" element={<VenueOrderPage kind="fotografer" />} />
+          <Route path="/event-organizer/:id/pesan" element={<VenueOrderPage kind="eo" />} />
+          <Route path="/checkout/:bookingId" element={<CheckoutPage />} />
+          <Route path="/pembayaran/:paymentId" element={<VirtualAccountPage />} />
+          <Route path="/pesanan/selesai/:bookingId" element={<KonfirmasiPage />} />
+          {/* Invoice punya tata letak cetak sendiri, jadi di luar SiteLayout. */}
+          <Route path="/invoice/:bookingId" element={<InvoicePage />} />
+        </Route>
         {/* Auth & onboarding vendor: layar penuh sendiri, di luar VendorLayout
             karena sidebar dashboard belum relevan sebelum profilnya jadi. */}
         <Route path="/vendor/masuk" element={<VendorLoginPage />} />

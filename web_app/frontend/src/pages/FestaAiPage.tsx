@@ -24,12 +24,14 @@ const KATEGORI: Record<string, CategoryKey> = {
 }
 
 /** Fokus acara -> kategori vendor yang dicari. Dipakai sebagai pencocokan
- *  SEMENTARA sampai AI Engineer menyediakan POST /api/v1/ai/recommend. */
+ *  SEMENTARA sampai AI Engineer menyediakan POST /api/v1/ai/recommend.
+ *  Satu fokus = satu kategori yang memang kita layani. "Katering" dan
+ *  "Hiburan" dibuang (revisi PM): dua-duanya diam-diam dipetakan ke EO,
+ *  padahal kategori itu tidak ada. */
 const FOKUS_KE_KATEGORI: Record<string, string> = {
+  'Perencanaan Acara': 'event_organizer',
   Dekorasi: 'florist',
   Dokumentasi: 'photographer',
-  Katering: 'event_organizer',
-  Hiburan: 'event_organizer',
   Busana: 'attire_rental',
   Rias: 'makeup_artist',
 }
@@ -57,7 +59,7 @@ const parameterFields = [
   },
 ]
 
-const fokusOptions = ['Dekorasi', 'Dokumentasi', 'Katering', 'Hiburan', 'Busana', 'Rias']
+const fokusOptions = Object.keys(FOKUS_KE_KATEGORI)
 
 
 export default function FestaAiPage() {
@@ -158,7 +160,7 @@ export default function FestaAiPage() {
                     type="button"
                     onClick={() => toggleFokus(f)}
                     aria-pressed={fokus.includes(f)}
-                    className={`rounded-sm border py-2.5 text-[13px] transition-colors ${
+                    className={`rounded-sm border py-2.5 text-[13px] transition-colors first:col-span-2 ${
                       fokus.includes(f)
                         ? 'border-navy-900 bg-navy-900 text-white'
                         : 'border-line bg-white hover:border-navy-900'

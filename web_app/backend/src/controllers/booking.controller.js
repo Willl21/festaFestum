@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const { hitungSaldo, vendorIdMilik } = require('../lib/saldo');
 const { acquireLock, lockHolder, releaseLock } = require('../config/redis');
 const { perTim: kategoriPerTim, BOOKING_AKTIF } = require('../lib/kategori');
+const { kirimEmail, urlFrontend } = require('../lib/email');
 
 const VALID_EVENT_TYPES = [
   'wedding', 'engagement', 'graduation', 'gala_dinner', 'corporate_seminar',
@@ -63,6 +64,17 @@ async function createBooking(req, res, next) {
   }
 
   const userId = req.user.user_id;
+
+  // Akun dari login Google lahir tanpa nomor HP (Google tidak memberinya),
+  // padahal vendor butuh nomor itu untuk menghubungi pemesannya. Ditagih di
+  // sini, satu pintu untuk kelima halaman pesan.
+  const hp = await pool.query('SELECT phone FROM users WHERE user_id = $1', [userId]);
+  if (!hp.rows[0]?.phone?.trim()) {
+    return res.status(400).json({
+      message: 'Lengkapi nomor WhatsApp di halaman Profil dulu sebelum memesan.',
+    });
+  }
+
   let vendorId = null;
   let weOwnTheLock = false;
 
@@ -442,10 +454,14 @@ async function konfirmasiBooking(req, res, next) {
     // Kepemilikan ikut di WHERE: vendor lain tidak menemukan baris ini sama
     // sekali, jadi balasannya 404 dan ID pesanan yang valid tidak bocor.
     const bk = await client.query(
-      `SELECT b.booking_id, b.confirm_status, b.payment_status
+      `SELECT b.booking_id, b.confirm_status, b.payment_status,
+              b.user_id, v.vendor_id, v.business_name, s.service_name,
+              to_char(b.event_date, 'DD/MM/YYYY') AS tanggal,
+              c.email AS customer_email, c.name AS customer_name
          FROM bookings b
          JOIN services s ON s.service_id = b.service_id
          JOIN vendors  v ON v.vendor_id  = s.vendor_id
+         JOIN users    c ON c.user_id    = b.user_id
         WHERE b.booking_id = $1 AND v.owner_user_id = $2
         FOR UPDATE OF b`,
       [req.params.bookingId, req.user.user_id]
@@ -500,7 +516,54 @@ async function konfirmasiBooking(req, res, next) {
       );
     }
 
+    // Pemberitahuan ke customer (revisi PM: "taunya udah dikonfirmasi
+    // gimana?"). Dua jalur, dengan sifat yang sengaja berbeda:
+    //
+    // 1. Pesan di ruang obrolan pesanan ini — DI DALAM transaksi. Kalau
+    //    gagal, konfirmasinya ikut batal: lebih baik vendor menekan ulang
+    //    daripada pesanan diterima diam-diam tanpa jejak di chat. Dikirim atas
+    //    nama pemilik vendor, jadi lencana obrolan di navbar customer menyala
+    //    lewat penghitung belum-dibaca yang sudah ada. Ruangnya dibuat kalau
+    //    belum ada, pola ON CONFLICT yang sama dengan openConversation.
+    const diterima = action === 'terima';
+    const isi = [
+      diterima
+        ? `[Otomatis] Pesanan "${booking.service_name}" untuk ${booking.tanggal} sudah DITERIMA. `
+          + 'Silakan bayar DP dalam 24 jam lewat menu Pesanan Saya, supaya jadwalnya tidak dilepas.'
+        : `[Otomatis] Mohon maaf, pesanan "${booking.service_name}" untuk ${booking.tanggal} DITOLAK.`,
+      note ? `Catatan vendor: ${note}` : '',
+    ].filter(Boolean).join('\n');
+
+    await client.query(
+      `INSERT INTO conversations (jenis, booking_id, user_id, vendor_id)
+       VALUES ('klien_vendor', $1, $2, $3)
+       ON CONFLICT DO NOTHING`,
+      [booking.booking_id, booking.user_id, booking.vendor_id]
+    );
+    await client.query(
+      `WITH c AS (
+         UPDATE conversations SET last_message_at = now()
+          WHERE booking_id = $1 RETURNING conversation_id
+       )
+       INSERT INTO messages (conversation_id, sender_user_id, body)
+       SELECT conversation_id, $2, $3 FROM c`,
+      [booking.booking_id, req.user.user_id, isi]
+    );
+
     await client.query('COMMIT');
+
+    // 2. Email — SESUDAH commit dan tidak ditunggu. Layanan luar yang lambat
+    //    atau mati tidak boleh menahan jawaban vendor, apalagi membatalkannya.
+    kirimEmail({
+      ke: booking.customer_email,
+      nama: booking.customer_name,
+      subjek: diterima
+        ? `Pesanan Anda di ${booking.business_name} diterima`
+        : `Pesanan Anda di ${booking.business_name} ditolak`,
+      teks: `Halo ${booking.customer_name},\n\n`
+        + isi.replace('[Otomatis] ', '')
+        + `\n\nLihat pesanan Anda: ${urlFrontend('/pesanan')}\n\nSalam,\nFesta Festum`,
+    }).catch((e) => console.error('[email] konfirmasi gagal:', e.message));
 
     const { rows } = await pool.query(`${BOOKING_SELECT} WHERE b.booking_id = $1`, [booking.booking_id]);
     res.json({ booking: rows[0] });

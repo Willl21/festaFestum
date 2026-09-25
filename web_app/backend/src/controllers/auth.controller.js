@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
@@ -79,6 +80,81 @@ async function login(req, res, next) {
     delete user.password_hash;
 
     res.json({ user, token });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/v1/auth/google
+// Body: { credential } — ID token dari tombol Google Identity Services.
+//
+// Tokennya diperiksa lewat endpoint tokeninfo Google: Google yang mengecek
+// tanda tangan & kedaluwarsanya, kita tinggal memastikan token itu memang
+// dibuat untuk Client ID KITA (`aud`) — tanpa itu, token login dari aplikasi
+// lain mana pun bisa dipakai masuk ke sini.
+// ponytail: tokeninfo = satu perjalanan ke Google per login. Upgrade kalau
+// ramai: verifikasi sendiri dengan jsonwebtoken + sertifikat publik Google.
+//
+// Tiga aturan (disepakati 25 Sep 2026):
+// - Hanya customer. Akun vendor/admin tetap masuk dengan sandi di halamannya.
+// - Email yang sudah terdaftar lewat form biasa langsung masuk ke akun itu —
+//   Google sudah membuktikan orang ini pemilik emailnya.
+// - Akun baru: nomor HP kosong (Google tidak memberinya; diisi di profil,
+//   createBooking menagihnya), sandi = hash angka acak yang tidak bisa ditebak,
+//   karena kolomnya NOT NULL dan akun ini memang tidak punya sandi.
+async function googleLogin(req, res, next) {
+  try {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      return res.status(503).json({ message: 'Login Google belum dikonfigurasi' });
+    }
+    const { credential } = req.body;
+    if (typeof credential !== 'string' || !credential) {
+      return res.status(400).json({ message: 'credential wajib diisi' });
+    }
+
+    const r = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`
+    );
+    const info = await r.json().catch(() => ({}));
+    const sah = r.ok
+      && info.aud === clientId
+      && ['accounts.google.com', 'https://accounts.google.com'].includes(info.iss)
+      && String(info.email_verified) === 'true'
+      && info.email;
+    if (!sah) {
+      return res.status(401).json({ message: 'Login Google gagal, coba lagi' });
+    }
+
+    // lower(): email dari Google selalu huruf kecil, sedangkan form daftar
+    // menyimpan apa adanya.
+    const ada = await pool.query(
+      `SELECT user_id, name, email, phone, role, avatar_url
+         FROM users WHERE lower(email) = lower($1)
+        ORDER BY created_at LIMIT 1`,
+      [info.email]
+    );
+
+    let user = ada.rows[0];
+    let baru = false;
+    if (user && user.role !== 'customer') {
+      return res.status(403).json({
+        message: 'Akun vendor/admin masuk lewat halaman masuknya sendiri dengan sandi',
+      });
+    }
+    if (!user) {
+      const sandiAcak = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), SALT_ROUNDS);
+      const dibuat = await pool.query(
+        `INSERT INTO users (name, email, phone, password_hash, role)
+         VALUES ($1, $2, '', $3, 'customer')
+         RETURNING user_id, name, email, phone, role, avatar_url`,
+        [(info.name || info.email.split('@')[0]).slice(0, 150), info.email, sandiAcak]
+      );
+      user = dibuat.rows[0];
+      baru = true;
+    }
+
+    res.status(baru ? 201 : 200).json({ user, token: signToken(user) });
   } catch (err) {
     next(err);
   }
@@ -271,4 +347,4 @@ async function changePassword(req, res, next) {
   }
 }
 
-module.exports = { register, login, me, updateMe, changePassword };
+module.exports = { register, login, googleLogin, me, updateMe, changePassword };

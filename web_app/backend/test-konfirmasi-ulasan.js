@@ -14,6 +14,18 @@ const pool = require('./src/config/db');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 
+/** Pesan otomatis di ruang obrolan sebuah pesanan (booking.controller.js,
+ *  konfirmasiBooking). Dibaca lewat DB supaya tidak ikut menandainya terbaca. */
+async function pesanOtomatis(bookingId) {
+  const { rows } = await pool.query(
+    `SELECT m.body FROM messages m
+       JOIN conversations c ON c.conversation_id = m.conversation_id
+      WHERE c.booking_id = $1`,
+    [bookingId]
+  );
+  return rows;
+}
+
 async function api(path, { method = 'GET', body, token } = {}) {
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -109,6 +121,11 @@ function tanggal(n) {
   assert.strictEqual(tolak.body.booking.confirm_status, 'ditolak');
   assert.strictEqual(tolak.body.booking.payment_status, 'cancelled');
 
+  // Customer diberi tahu lewat obrolan pesanan itu, dengan alasan vendornya.
+  const pesanTolak = await pesanOtomatis(b1.body.booking.booking_id);
+  assert.strictEqual(pesanTolak.length, 1, 'penolakan harus meninggalkan satu pesan di chat');
+  assert.match(pesanTolak[0].body, /DITOLAK[\s\S]*Sedang penuh/);
+
   const dua = await api(`/bookings/${b1.body.booking.booking_id}/konfirmasi`, {
     method: 'PATCH', token: vendor.token, body: { action: 'terima' },
   });
@@ -134,6 +151,9 @@ function tanggal(n) {
   });
   assert.strictEqual(terima.status, 200, `terima gagal: ${JSON.stringify(terima.body)}`);
   assert.strictEqual(terima.body.booking.confirm_status, 'diterima');
+  const pesanTerima = await pesanOtomatis(hidup);
+  assert.strictEqual(pesanTerima.length, 1, 'penerimaan harus meninggalkan satu pesan di chat');
+  assert.match(pesanTerima[0].body, /DITERIMA/);
 
   const bayar = await api('/payments/charge', {
     method: 'POST', token: customer.token,

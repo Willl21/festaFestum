@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import AuthLayout, { inputClass } from '../components/AuthLayout'
-import { EyeIcon, EyeOffIcon, GoogleIcon } from '../components/icons'
-import { post, saveAuth, pesanSesiHabis, type AuthResponse } from '../lib/api'
+import { EyeIcon, EyeOffIcon } from '../components/icons'
+import TombolGoogle from '../components/TombolGoogle'
+import { post, saveAuth, pesanSesiHabis, tujuanLanjut, type AuthResponse } from '../lib/api'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -11,6 +12,12 @@ export default function LoginPage() {
   // karena sesinya kedaluwarsa (?sesi=habis).
   const [error, setError] = useState(pesanSesiHabis())
   const [loading, setLoading] = useState(false)
+  const lanjut = tujuanLanjut()
+  // Penjelasan kenapa orang ini ada di sini: baru daftar (RegisterPage), atau
+  // dilempar WajibMasuk dari halaman pesan. Bukan galat, jadi warnanya beda.
+  const info = new URLSearchParams(window.location.search).get('terdaftar')
+    ? 'Akun berhasil dibuat. Silakan masuk untuk melanjutkan.'
+    : lanjut ? 'Masuk dulu untuk melanjutkan pemesanan.' : ''
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -24,7 +31,7 @@ export default function LoginPage() {
         password: form.get('password'),
       })
       saveAuth(auth)
-      navigate('/')
+      navigate(lanjut ?? '/', { replace: true })
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -43,6 +50,11 @@ export default function LoginPage() {
         Selamat Datang Kembali
       </h1>
       <p className="mt-2 text-[14px] text-muted">Silakan masukkan detail Anda untuk masuk.</p>
+      {info && !error && (
+        <p role="status" className="mt-4 rounded bg-lavender px-4 py-3 text-[14px] text-navy-900">
+          {info}
+        </p>
+      )}
 
       <form onSubmit={handleSubmit} className="mt-7">
         <label htmlFor="email" className="block text-[12px] font-semibold tracking-[0.08em] text-navy-900">
@@ -106,20 +118,13 @@ export default function LoginPage() {
         <span className="h-px flex-1 bg-line" />
       </div>
 
-      {/* Backend belum punya OAuth — tombolnya sengaja mati, bukan tombol bohong. */}
-      <button
-        type="button"
-        disabled
-        title="Login Google belum tersedia"
-        className="mt-5 flex h-11 w-full items-center justify-center gap-3 rounded border border-line bg-white text-[14px] text-ink disabled:opacity-60"
-      >
-        <GoogleIcon />
-        Masuk dengan Google
-      </button>
+      <div className="mt-5">
+        <TombolGoogle teks="signin_with" />
+      </div>
 
       <p className="mt-7 text-center text-[14px] text-ink">
         Belum punya akun?{' '}
-        <Link to="/daftar" className="ml-1 text-[13px] font-semibold tracking-[0.1em] text-[#2e6b52] hover:underline">
+        <Link to={lanjut ? `/daftar?lanjut=${encodeURIComponent(lanjut)}` : '/daftar'} className="ml-1 text-[13px] font-semibold tracking-[0.1em] text-[#2e6b52] hover:underline">
           DAFTAR
         </Link>
       </p>

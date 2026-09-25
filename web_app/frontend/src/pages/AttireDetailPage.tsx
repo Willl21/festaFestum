@@ -48,6 +48,19 @@ const sizeGuides = {
 
 const sizes = ['S', 'M', 'L', 'XL', 'XLL']
 
+type Jenis = 'semua' | 'jas' | 'kebaya'
+
+/** Jas/Kebaya dibaca dari `details.jenis_pakaian`, teks bebas isian vendor —
+ *  tidak ada kolom jenis di database. Jas = busana pria (jas, beskap), Kebaya =
+ *  busana wanita (kebaya, gaun malam), selaras dengan dua tabel ukuran di atas.
+ *  Koleksi yang tidak mengisinya cuma muncul di "Semua". */
+function jenisDari(s: ApiService | undefined): 'jas' | 'kebaya' | null {
+  const t = (s?.details?.jenis_pakaian ?? '').toLowerCase()
+  if (/kebaya|gaun/.test(t)) return 'kebaya'
+  if (/jas|beskap/.test(t)) return 'jas'
+  return null
+}
+
 /** Tombol pilihan dua-arah (Jas/Kebaya, Ya/Tidak). Terpilih = navy. */
 function Toggle({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
@@ -79,7 +92,10 @@ export default function AttireDetailPage() {
   /** Produk yang sedang dipilih. Halaman ini dulu selalu memakai layanan
    *  PERTAMA, jadi vendor dengan enam koleksi cuma bisa menjual satu. */
   const [produkId, setProdukId] = useState('')
-  const [jenis, setJenis] = useState<'jas' | 'kebaya'>('jas')
+  // Penyaring daftar koleksi (revisi PM). Dulu tombol Jas/Kebaya di panel
+  // kanan cuma mengganti tabel ukuran, tidak menyaring apa pun — orang
+  // bingung harus menekan yang mana untuk memesan.
+  const [jenis, setJenis] = useState<Jenis>('semua')
   const [size, setSize] = useState('')
   const [color, setColor] = useState(WARNA[0].hex)
   const [fitting, setFitting] = useState(true)
@@ -103,6 +119,9 @@ export default function AttireDetailPage() {
   }, [id])
 
   const utama = layanan.find((s) => s.service_id === produkId) ?? layanan[0]
+  const tampil = jenis === 'semua' ? layanan : layanan.filter((s) => jenisDari(s) === jenis)
+  // Saat "Semua", tabel ukuran mengikuti koleksi yang sedang dipilih.
+  const jenisUkuran = jenis !== 'semua' ? jenis : jenisDari(utama) ?? 'jas'
   const [jam, setJam] = useState('')
 
   /** Tiap produk punya kalender dan lead time sendiri, jadi tanggal yang
@@ -112,6 +131,15 @@ export default function AttireDetailPage() {
     if (id === produkId) return
     setProdukId(id)
     setTglSewa(''); setJam(''); setTglAmbil(''); setTglFitting(''); setCek(null)
+  }
+
+  /** Koleksi yang sedang dipilih bisa tersaring keluar; kalau begitu pilihan
+   *  pindah ke koleksi pertama yang tersisa, supaya panel pemesanan tidak
+   *  memegang barang yang tidak kelihatan di daftar. */
+  function pilihJenis(j: Jenis) {
+    setJenis(j)
+    const sisa = j === 'semua' ? layanan : layanan.filter((s) => jenisDari(s) === j)
+    if (sisa.length && !sisa.some((s) => s.service_id === produkId)) pilihProduk(sisa[0].service_id)
   }
 
   // Jadwal sewa dipakai sebagai tanggal acara — itu hari busananya dipakai.
@@ -141,7 +169,7 @@ export default function AttireDetailPage() {
       if (r.available) {
         const q = new URLSearchParams({
           service: utama.service_id, date: tglSewa, jam: jam,
-          jenis, size, color, fitting: String(fitting),
+          jenis: jenisUkuran, size, color, fitting: String(fitting),
           ambil: tglAmbil, ...(fitting && tglFitting ? { tglFitting } : {}),
         })
         navigate(`/${kat.slug}/${id}/pesan?${q}`)
@@ -215,13 +243,23 @@ export default function AttireDetailPage() {
                 Pilih satu koleksi untuk melihat jadwal dan harga sewanya di panel pemesanan.
               </p>
 
-              {layanan.length === 0 ? (
+              {layanan.length > 0 && (
+                <div className="mt-5 flex max-w-[400px] gap-3" role="group" aria-label="Saring koleksi">
+                  <Toggle active={jenis === 'semua'} onClick={() => pilihJenis('semua')}>Semua</Toggle>
+                  <Toggle active={jenis === 'jas'} onClick={() => pilihJenis('jas')}>Jas</Toggle>
+                  <Toggle active={jenis === 'kebaya'} onClick={() => pilihJenis('kebaya')}>Kebaya</Toggle>
+                </div>
+              )}
+
+              {tampil.length === 0 ? (
                 <p className="mt-7 text-[14px] text-muted">
-                  Vendor ini belum menambahkan koleksi.
+                  {layanan.length === 0
+                    ? 'Vendor ini belum menambahkan koleksi.'
+                    : `Vendor ini belum punya koleksi ${jenis}.`}
                 </p>
               ) : (
                 <ul className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                  {layanan.map((s) => {
+                  {tampil.map((s) => {
                     const aktif = s.service_id === utama?.service_id
                     return (
                       <li key={s.service_id}>
@@ -279,7 +317,7 @@ export default function AttireDetailPage() {
               </p>
 
               <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {sizeGuides[jenis].map((g) => (
+                {sizeGuides[jenisUkuran].map((g) => (
                   <div key={g.size} className="border border-lavender bg-lavender/40 p-4">
                     <span className="inline-block rounded-sm bg-[#8f9bd4] px-2.5 py-0.5 text-[11px] font-bold text-white">
                       {g.size}
@@ -300,15 +338,10 @@ export default function AttireDetailPage() {
                 Detail Informasi
               </p>
 
-              <p className="mt-5 text-[15px] font-semibold">Pilihan Kategori</p>
-              <div className="mt-2 flex gap-4">
-                <Toggle active={jenis === 'jas'} onClick={() => setJenis('jas')}>
-                  Jas
-                </Toggle>
-                <Toggle active={jenis === 'kebaya'} onClick={() => setJenis('kebaya')}>
-                  Kebaya
-                </Toggle>
-              </div>
+              {/* Pilihan Jas/Kebaya pindah ke atas daftar koleksi sebagai
+                  penyaring. Di sini cukup diingatkan apa yang sedang dipesan. */}
+              <p className="mt-5 text-[15px] font-semibold">Koleksi Dipilih</p>
+              <p className="mt-1 text-[14px] text-ink/80">{utama?.service_name ?? '—'}</p>
 
               <p className="mt-5 text-[15px] font-semibold">Input Ukuran</p>
               <div className="mt-2 grid grid-cols-5 gap-2">

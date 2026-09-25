@@ -78,6 +78,15 @@ const PESAN_SESI_HABIS = 'Sesi Anda sudah berakhir. Silakan masuk lagi.'
 export const pesanSesiHabis = () =>
   new URLSearchParams(window.location.search).get('sesi') === 'habis' ? PESAN_SESI_HABIS : ''
 
+/** `?lanjut=` dipasang WajibMasuk (PenjagaAkses.tsx) dan datang dari URL, jadi
+ *  siapa pun bisa mengisinya. Hanya path di situs ini yang diterima —
+ *  "//evil.com" atau "https://..." bakal membawa orang yang baru login ke situs
+ *  lain. */
+export function tujuanLanjut() {
+  const v = new URLSearchParams(window.location.search).get('lanjut')
+  return v && v.startsWith('/') && !v.startsWith('//') && !v.startsWith('/\\') ? v : null
+}
+
 /** Tiap area punya halaman masuknya sendiri. Dipilih dari URL yang sedang
  *  dibuka, bukan dari role di localStorage — sesi yang mati justru bikin
  *  role-nya tidak bisa dipercaya. */

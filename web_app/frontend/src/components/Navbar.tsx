@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { ChatIcon, MenuIcon } from './icons'
-import { clearAuth, pesanBelumDibaca, usePengguna } from '../lib/api'
+import { clearAuth, listMyBookings, pesanBelumDibaca, usePengguna } from '../lib/api'
 
 export default function Navbar() {
   const navigate = useNavigate()
@@ -13,6 +13,10 @@ export default function Navbar() {
   // Beranda/Festa AI/Pesanan Saya sama sekali tidak bisa dijangkau dari HP.
   const [menuBuka, setMenuBuka] = useState(false)
   const [belumDibaca, setBelumDibaca] = useState(0)
+  // Pesanan yang sudah DITERIMA vendor tapi DP-nya belum dibayar (revisi PM:
+  // "taunya udah dikonfirmasi gimana?"). Tanpa ini customer harus rajin
+  // membuka Pesanan Saya sendiri untuk tahu gilirannya membayar.
+  const [perluBayar, setPerluBayar] = useState(0)
 
   // Navbar ikut di semua halaman pelanggan, jadi lencananya ditarik di sini —
   // satu angka lewat /chat/belum-dibaca, bukan seluruh daftar percakapan.
@@ -23,10 +27,21 @@ export default function Navbar() {
     // dan masuk lagi memicu efek ini menarik angka yang segar.
     if (!user) return
     let hidup = true
-    const tarik = () =>
+    const tarik = () => {
       pesanBelumDibaca()
         .then((r) => hidup && setBelumDibaca(r.jumlah))
         .catch(() => {}) // lencana bukan alasan merusak navbar di semua halaman
+      // Memakai GET /bookings yang sudah ada, bukan endpoint hitung baru:
+      // pesanan satu customer cuma belasan baris. Vendor & admin dilewati —
+      // "Pesanan Saya" milik pelanggan.
+      if (user.role === 'customer') {
+        listMyBookings()
+          .then((r) => hidup && setPerluBayar(r.data.filter(
+            (b) => b.confirm_status === 'diterima' && b.payment_status === 'pending',
+          ).length))
+          .catch(() => {})
+      }
+    }
     tarik()
     const t = setInterval(tarik, 30_000)
     return () => {
@@ -39,8 +54,19 @@ export default function Navbar() {
   const links = [
     { to: '/', label: 'Beranda' },
     { to: '/festa-ai', label: 'Festa AI' },
-    ...(user ? [{ to: '/pesanan', label: 'Pesanan Saya' }] : []),
-  ]
+    ...(user ? [{ to: '/pesanan', label: 'Pesanan Saya', lencana: perluBayar }] : []),
+  ] as { to: string; label: string; lencana?: number }[]
+
+  /** Titik angka di "Pesanan Saya". Dipakai dua kali: bilah desktop & menu HP. */
+  const lencana = (n?: number) =>
+    n ? (
+      <span
+        title={`${n} pesanan sudah diterima vendor dan menunggu pembayaran DP`}
+        className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-maroon px-1 align-top text-[10px] font-semibold text-white"
+      >
+        {n > 9 ? '9+' : n}
+      </span>
+    ) : null
 
   function keluar() {
     clearAuth()
@@ -76,6 +102,7 @@ export default function Navbar() {
               {({ isActive }) => (
                 <>
                   {l.label}
+                  {lencana(l.lencana)}
                   {isActive && (
                     <motion.span
                       // Satu-satunya yang bikin garisnya meluncur, bukan
@@ -194,6 +221,7 @@ export default function Navbar() {
               }
             >
               {l.label}
+              {lencana(l.lencana)}
             </NavLink>
           ))}
         </nav>
