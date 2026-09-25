@@ -1,6 +1,8 @@
 const pool = require('../config/db');
 const { acquireLock, lockHolder, LOCK_TTL_SECONDS } = require('../config/redis');
-const { perTim, BOOKING_AKTIF } = require('../lib/kategori');
+const {
+  perTim, BOOKING_AKTIF, berbasisJam, durasiPesanan, MAKS_JAM_TAMBAHAN,
+} = require('../lib/kategori');
 
 // Rentang maksimal satu permintaan ketersediaan. Kalender cuma butuh
 // sebulan; 92 hari memberi ruang untuk tampilan tiga bulan.
@@ -59,6 +61,11 @@ const sqlKetersediaan = (svc, dari, sampai) => `
      WHERE b.vendor_id = svc.vendor_id
        AND b.event_date BETWEEN ${dari}::date AND ${sampai}::date
        AND b.${BOOKING_AKTIF}
+       -- Pesanan berbasis jam (MUA & fotografer, migrasi 016) tidak
+       -- menghabiskan HARI — yang habis jam tim-nya, dan itu dijawab per jam
+       -- oleh GET /services/:id/jam. Di level tanggal vendor seperti itu
+       -- cuma bisa 'blocked' (ditutup) atau 'available'.
+       AND b.durasi_menit IS NULL
      GROUP BY b.event_date
   )
   SELECT h.event_date::text AS event_date,
@@ -85,7 +92,8 @@ const sqlKetersediaan = (svc, dari, sampai) => `
 async function cekTanggal(service_id, event_date) {
   const q = await pool.query(
     `SELECT s.vendor_id, s.service_name, s.price, s.minimum_notice_days, s.category,
-            v.daily_capacity,
+            s.durasi_menit, s.per_orang, s.harga_per_jam_tambahan,
+            v.daily_capacity, v.jeda_menit,
             ($2::date >= CURRENT_DATE + s.minimum_notice_days) AS notice_ok,
             ($2::date <= CURRENT_DATE + ${HORIZON_HARI}) AS horizon_ok,
             k.status, k.sisa_kapasitas
@@ -103,7 +111,49 @@ async function cekTanggal(service_id, event_date) {
 // dikunci — memaksa pembeli antre satu-satu di checkout cuma menghalangi
 // mereka tanpa mencegah apa pun, dan kapasitasnya tetap dijaga advisory lock
 // saat booking dibuat.
-const eksklusifSeharian = (category, daily_capacity) => perTim(category) && daily_capacity === 1;
+//
+// Vendor berbasis jam juga tidak: harinya tidak pernah habis oleh satu
+// pesanan, jadi mengunci SEHARIAN justru menolak pesanan jam lain yang sah.
+const eksklusifSeharian = (category, daily_capacity) =>
+  perTim(category) && daily_capacity === 1 && !berbasisJam(category);
+
+/** Nomor tim (slot_ke) terkecil yang KOSONG di rentang [mulai, mulai+durasi+jeda),
+ *  atau null kalau semua tim bentrok. Dipakai createBooking (di dalam advisory
+ *  lock) dan /schedules/check, supaya keduanya tidak pernah beda jawaban.
+ *  Rentangnya tsrange yang sama persis dengan kolom bookings.rentang, jadi yang
+ *  ditolak di sini juga yang akan ditolak constraint EXCLUDE di DB. */
+async function timKosong(db, { vendor_id, event_date, start_time, durasi, jeda, kapasitas }) {
+  const { rows } = await db.query(
+    `SELECT n FROM generate_series(0, $6::int - 1) n
+      WHERE NOT EXISTS (
+        SELECT 1 FROM bookings b
+         WHERE b.vendor_id = $1 AND b.slot_ke = n AND b.rentang IS NOT NULL
+           AND b.${BOOKING_AKTIF}
+           AND b.rentang && tsrange($2::date + $3::time,
+                                    $2::date + $3::time + ($4::int + $5::int) * interval '1 minute')
+      )
+      ORDER BY n LIMIT 1`,
+    [vendor_id, event_date, start_time, durasi, jeda, kapasitas]
+  );
+  return rows.length ? rows[0].n : null;
+}
+
+/** Durasi pesanan berbasis jam, atau pesan galat. Aturan validasinya dipakai
+ *  bersama createBooking dan /schedules/check. */
+function bacaDurasi(layanan, jumlah, jam_tambahan) {
+  const tambahan = jam_tambahan == null ? 0 : Number(jam_tambahan);
+  if (!Number.isInteger(tambahan) || tambahan < 0 || tambahan > MAKS_JAM_TAMBAHAN) {
+    return { galat: `jam_tambahan harus bilangan bulat 0-${MAKS_JAM_TAMBAHAN}` };
+  }
+  if (tambahan > 0 && layanan.harga_per_jam_tambahan == null) {
+    return { galat: 'Layanan ini tidak menerima jam tambahan' };
+  }
+  // Paket per sesi harganya per paket: jumlah orang tidak berlaku.
+  if (!layanan.per_orang && jumlah !== 1) {
+    return { galat: 'Paket ini per sesi, jumlah orang tidak bisa diubah' };
+  }
+  return { tambahan, durasi: durasiPesanan(layanan, jumlah, tambahan) };
+}
 
 // POST /api/v1/schedules  (vendor_owner)
 // Body: { dates: ['YYYY-MM-DD', ...] }
@@ -228,12 +278,70 @@ async function listAvailability(req, res, next) {
   }
 }
 
+// GET /api/v1/services/:serviceId/jam?date=YYYY-MM-DD  (public)
+//
+// Untuk kolom tombol jam di kalender, khusus layanan berbasis jam. Membalas
+// rentang yang sudah TERKUNCI per tim di sekitar tanggal itu, dalam menit
+// relatif terhadap 00:00 tanggal tersebut (boleh negatif / lewat 1440 untuk
+// pesanan yang menyeberang tengah malam). Frontend yang menghitung jam mulai
+// mana yang masih muat untuk durasi pilihannya — durasinya berubah tiap kali
+// jumlah orang atau jam tambahan diubah, dan itu tidak perlu bolak-balik ke
+// server. Keputusan akhirnya tetap di createBooking.
+async function listJamTerisi(req, res, next) {
+  try {
+    const { date } = req.query;
+    if (!isValidDate(date)) {
+      return res.status(400).json({ message: 'date wajib diisi, format YYYY-MM-DD' });
+    }
+
+    const svc = await pool.query(
+      `SELECT s.vendor_id, s.category, s.durasi_menit, s.per_orang, s.harga_per_jam_tambahan,
+              v.daily_capacity, v.jeda_menit
+         FROM services s
+         JOIN vendors  v ON v.vendor_id = s.vendor_id
+        WHERE s.service_id = $1 AND s.is_active = TRUE`,
+      [req.params.serviceId]
+    );
+    if (svc.rows.length === 0) {
+      return res.status(404).json({ message: 'Layanan tidak ditemukan atau sudah tidak aktif' });
+    }
+    const l = svc.rows[0];
+    if (!berbasisJam(l.category)) {
+      return res.status(400).json({ message: 'Layanan ini tidak dipesan per jam' });
+    }
+
+    // Jendela sehari sebelum sampai dua hari sesudah: cukup untuk menangkap
+    // pesanan kemarin yang menyeberang tengah malam dan pesanan besok pagi
+    // yang bisa ditabrak durasi panjang yang dimulai malam ini.
+    const { rows } = await pool.query(
+      `SELECT b.slot_ke,
+              (extract(epoch FROM lower(b.rentang) - $2::date::timestamp) / 60)::int AS mulai,
+              (extract(epoch FROM upper(b.rentang) - $2::date::timestamp) / 60)::int AS selesai
+         FROM bookings b
+        WHERE b.vendor_id = $1 AND b.rentang IS NOT NULL AND b.${BOOKING_AKTIF}
+          AND b.rentang && tsrange($2::date - 1, $2::date + 2)
+        ORDER BY b.slot_ke, lower(b.rentang)`,
+      [l.vendor_id, date]
+    );
+
+    res.json({
+      kapasitas: l.daily_capacity,
+      jeda_menit: l.jeda_menit,
+      terisi: rows,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // POST /api/v1/schedules/check  (public)
 // Body: { service_id, event_date }
 // Menjawab satu pertanyaan: tanggal ini bisa dipesan atau tidak, dan kenapa.
 async function checkAvailability(req, res, next) {
   try {
-    const { service_id, event_date } = req.body;
+    // start_time/quantity/jam_tambahan opsional, dan cuma berarti untuk
+    // layanan berbasis jam: tanpa itu yang dijawab tetap "tanggalnya bisa".
+    const { service_id, event_date, start_time, quantity, jam_tambahan } = req.body;
 
     if (!service_id || !event_date) {
       return res.status(400).json({ message: 'service_id dan event_date wajib diisi' });
@@ -282,6 +390,26 @@ async function checkAvailability(req, res, next) {
           ? 'Vendor tidak menerima pesanan di tanggal ini'
           : 'Vendor sudah penuh di tanggal ini',
       });
+    }
+
+    // Jamnya sendiri: masih ada tim yang kosong selama rentang itu?
+    if (berbasisJam(r.category) && start_time) {
+      if (!/^([01]\d|2[0-3]):00$/.test(start_time)) {
+        return res.status(400).json({ message: 'start_time harus jam penuh, format HH:00' });
+      }
+      const jumlah = quantity == null ? 1 : Number(quantity);
+      const d = bacaDurasi(r, jumlah, jam_tambahan);
+      if (d.galat) return res.status(400).json({ message: d.galat });
+      const tim = await timKosong(pool, {
+        vendor_id: r.vendor_id, event_date, start_time,
+        durasi: d.durasi, jeda: r.jeda_menit, kapasitas: r.daily_capacity,
+      });
+      if (tim === null) {
+        return res.json({
+          ...base, available: false,
+          reason: 'Jam itu bentrok dengan pesanan lain. Pilih jam lain.',
+        });
+      }
     }
 
     // Bebas menurut DB, tapi mungkin sedang dipegang user lain di checkout.
@@ -386,7 +514,7 @@ async function listMySchedules(req, res, next) {
            FROM generate_series($2::date, $3::date, interval '1 day') d
        ),
        aktif AS (
-         SELECT b.booking_id, b.event_date, b.per_tim, b.quantity,
+         SELECT b.booking_id, b.event_date, b.per_tim, b.quantity, b.durasi_menit,
                 b.start_time, b.payment_status, u.name AS customer_name
            FROM bookings b
            JOIN users u ON u.user_id = b.user_id
@@ -395,9 +523,11 @@ async function listMySchedules(req, res, next) {
             AND b.${BOOKING_AKTIF}
        ),
        terpakai AS (
+         -- Pesanan berbasis jam tidak menghabiskan hari (migrasi 016), jadi
+         -- tidak ikut dihitung di sini; jumlah_pesanan tetap menyebutnya.
          SELECT event_date,
                 SUM(CASE WHEN per_tim THEN 1 ELSE quantity END)::int AS jumlah
-           FROM aktif GROUP BY event_date
+           FROM aktif WHERE durasi_menit IS NULL GROUP BY event_date
        )
        SELECT h.event_date::text AS event_date,
               tutup.schedule_id,
@@ -466,6 +596,7 @@ async function bukaSlot(req, res, next) {
 }
 
 module.exports = {
+  listJamTerisi, timKosong, bacaDurasi,
   tutupTanggal, checkAvailability, listAvailability, holdSlot, listMySchedules,
   bukaSlot,
 };

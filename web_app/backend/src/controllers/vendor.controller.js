@@ -130,6 +130,10 @@ async function listVendors(req, res, next) {
            WHERE bk.vendor_id = v.vendor_id
              AND bk.event_date = $${pDate}::date
              AND bk.${BOOKING_AKTIF}
+             -- MUA & fotografer (migrasi 016) tidak kehabisan HARI karena
+             -- satu pesanan pagi; jamnya yang habis, dan itu diputuskan saat
+             -- memilih jam. Sama dengan sqlKetersediaan di schedule.controller.
+             AND bk.durasi_menit IS NULL
         ), 0) < v.daily_capacity`);
       }
 
@@ -242,7 +246,8 @@ async function getVendorDetail(req, res, next) {
     const [servicesResult, imagesResult] = await Promise.all([
       pool.query(
         `SELECT service_id, service_name, category, description, price,
-                minimum_notice_days, details
+                minimum_notice_days, details,
+                durasi_menit, per_orang, harga_per_jam_tambahan
          FROM services
          WHERE vendor_id = $1 AND is_active = TRUE
          ORDER BY price ASC`,
@@ -276,7 +281,7 @@ async function getVendorDetail(req, res, next) {
 async function updateVendor(req, res, next) {
   try {
     const { vendorId } = req.params;
-    const { business_name, city, address, description, daily_capacity } = req.body;
+    const { business_name, city, address, description, daily_capacity, jeda_menit } = req.body;
 
     if (city && !VALID_CITIES.includes(city)) {
       return res.status(400).json({ message: 'city tidak valid', allowed: VALID_CITIES });
@@ -293,6 +298,16 @@ async function updateVendor(req, res, next) {
       }
     }
 
+    // Jeda perjalanan antar-pesanan MUA/fotografer (migrasi 016). Diisi
+    // vendor sendiri karena jarak antar-lokasi di Jabodetabek beda-beda.
+    // Hanya memengaruhi pesanan BARU — yang sudah ada menyimpan salinannya.
+    if (jeda_menit !== undefined) {
+      const n = Number(jeda_menit);
+      if (!Number.isInteger(n) || n < 0 || n > 480) {
+        return res.status(400).json({ message: 'jeda_menit harus bilangan bulat 0-480' });
+      }
+    }
+
     // Kepemilikan dicek langsung di klausa WHERE, sehingga vendor lain
     // tidak bisa mengubah data walau menebak vendor_id.
     const result = await pool.query(
@@ -302,12 +317,14 @@ async function updateVendor(req, res, next) {
          address       = COALESCE($3, address),
          description   = COALESCE($4, description),
          daily_capacity = COALESCE($5, daily_capacity),
+         jeda_menit    = COALESCE($8, jeda_menit),
          updated_at    = now()
        WHERE vendor_id = $6 AND owner_user_id = $7
        RETURNING *`,
       [business_name || null, city || null, address || null, description || null,
        daily_capacity === undefined ? null : Number(daily_capacity),
-       vendorId, req.user.user_id]
+       vendorId, req.user.user_id,
+       jeda_menit === undefined ? null : Number(jeda_menit)]
     );
 
     if (result.rows.length === 0) {

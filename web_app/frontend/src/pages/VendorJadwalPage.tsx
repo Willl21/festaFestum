@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { VendorPageHeader } from '../components/VendorLayout'
 import { ChevronDown } from '../components/icons'
-import { listMySchedules, tutupTanggal, ubahKapasitas, getMyVendor, kirim } from '../lib/api'
+import {
+  listMySchedules, tutupTanggal, ubahKapasitas, ubahJeda, getMyVendor, getMyServices, kirim,
+} from '../lib/api'
 
 /** Kalender ketersediaan vendor — sumber data untuk schedule-first discovery.
  *
@@ -75,6 +77,13 @@ export default function VendorJadwalPage() {
   const [kapasitas, setKapasitas] = useState(1)
   const [vendorId, setVendorId] = useState('')
   const [simpanKapasitas, setSimpanKapasitas] = useState('')
+  // MUA & fotografer (migrasi 016): kapasitas = jumlah TIM yang bisa jalan
+  // bersamaan, dan harinya tidak pernah "penuh" karena satu pesanan — yang
+  // habis jam tim-nya. Jeda = waktu perjalanan yang ikut dikunci sesudah
+  // tiap pesanan.
+  const [perJam, setPerJam] = useState(false)
+  const [jeda, setJeda] = useState(60)
+  const [simpanJedaStatus, setSimpanJedaStatus] = useState('')
 
   const days = useMemo(() => {
     const first = new Date(month.getFullYear(), month.getMonth(), 1)
@@ -126,7 +135,15 @@ export default function VendorJadwalPage() {
   // vendor_id tidak ikut di /schedules/me, padahal PATCH kapasitas butuh dia.
   useEffect(() => {
     getMyVendor()
-      .then((r) => setVendorId(r.vendor.vendor_id))
+      .then((r) => {
+        setVendorId(r.vendor.vendor_id)
+        setJeda(r.vendor.jeda_menit ?? 60)
+      })
+      .catch(() => {})
+    // Satu vendor satu kategori, jadi cukup melihat apakah layanannya
+    // berbasis jam.
+    getMyServices()
+      .then((r) => setPerJam(r.data.some((s) => s.durasi_menit != null)))
       .catch(() => {})
   }, [])
 
@@ -143,6 +160,19 @@ export default function VendorJadwalPage() {
     } catch (e) {
       setGalat((e as Error).message)
       setSimpanKapasitas('')
+    }
+  }
+
+  async function simpanJeda(n: number) {
+    if (!vendorId) return
+    setSimpanJedaStatus('menyimpan')
+    setGalat('')
+    try {
+      await ubahJeda(vendorId, n)
+      setSimpanJedaStatus('tersimpan')
+    } catch (e) {
+      setGalat((e as Error).message)
+      setSimpanJedaStatus('')
     }
   }
 
@@ -189,7 +219,9 @@ export default function VendorJadwalPage() {
               </p>
             </div>
             <div className="rounded-md border border-line bg-white px-5 py-3 text-center">
-              <label htmlFor="kapasitas" className="sr-only">Pesanan per hari</label>
+              <label htmlFor="kapasitas" className="sr-only">
+                {perJam ? 'Jumlah tim bersamaan' : 'Pesanan per hari'}
+              </label>
               <input
                 id="kapasitas"
                 type="number"
@@ -201,9 +233,28 @@ export default function VendorJadwalPage() {
                 className="w-16 rounded border border-line text-center font-display text-[24px] font-semibold"
               />
               <p className="text-[12px] text-ink/70">
-                pesanan/hari{simpanKapasitas === 'tersimpan' && ' ✓'}
+                {perJam ? 'tim bersamaan' : 'pesanan/hari'}{simpanKapasitas === 'tersimpan' && ' ✓'}
               </p>
             </div>
+            {perJam && (
+              <div className="rounded-md border border-line bg-white px-5 py-3 text-center">
+                <label htmlFor="jeda" className="sr-only">Jeda antar-pesanan dalam menit</label>
+                <input
+                  id="jeda"
+                  type="number"
+                  min={0}
+                  max={480}
+                  step={15}
+                  value={jeda}
+                  onChange={(e) => setJeda(Math.min(480, Math.max(0, Number(e.target.value) || 0)))}
+                  onBlur={(e) => simpanJeda(Math.min(480, Math.max(0, Number(e.target.value) || 0)))}
+                  className="w-20 rounded border border-line text-center font-display text-[24px] font-semibold"
+                />
+                <p className="text-[12px] text-ink/70" title="Waktu perjalanan yang ikut dikunci sesudah tiap pesanan. Berlaku untuk pesanan baru.">
+                  menit jeda{simpanJedaStatus === 'tersimpan' && ' ✓'}
+                </p>
+              </div>
+            )}
           </div>
         }
       />
@@ -270,7 +321,9 @@ export default function VendorJadwalPage() {
                       {/* Angka terpakai/kapasitas menggantikan tiga titik shift:
                           tanpa itu, vendor berkapasitas 10 tidak punya cara
                           melihat berapa yang sudah masuk hari itu. */}
-                      {hari.terpakai > 0 && (
+                      {perJam ? hari.jumlahPesanan > 0 && (
+                        <span className="text-[10px] text-ink/60">{hari.jumlahPesanan} pesanan</span>
+                      ) : hari.terpakai > 0 && (
                         <span className="text-[10px] text-ink/60">
                           {hari.terpakai}/{kapasitas}
                         </span>
@@ -307,7 +360,9 @@ export default function VendorJadwalPage() {
               </h2>
 
               <p className="mt-4 text-[13px] text-ink/70">
-                {hariDipilih.terpakai} dari {kapasitas} terpakai
+                {perJam
+                  ? `${hariDipilih.jumlahPesanan} pesanan di tanggal ini. Jam yang masih kosong tetap bisa dipesan.`
+                  : `${hariDipilih.terpakai} dari ${kapasitas} terpakai`}
               </p>
 
               {hariDipilih.status === 'booked' ? (

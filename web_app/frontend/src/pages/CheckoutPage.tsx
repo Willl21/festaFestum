@@ -8,7 +8,8 @@ import { LockIcon, ShieldIcon } from '../components/icons'
 import { categories, namaKota, type CategoryKey } from '../data/categories'
 import { grupMetode, metodeBayar } from '../data/payments'
 import { rupiah } from '../lib/format'
-import { getBooking, bayarBooking, type ApiBooking } from '../lib/api'
+import { getBooking, bayarBooking, urlFotoLayanan, type ApiBooking } from '../lib/api'
+import { rentangJam } from '../lib/durasi'
 
 /** Enum vendor_category dari backend -> kunci kategori di frontend. */
 const KATEGORI: Record<string, CategoryKey> = {
@@ -112,10 +113,15 @@ export default function CheckoutPage() {
 
                   <div className="p-7">
                     <div className="flex flex-wrap items-center gap-8">
+                      {/* Foto LAYANAN yang dipesan, pola yang sama dengan
+                          Pesanan Saya. Dulu <Img> ini tanpa src sama sekali,
+                          jadi selamanya kotak polos. Slot kosong dibalas 404
+                          dan Img jatuh ke blok polos lewat onError. */}
                       <Img
-                        alt={booking.business_name}
+                        src={urlFotoLayanan(booking.service_id)}
+                        alt={booking.service_name}
                         tint={kat.tint}
-                        className="h-[170px] w-[170px] object-contain"
+                        className="h-[170px] w-[170px] object-cover"
                       />
                       <div>
                         <h3 className="font-display text-[27px] font-semibold">{booking.business_name}</h3>
@@ -131,7 +137,7 @@ export default function CheckoutPage() {
                           {new Date(booking.event_date).toLocaleDateString('id-ID', {
                             day: 'numeric', month: 'long', year: 'numeric',
                           })}{' '}
-                          · {booking.start_time}
+                          · {rentangJam(booking)}
                         </dd>
                       </div>
                       <div>

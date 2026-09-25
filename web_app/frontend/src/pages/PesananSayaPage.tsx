@@ -10,6 +10,7 @@ import {
   getToken, listMyBookings, batalBooking, kirimUlasan, bukaPercakapan, urlFotoLayanan,
   type ApiBooking,
 } from '../lib/api'
+import { rentangJam } from '../lib/durasi'
 
 const KATEGORI: Record<string, CategoryKey> = {
   florist: 'florist',
@@ -311,7 +312,7 @@ export default function PesananSayaPage() {
                         <div>
                           <dt className="text-[10px] font-semibold tracking-[0.04em] text-muted">TANGGAL ACARA</dt>
                           <dd className="mt-1 text-[13px] font-semibold">
-                            {tanggalPanjang(p.event_date)} · {p.start_time}
+                            {tanggalPanjang(p.event_date)} · {rentangJam(p)}
                           </dd>
                         </div>
                         <div>

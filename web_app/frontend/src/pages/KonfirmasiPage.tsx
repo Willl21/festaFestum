@@ -6,7 +6,8 @@ import Img from '../components/Img'
 import { CheckCircleIcon } from '../components/icons'
 import { categories, type CategoryKey } from '../data/categories'
 import { rupiah } from '../lib/format'
-import { getBooking, type ApiBooking } from '../lib/api'
+import { getBooking, urlFotoLayanan, type ApiBooking } from '../lib/api'
+import { rentangJam } from '../lib/durasi'
 
 const KATEGORI: Record<string, CategoryKey> = {
   florist: 'florist',
@@ -95,7 +96,16 @@ export default function KonfirmasiPage() {
 
                   <div className="p-6">
                     <div className="flex flex-wrap items-center gap-7">
-                      <Img alt={booking.business_name} tint={kat.tint} className="h-[130px] w-[130px] object-contain" />
+                      {/* Foto LAYANAN yang dipesan, pola yang sama dengan
+                          Pesanan Saya. Dulu <Img> ini tanpa src sama sekali,
+                          jadi selamanya kotak polos. Slot kosong dibalas 404
+                          dan Img jatuh ke blok polos lewat onError. */}
+                      <Img
+                        src={urlFotoLayanan(booking.service_id)}
+                        alt={booking.service_name}
+                        tint={kat.tint}
+                        className="h-[130px] w-[130px] object-cover"
+                      />
                       <div>
                         <h2 className="font-display text-[26px] font-semibold">{booking.business_name}</h2>
                         <p className="mt-1.5 text-[15px] text-ink/80">{booking.service_name}</p>
@@ -105,7 +115,7 @@ export default function KonfirmasiPage() {
                     <dl className="mt-9 flex flex-wrap justify-between gap-6">
                       <div>
                         <dt className="text-[11px] font-semibold tracking-[0.06em] text-ink/70">TANGGAL ACARA</dt>
-                        <dd className="mt-2 text-[17px]">{`${new Date(booking.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} · ${booking.start_time}`}</dd>
+                        <dd className="mt-2 text-[17px]">{`${new Date(booking.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} · ${rentangJam(booking)}`}</dd>
                       </div>
                       <div className="text-right">
                         <dt className="text-[11px] font-semibold tracking-[0.06em] text-ink/70">TOTAL DIBAYAR</dt>

@@ -208,6 +208,7 @@ export default function FloristDetailPage() {
                 <div className="mt-3">
                   <KalenderSlot
                     serviceId={utama.service_id}
+                    kategori="florist"
                     tanggal={tanggal}
                     jam={jam}
                     labelJam="Jam Kirim"

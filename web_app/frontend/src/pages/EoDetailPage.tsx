@@ -93,7 +93,14 @@ export default function EoDetailPage() {
             </div>
 
             <div className="relative">
-              <Img alt={vendor.business_name} tint={kat.tint} className="h-[300px] w-full object-cover md:h-[430px]" />
+              {/* Dulu tanpa src sama sekali, jadi selamanya kotak polos. Slot 0
+                  = foto hero, sama dengan halaman detail kategori lain. */}
+              <Img
+                src={fotoSlot.includes(0) ? urlFotoVendor(id, 0) : undefined}
+                alt={vendor.business_name}
+                tint={kat.tint}
+                className="h-[300px] w-full object-cover md:h-[430px]"
+              />
 
               <div className="absolute right-5 bottom-5 left-5 grid grid-cols-2 gap-4 bg-white/85 px-5 py-3 backdrop-blur">
                 <div>

@@ -6,7 +6,7 @@ import Img from '../components/Img'
 import { ChevronDown, SearchIcon } from '../components/icons'
 import { rupiah } from '../lib/format'
 import { categories, namaKota, type CategoryKey } from '../data/categories'
-import { listVendors, type ApiVendor } from '../lib/api'
+import { listVendors, urlFotoVendor, type ApiVendor } from '../lib/api'
 import Bagian from '../components/Bagian'
 
 /** Umur minimum rangka hasil pencarian, diteruskan ke <TukarHalus>. Lebih
@@ -233,6 +233,7 @@ export default function FestaAiPage() {
                           className="grid gap-6 rounded-sm border border-line bg-white p-4 sm:grid-cols-[320px_1fr]"
                         >
                           <Img
+                            src={r.has_photo ? urlFotoVendor(r.vendor_id) : undefined}
                             alt={r.business_name}
                             tint={kat.tint}
                             className="h-[200px] w-full object-cover"

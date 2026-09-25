@@ -1,7 +1,8 @@
 const pool = require('../config/db');
 const { hitungSaldo, vendorIdMilik } = require('../lib/saldo');
 const { acquireLock, lockHolder, releaseLock } = require('../config/redis');
-const { perTim: kategoriPerTim, BOOKING_AKTIF } = require('../lib/kategori');
+const { perTim: kategoriPerTim, BOOKING_AKTIF, berbasisJam } = require('../lib/kategori');
+const { timKosong, bacaDurasi } = require('./schedule.controller');
 const { kirimEmail, urlFrontend } = require('../lib/email');
 
 const VALID_EVENT_TYPES = [
@@ -29,13 +30,15 @@ function isValidDate(s) {
 //      vendor itu di tanggal itu, jadi hitungan kapasitas tidak bisa balapan.
 //      Menggantikan SELECT ... FOR UPDATE yang dulu mengunci baris jadwal:
 //      barisnya sekarang tidak ada sampai vendor menutup tanggalnya.
-//   3. idx_booking_slot_ke_aktif — jaring terakhir di level DB kalau 1 & 2 bocor.
-//      Indeks unik cuma bisa menjamin "paling banyak satu", jadi tiap pesanan
-//      per_tim memegang NOMOR slot (0..kapasitas-1) dan indeksnya menjamin
-//      tidak ada dua pesanan memegang nomor yang sama. Lihat migrasi 014.
+//   3. Jaring terakhir di level DB kalau 1 & 2 bocor. Tiap pesanan per_tim
+//      memegang NOMOR tim (slot_ke, 0..kapasitas-1):
+//      - EO: idx_booking_slot_ke_aktif, satu nomor sekali sehari (migrasi 014).
+//      - MUA & fotografer: bookings_rentang_tidak_bertumpuk, satu nomor tidak
+//        boleh punya dua rentang jam yang bertumpuk (migrasi 016).
 async function createBooking(req, res, next) {
   const {
     service_id, event_date, start_time, event_type, event_location_detail, quantity,
+    jam_tambahan,
   } = req.body;
 
   if (!service_id || !event_date || !start_time || !event_type || !event_location_detail) {
@@ -82,7 +85,8 @@ async function createBooking(req, res, next) {
   try {
     const svc = await client.query(
       `SELECT s.vendor_id, s.price, s.minimum_notice_days, s.category,
-              v.daily_capacity,
+              s.durasi_menit, s.per_orang, s.harga_per_jam_tambahan,
+              v.daily_capacity, v.jeda_menit,
               ($2::date >= CURRENT_DATE + s.minimum_notice_days) AS notice_ok
          FROM services s
          JOIN vendors  v ON v.vendor_id = s.vendor_id
@@ -94,16 +98,36 @@ async function createBooking(req, res, next) {
       return res.status(404).json({ message: 'Layanan tidak ditemukan atau sudah tidak aktif' });
     }
 
+    const layanan = svc.rows[0];
     const {
       vendor_id, price, minimum_notice_days, category, daily_capacity, notice_ok,
-    } = svc.rows[0];
+    } = layanan;
     // Satu pesanan = satu tim (MUA/EO/fotografer) atau sekian unit stok
     // (florist/sewa). Yang pertama memotong kapasitas 1 berapa pun jumlahnya.
     const perTim = kategoriPerTim(category);
     // Tanggalnya habis begitu ada satu pesanan: cuma vendor per_tim yang
     // kapasitasnya 1. Yang menentukan perlu-tidaknya lock Redis.
-    const eksklusif = perTim && daily_capacity === 1;
+    // MUA & fotografer: yang habis JAM tim-nya, bukan harinya (migrasi 016).
+    const perJam = berbasisJam(category);
+    const eksklusif = perTim && daily_capacity === 1 && !perJam;
     vendorId = vendor_id;
+
+    let durasi = null;
+    let tambahan = 0;
+    if (perJam) {
+      // Jadwalnya dipilih per jam penuh, dan rentang kuncinya dihitung dari
+      // situ — menit bebas akan membuat dua pesanan saling mengunci 15 menit
+      // yang tidak pernah bisa dipakai siapa pun.
+      if (!/^([01]\d|2[0-3]):00$/.test(start_time)) {
+        return res.status(400).json({ message: 'start_time harus jam penuh, format HH:00' });
+      }
+      const d = bacaDurasi(layanan, jumlah, jam_tambahan);
+      if (d.galat) return res.status(400).json({ message: d.galat });
+      durasi = d.durasi;
+      tambahan = d.tambahan;
+    } else if (jam_tambahan) {
+      return res.status(400).json({ message: 'Layanan ini tidak dipesan per jam' });
+    }
 
     if (!notice_ok) {
       return res.status(400).json({
@@ -137,9 +161,13 @@ async function createBooking(req, res, next) {
     // Semua pemesanan vendor ini di tanggal ini diserialkan di sini. Inilah
     // yang membuat hitungan kapasitas — dan pemilihan nomor slot di bawah —
     // tidak bisa balapan.
+    //
+    // Pesanan berbasis jam diserialkan per VENDOR, bukan per tanggal: rentang
+    // yang dimulai malam ini bisa menyeberang ke besok pagi, jadi dua pesanan
+    // di dua tanggal berbeda tetap bisa bertabrakan.
     await client.query(
       'SELECT pg_advisory_xact_lock(hashtext($1))',
-      [`${vendor_id}:${event_date}`]
+      [perJam ? `${vendor_id}:jam` : `${vendor_id}:${event_date}`]
     );
 
     // Baris vendor_schedules sekarang HANYA berarti "vendor menutup ini".
@@ -157,7 +185,25 @@ async function createBooking(req, res, next) {
     // per_tim dibaca dari BARIS PESANANNYA, bukan dari kategori layanan
     // yang sedang dipesan: satu vendor satu kategori, jadi seluruh pesanannya
     // dihitung dengan aturan yang sama, termasuk pesanan lama.
-    const pakai = await client.query(
+    let slotKe = null;
+
+    // Berbasis jam: cari tim yang kosong selama rentang itu. Tidak ada
+    // hitungan harian sama sekali — tim yang sama boleh dapat pesanan pagi
+    // dan sore di hari yang sama.
+    if (perJam) {
+      slotKe = await timKosong(client, {
+        vendor_id, event_date, start_time,
+        durasi, jeda: layanan.jeda_menit, kapasitas: daily_capacity,
+      });
+      if (slotKe === null) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          message: 'Jam itu bentrok dengan pesanan lain. Pilih jam lain.',
+        });
+      }
+    }
+
+    const pakai = perJam ? null : await client.query(
       `SELECT COALESCE(SUM(CASE WHEN per_tim THEN 1 ELSE quantity END), 0)::int AS terpakai
          FROM bookings
         WHERE vendor_id = $1 AND event_date = $2::date AND ${BOOKING_AKTIF}`,
@@ -165,7 +211,7 @@ async function createBooking(req, res, next) {
     );
 
     const butuh = perTim ? 1 : jumlah;
-    const sisa = daily_capacity - pakai.rows[0].terpakai;
+    const sisa = perJam ? Infinity : daily_capacity - pakai.rows[0].terpakai;
     if (butuh > sisa) {
       await client.query('ROLLBACK');
       return res.status(409).json({
@@ -183,8 +229,7 @@ async function createBooking(req, res, next) {
     //
     // Pesanan yang tidak per_tim tidak bernomor (NULL) — kapasitasnya dipotong
     // per unit, dan beberapa pesanan memang boleh berbagi hari yang sama.
-    let slotKe = null;
-    if (perTim) {
+    if (perTim && !perJam) {
       const bebas = await client.query(
         `SELECT n FROM generate_series(0, $3::int - 1) n
           WHERE NOT EXISTS (
@@ -207,19 +252,23 @@ async function createBooking(req, res, next) {
 
     // Nominal selalu dihitung ulang di sini dari harga layanan di DB — angka
     // dari browser tidak dipercaya, termasuk jumlahnya.
-    const totalPrice = (Number(price) * jumlah).toFixed(2);
+    // Jam tambahan ditagih per pesanan, bukan per orang.
+    const totalPrice = (
+      Number(price) * jumlah + tambahan * Number(layanan.harga_per_jam_tambahan || 0)
+    ).toFixed(2);
     const dpAmount = (Number(totalPrice) * DP_RATE).toFixed(2);
 
     const booking = await client.query(
       `INSERT INTO bookings
          (user_id, service_id, vendor_id, event_date, start_time, per_tim,
           slot_ke, quantity, event_type, event_location_detail, total_price,
-          dp_amount, soft_lock_expires_at)
+          dp_amount, soft_lock_expires_at, durasi_menit, jam_tambahan, jeda_menit)
        VALUES ($1, $2, $3, $4::date, $5::time, $6, $7, $8, $9, $10, $11, $12,
-               now() + interval '24 hours')
+               now() + interval '24 hours', $13, $14, $15)
        RETURNING *`,
       [userId, service_id, vendor_id, event_date, start_time, perTim,
-       slotKe, jumlah, event_type, event_location_detail, totalPrice, dpAmount]
+       slotKe, jumlah, event_type, event_location_detail, totalPrice, dpAmount,
+       durasi, tambahan, perJam ? layanan.jeda_menit : 0]
     );
 
     await client.query('COMMIT');
@@ -227,6 +276,12 @@ async function createBooking(req, res, next) {
     res.status(201).json({ booking: booking.rows[0] });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
+    // 23P01 = constraint EXCLUDE menolak: dua rentang jam bertumpuk lolos dari
+    // pengecekan aplikasi (mis. lock bocor). Itu tetap "jadwal bentrok" bagi
+    // pemesan, bukan kesalahan server.
+    if (err.code === '23P01') {
+      return res.status(409).json({ message: 'Jam itu bentrok dengan pesanan lain. Pilih jam lain.' });
+    }
     next(err);
   } finally {
     client.release();
@@ -281,6 +336,10 @@ const BOOKING_SELECT = `
          v.vendor_id, v.business_name, v.city,
          u.name AS customer_name, u.phone AS customer_phone,
          b.event_date, to_char(b.start_time, 'HH24:MI') AS start_time, b.quantity,
+         -- Rentang jam untuk MUA & fotografer (migrasi 016); NULL untuk
+         -- kategori harian. Jeda perjalanan sengaja tidak ikut dihitung.
+         b.durasi_menit, b.jam_tambahan,
+         to_char(b.start_time + b.durasi_menit * interval '1 minute', 'HH24:MI') AS end_time,
          COALESCE(
            (SELECT json_agg(json_build_object(
                      'payment_id', p.payment_id,
@@ -456,7 +515,11 @@ async function konfirmasiBooking(req, res, next) {
     const bk = await client.query(
       `SELECT b.booking_id, b.confirm_status, b.payment_status,
               b.user_id, v.vendor_id, v.business_name, s.service_name,
-              to_char(b.event_date, 'DD/MM/YYYY') AS tanggal,
+              -- Tanggal + jam untuk pesan otomatis & email. MUA & fotografer
+              -- ikut menyebut rentangnya (migrasi 016).
+              to_char(b.event_date, 'DD/MM/YYYY') || ' pukul ' || to_char(b.start_time, 'HH24:MI')
+                || COALESCE('–' || to_char(b.start_time + b.durasi_menit * interval '1 minute', 'HH24:MI'), '')
+                AS tanggal,
               c.email AS customer_email, c.name AS customer_name
          FROM bookings b
          JOIN services s ON s.service_id = b.service_id

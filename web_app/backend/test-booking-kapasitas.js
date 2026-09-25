@@ -1,15 +1,20 @@
-// Aturan kapasitas harian, pengganti aturan "kategori eksklusif" yang lama.
+// Aturan kapasitas & jadwal pemesanan.
 //
 // Yang dibuktikan:
-//   1. Kapasitas 1 (fotografer/EO/MUA bawaan) menutup SELURUH tanggal
-//   2. Kapasitas > 1 menerima beberapa pesanan di tanggal yang sama
-//   3. Pesanan MUA berisi banyak orang tetap memotong 1, bukan sejumlah orang
+//   1. EO berkapasitas 1 menutup SELURUH tanggal (kapasitas harian)
+//   2. MUA & fotografer dikunci per RENTANG JAM (migrasi 016):
+//      - rentang yang bertumpuk ditolak, termasuk jeda perjalanan
+//      - tim yang sama boleh dapat pesanan pagi DAN sore di hari yang sama
+//      - jam tambahan ikut memperpanjang rentang dan menambah harga
+//      - jeda disalin ke pesanan, mengubahnya tidak menggeser pesanan lama
+//      - rentang yang menyeberang tengah malam ikut memblok besok pagi
+//      - constraint EXCLUDE di DB menolak tumpang tindih walau aplikasi dilewati
+//   3. Paket MUA per orang: durasi = menit x orang, dibulatkan ke jam penuh;
+//      kapasitas = jumlah tim yang jalan bersamaan
 //   4. Pesanan florist memotong sejumlah barang
 //   5. Tanggal yang ditutup vendor ditolak
 //   6. Vendor tidak bisa menutup tanggal yang sudah dipesan
 //   7. Lima orang berebut kapasitas 3: tepat 3 yang berhasil
-//   8. Jam acara TIDAK mengunci apa pun (migrasi 014) — dua pesanan boleh
-//      berbagi jam yang sama selama kapasitasnya masih sisa
 //
 // Jalankan dengan server hidup:  node test-booking-kapasitas.js
 const assert = require('assert');
@@ -80,88 +85,182 @@ async function siapkanVendor(category, kapasitas) {
   return { token, vendorId, serviceId: s.body.service.service_id };
 }
 
-function pesan(token, serviceId, event_date, start_time, quantity) {
+function pesan(token, serviceId, event_date, start_time, quantity, jam_tambahan) {
   return api('/bookings', {
     method: 'POST', token,
     body: {
       service_id: serviceId, event_date, start_time,
       event_type: 'wedding', event_location_detail: 'Gedung Uji',
       ...(quantity ? { quantity } : {}),
+      ...(jam_tambahan ? { jam_tambahan } : {}),
     },
   });
+}
+
+function aturPaket(v, body) {
+  return api(`/services/${v.serviceId}`, { method: 'PATCH', token: v.token, body });
 }
 
 (async () => {
   const TGL_A = futureDate(40);
   const TGL_B = futureDate(41);
 
-  // --- 1. Kapasitas 1 mengunci seluruh tanggal --------------------------
-  console.log('\nKapasitas 1 (bawaan fotografer/EO/MUA):');
-  {
-    const v = await siapkanVendor('photographer');
-    const c = await register('customer');
+  const TGL_C = futureDate(42);
 
-    const a = await pesan(c, v.serviceId, TGL_A, '08:00');
+  // --- 1. EO: kapasitas 1 mengunci seluruh tanggal ----------------------
+  console.log('\nKapasitas harian (EO):');
+  {
+    const v = await siapkanVendor('event_organizer');
+    const a = await pesan(await register('customer'), v.serviceId, TGL_A, '08:00');
     assert.strictEqual(a.status, 201, `pesanan pertama gagal: ${JSON.stringify(a.body)}`);
     assert.strictEqual(a.body.booking.slot_ke, 0, 'pesanan pertama harus memegang slot nomor 0');
+    assert.strictEqual(a.body.booking.durasi_menit, null, 'EO tidak berbasis jam');
     ok('pesanan pertama diterima, memegang slot 0');
 
     const b = await pesan(await register('customer'), v.serviceId, TGL_A, '19:00');
     assert.strictEqual(b.status, 409, 'jam lain di tanggal yang sama harusnya ditolak');
     assert.ok(/penuh/i.test(b.body.message), `pesan salah: ${b.body.message}`);
-    ok('jam LAIN di tanggal itu ikut tertutup: yang habis kapasitas, bukan jam');
+    ok('jam LAIN di tanggal itu ikut tertutup: EO habis per hari');
 
-    const lain = await pesan(await register('customer'), v.serviceId, TGL_B, '08:00');
-    assert.strictEqual(lain.status, 201, 'tanggal lain harusnya masih bisa');
-    ok('tanggal lain tidak ikut terkunci');
-
-    // Kalender harus setuju dengan createBooking, bukan menawarkan slot mati.
     const kal = await api(`/services/${v.serviceId}/availability?from=${TGL_A}&to=${TGL_A}`);
-    assert.strictEqual(kal.status, 200);
     assert.ok(kal.body.data.every((s) => s.status !== 'available'),
       'kalender masih menawarkan tanggal yang sudah penuh');
     ok('kalender ikut menutup tanggal itu');
   }
 
-  // --- 2 & 3. Kapasitas > 1, dan jumlah orang tidak memotong kapasitas ---
-  console.log('\nKapasitas 2 (MUA dua tim):');
+  // --- 2. Fotografer: dikunci per rentang jam ---------------------------
+  console.log('\nRentang jam (fotografer, 1 tim, paket bawaan 4 jam, jeda 1 jam):');
+  {
+    const v = await siapkanVendor('photographer');
+
+    const a = await pesan(await register('customer'), v.serviceId, TGL_A, '08:00');
+    assert.strictEqual(a.status, 201, `pesanan 08:00 gagal: ${JSON.stringify(a.body)}`);
+    assert.strictEqual(a.body.booking.durasi_menit, 240, 'durasi paket bawaan fotografer 4 jam');
+    ok('08:00-12:00 diterima');
+
+    const tumpuk = await pesan(await register('customer'), v.serviceId, TGL_A, '10:00');
+    assert.strictEqual(tumpuk.status, 409, 'rentang bertumpuk harusnya ditolak');
+    ok('10:00 ditolak: bertumpuk dengan 08:00-12:00');
+
+    const jeda = await pesan(await register('customer'), v.serviceId, TGL_A, '12:00');
+    assert.strictEqual(jeda.status, 409, 'jam dalam jeda perjalanan harusnya ditolak');
+    ok('12:00 ditolak: masih di jeda perjalanan (terkunci sampai 13:00)');
+
+    const sore = await pesan(await register('customer'), v.serviceId, TGL_A, '13:00');
+    assert.strictEqual(sore.status, 201, `13:00 harusnya boleh: ${JSON.stringify(sore.body)}`);
+    assert.strictEqual(sore.body.booking.slot_ke, 0, 'tim yang sama dipakai lagi');
+    ok('13:00 diterima di tim yang SAMA — hari tidak habis oleh satu pesanan');
+
+    const menit = await pesan(await register('customer'), v.serviceId, TGL_B, '08:30');
+    assert.strictEqual(menit.status, 400, 'jam mulai harus jam penuh');
+    ok('08:30 ditolak 400: jadwal per jam penuh');
+
+    const kal = await api(`/services/${v.serviceId}/availability?from=${TGL_A}&to=${TGL_A}`);
+    assert.strictEqual(kal.body.data[0].status, 'available', 'tanggal berbasis jam tidak boleh jadi penuh');
+    const jam = await api(`/services/${v.serviceId}/jam?date=${TGL_A}`);
+    assert.strictEqual(jam.status, 200);
+    assert.deepStrictEqual(jam.body.terisi.map((t) => [t.mulai, t.selesai]), [[480, 780], [780, 1080]],
+      `rentang terisi salah: ${JSON.stringify(jam.body.terisi)}`);
+    ok('/services/:id/jam membalas rentang terkunci termasuk jeda');
+
+    const cekBentrok = await api('/schedules/check', {
+      method: 'POST', body: { service_id: v.serviceId, event_date: TGL_A, start_time: '10:00' },
+    });
+    const cekKosong = await api('/schedules/check', {
+      method: 'POST', body: { service_id: v.serviceId, event_date: TGL_A, start_time: '18:00' },
+    });
+    assert.strictEqual(cekBentrok.body.available, false);
+    assert.strictEqual(cekKosong.body.available, true, JSON.stringify(cekKosong.body));
+    ok('/schedules/check sepakat dengan createBooking soal jam');
+
+    // Jam tambahan: ditolak selama vendor belum memasang harganya.
+    const tanpaHarga = await pesan(await register('customer'), v.serviceId, TGL_B, '08:00', 1, 2);
+    assert.strictEqual(tanpaHarga.status, 400, 'jam tambahan tanpa harga harusnya ditolak');
+    const atur = await aturPaket(v, { durasi_menit: 240, per_orang: false, harga_per_jam_tambahan: 200000 });
+    assert.strictEqual(atur.status, 200, JSON.stringify(atur.body));
+    const tambah = await pesan(await register('customer'), v.serviceId, TGL_B, '08:00', 1, 2);
+    assert.strictEqual(tambah.status, 201, JSON.stringify(tambah.body));
+    assert.strictEqual(tambah.body.booking.durasi_menit, 360, '4 jam + 2 jam tambahan');
+    assert.strictEqual(Number(tambah.body.booking.total_price), 1400000, 'harga paket + 2 x 200 ribu');
+    ok('jam tambahan: rentang jadi 6 jam, harga + 2 x Rp200.000');
+
+    // Jeda disalin ke pesanan: mengubahnya tidak memendekkan kunci pesanan lama.
+    const u = await api(`/vendors/${v.vendorId}`, { method: 'PATCH', token: v.token, body: { jeda_menit: 0 } });
+    assert.strictEqual(u.body.vendor.jeda_menit, 0);
+    const masihJeda = await pesan(await register('customer'), v.serviceId, TGL_A, '17:00');
+    assert.strictEqual(masihJeda.status, 409, 'pesanan 13:00 masih menyimpan jeda 60 menitnya');
+    ok('jeda baru tidak menggeser pesanan lama (17:00 tetap terkunci)');
+
+    // Menyeberang tengah malam: 20:00 + 4 jam + 6 jam tambahan = 06:00 besok.
+    const malam = await pesan(await register('customer'), v.serviceId, TGL_B, '20:00', 1, 6);
+    assert.strictEqual(malam.status, 201, JSON.stringify(malam.body));
+    const subuh = await pesan(await register('customer'), v.serviceId, TGL_C, '05:00');
+    assert.strictEqual(subuh.status, 409, 'rentang semalam harusnya memblok besok subuh');
+    const pagi = await pesan(await register('customer'), v.serviceId, TGL_C, '06:00');
+    assert.strictEqual(pagi.status, 201, 'sesudah 06:00 (jeda 0) harusnya bebas');
+    ok('rentang lewat tengah malam memblok 05:00 besoknya, 06:00 bebas');
+
+    // Lapis ketiga: sisipkan langsung ke tabel, melewati aplikasi sama sekali.
+    let kode = null;
+    try {
+      await pool.query(
+        `INSERT INTO bookings (user_id, service_id, vendor_id, event_date, start_time, per_tim,
+                               slot_ke, quantity, event_type, event_location_detail, total_price,
+                               dp_amount, soft_lock_expires_at, durasi_menit, jam_tambahan, jeda_menit)
+         SELECT user_id, service_id, vendor_id, event_date, '09:00', per_tim, slot_ke, quantity,
+                event_type, event_location_detail, total_price, dp_amount, soft_lock_expires_at,
+                60, 0, 0
+           FROM bookings WHERE booking_id = $1`,
+        [a.body.booking.booking_id]
+      );
+    } catch (e) {
+      kode = e.code;
+    }
+    assert.strictEqual(kode, '23P01', 'constraint EXCLUDE harusnya menolak rentang bertumpuk');
+    ok('constraint DB menolak tumpang tindih walau aplikasi dilewati (23P01)');
+  }
+
+  // --- 3. MUA per orang, dua tim ----------------------------------------
+  console.log('\nPaket per orang (MUA, 45 menit/orang, 2 tim):');
   {
     const v = await siapkanVendor('makeup_artist', 2);
+    const atur = await aturPaket(v, { durasi_menit: 45, per_orang: true, harga_per_jam_tambahan: null });
+    assert.strictEqual(atur.status, 200, JSON.stringify(atur.body));
+    assert.strictEqual(atur.body.service.per_orang, true);
 
-    // Lima orang dalam satu pesanan tetap satu tim.
     const a = await pesan(await register('customer'), v.serviceId, TGL_A, '08:00', 5);
     assert.strictEqual(a.status, 201, `pesanan 5 orang gagal: ${JSON.stringify(a.body)}`);
+    assert.strictEqual(a.body.booking.durasi_menit, 240, '5 x 45 menit = 225, dibulatkan 4 jam');
     assert.strictEqual(Number(a.body.booking.total_price), 5000000, 'harga harus dikali jumlah orang');
     assert.strictEqual(Number(a.body.booking.dp_amount), 1500000, 'DP harus ikut jumlah orang');
-    ok('pesanan 5 orang: harga dikali 5, kapasitas terpotong 1');
+    ok('5 orang: 4 jam (225 menit dibulatkan), harga x 5');
 
-    const b = await pesan(await register('customer'), v.serviceId, TGL_A, '13:00');
-    assert.strictEqual(b.status, 201, 'tim kedua harusnya masih bisa dipesan');
-    assert.strictEqual(b.body.booking.slot_ke, 1, 'tim kedua harus memegang slot nomor 1');
-    ok('tim kedua di tanggal yang sama tetap menerima pesanan');
+    const b = await pesan(await register('customer'), v.serviceId, TGL_A, '08:00', 1);
+    assert.strictEqual(b.status, 201, 'tim kedua harusnya masih bisa di jam yang sama');
+    assert.strictEqual(b.body.booking.slot_ke, 1, 'tim kedua harus memegang nomor 1');
+    ok('jam yang sama diterima tim kedua');
 
-    const c = await pesan(await register('customer'), v.serviceId, TGL_A, '19:00');
-    assert.strictEqual(c.status, 409, 'pesanan ketiga harusnya melebihi kapasitas');
-    ok('pesanan ketiga ditolak: kapasitas 2 habis');
+    const c = await pesan(await register('customer'), v.serviceId, TGL_A, '09:00', 1);
+    assert.strictEqual(c.status, 409, 'dua tim sedang sibuk');
+    ok('09:00 ditolak: kedua tim sibuk');
 
-    // --- 8. Jam yang SAMA boleh dipakai dua pesanan ---------------------
-    // Kebalikan dari aturan sebelum migrasi 014. Dulu shift yang sama ditolak
-    // walau kapasitas masih sisa — MUA berkru 3 tidak bisa menerima dua
-    // pesanan sekaligus, padahal ketiga krunya bisa di tiga tempat.
-    const v2 = await siapkanVendor('makeup_artist', 3);
-    const p1 = await pesan(await register('customer'), v2.serviceId, TGL_B, '09:00');
-    assert.strictEqual(p1.status, 201);
-    const p2 = await pesan(await register('customer'), v2.serviceId, TGL_B, '09:00');
-    assert.strictEqual(p2.status, 201, 'jam yang sama harusnya boleh selama kapasitas sisa');
-    assert.notStrictEqual(p2.body.booking.slot_ke, p1.body.booking.slot_ke,
-      'dua pesanan tidak boleh memegang nomor slot yang sama');
-    ok('jam yang sama diterima dua kali, nomor slotnya berbeda');
+    const tambah = await pesan(await register('customer'), v.serviceId, TGL_B, '08:00', 1, 1);
+    assert.strictEqual(tambah.status, 400, 'paket tanpa harga jam tambahan harusnya menolak');
+    ok('jam tambahan ditolak di paket tanpa harga per jam');
 
-    const p3 = await pesan(await register('customer'), v2.serviceId, TGL_B, '09:00');
-    assert.strictEqual(p3.status, 201, 'kru ketiga harusnya masih muat');
-    const p4 = await pesan(await register('customer'), v2.serviceId, TGL_B, '09:00');
-    assert.strictEqual(p4.status, 409, 'kru keempat tidak ada');
-    ok('berhenti tepat di kapasitas 3, bukan di jumlah jam');
+    // Lima orang berebut dua tim di jam yang sama: tepat dua yang lolos.
+    const tokens = [];
+    for (let i = 0; i < 5; i++) tokens.push(await register('customer'));
+    const hasil = await Promise.all(tokens.map((t) => pesan(t, v.serviceId, TGL_C, '10:00', 1)));
+    const sukses = hasil.filter((r) => r.status === 201).length;
+    console.log(`  201: ${sukses}  409: ${hasil.filter((r) => r.status === 409).length}`);
+    assert.strictEqual(sukses, 2, 'harus tepat 2 yang berhasil');
+    ok('ditembak bersamaan: tepat 2 tim yang terisi');
+
+    const sesi = await siapkanVendor('makeup_artist');
+    const dua = await pesan(await register('customer'), sesi.serviceId, TGL_A, '08:00', 2);
+    assert.strictEqual(dua.status, 400, 'paket per sesi tidak menerima jumlah orang');
+    ok('paket per sesi menolak jumlah orang > 1');
   }
 
   // --- 4. Florist: kapasitas dipotong sejumlah barang -------------------

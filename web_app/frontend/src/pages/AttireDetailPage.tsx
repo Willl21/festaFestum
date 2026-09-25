@@ -382,6 +382,7 @@ export default function AttireDetailPage() {
                 <div className="mt-3">
                   <KalenderSlot
                     serviceId={utama.service_id}
+                    kategori="attire"
                     tanggal={tglSewa}
                     jam={jam}
                     labelJam="Jam Pengambilan"

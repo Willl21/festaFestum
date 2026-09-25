@@ -173,6 +173,7 @@ export default function FloristOrderPage() {
                 <div className="mt-3">
                   <KalenderSlot
                     serviceId={paket.service_id}
+                    kategori="florist"
                     tanggal={tanggal}
                     jam={jam}
                     labelJam="Jam Kirim"

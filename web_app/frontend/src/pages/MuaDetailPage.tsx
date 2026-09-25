@@ -11,6 +11,7 @@ import TukarHalus from '../components/TukarHalus'
 import { ArrowRight, ChevronDown, PhotoIcon } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
 import { rupiah } from '../lib/format'
+import { hargaPesanan } from '../lib/durasi'
 import {
   getVendor, getVendorServices, cekKetersediaan, urlFotoVendor,
   type ApiService, type ApiVendor,
@@ -42,6 +43,11 @@ export default function MuaDetailPage() {
   const [jam, setJam] = useState('')
   const [cek, setCek] = useState<{ ada: boolean; alasan: string | null } | null>(null)
   const [mengecek, setMengecek] = useState(false)
+  // Paket berbasis jam (migrasi 016): jumlah orang untuk paket per orang, dan
+  // jam tambahan. Ikut menentukan panjang blok jam dan totalnya, lalu dibawa
+  // ke halaman pesan lewat query. Kembali ke 1/0 tiap paket diganti.
+  const [jumlah, setJumlah] = useState(1)
+  const [tambahan, setTambahan] = useState(0)
 
   useEffect(() => {
     Promise.all([getVendor(id), getVendorServices(id, kategori.apiCategory)])
@@ -65,16 +71,23 @@ export default function MuaDetailPage() {
       setCek({ ada: false, alasan: 'Pilih tanggal acara dulu.' })
       return
     }
+    if (!jam) {
+      setCek({ ada: false, alasan: 'Pilih jam mulai dulu.' })
+      return
+    }
 
     setMengecek(true)
     try {
+      // Dengan jam + durasi, yang dijawab "masih ada tim kosong di jam itu",
+      // bukan cuma "tanggalnya bisa".
       const r = await cekKetersediaan({
         service_id: dipilih.service_id, event_date: tanggal,
+        ...(jam ? { start_time: jam, quantity: jumlah, jam_tambahan: tambahan } : {}),
       })
       setCek({ ada: r.available, alasan: r.reason })
       if (r.available) {
         navigate(`/${kategori.slug}/${id}/pesan?service=${dipilih.service_id}`
-          + `&date=${tanggal}&jam=${jam}`)
+          + `&date=${tanggal}&jam=${jam}&orang=${jumlah}&tambah=${tambahan}`)
       }
     } catch (e) {
       setCek({ ada: false, alasan: (e as Error).message })
@@ -181,7 +194,7 @@ export default function MuaDetailPage() {
                 <select
                   id="paket"
                   value={paketId}
-                  onChange={(e) => { setPaketId(e.target.value); setCek(null) }}
+                  onChange={(e) => { setPaketId(e.target.value); setCek(null); setJumlah(1); setTambahan(0) }}
                   className="h-11 w-full appearance-none rounded-sm border border-line bg-white px-3 pr-9 text-[14px] outline-none focus:border-navy-900"
                 >
                   {layanan.map((p) => (
@@ -200,9 +213,14 @@ export default function MuaDetailPage() {
                 <div className="mt-3">
                   <KalenderSlot
                     serviceId={dipilih.service_id}
+                    kategori="mua"
                     tanggal={tanggal}
                     jam={jam}
                     onPilih={(t, j) => { setTanggal(t); setJam(j); setCek(null) }}
+                    paket={dipilih}
+                    jumlah={jumlah}
+                    tambahan={tambahan}
+                    onUbahDurasi={(n, t) => { setJumlah(n); setTambahan(t); setCek(null) }}
                   />
                 </div>
               ) : (
@@ -214,7 +232,7 @@ export default function MuaDetailPage() {
               <div className="mt-7 flex items-baseline justify-between border-t border-line pt-4">
                 <span className="text-[15px] font-semibold">Total:</span>
                 <span className="font-display text-[22px] font-semibold">
-                  {dipilih ? rupiah(Number(dipilih.price)) : '-'}
+                  {dipilih ? rupiah(hargaPesanan(dipilih, jumlah, tambahan)) : '-'}
                 </span>
               </div>
 

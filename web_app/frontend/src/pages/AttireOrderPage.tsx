@@ -175,6 +175,7 @@ export default function AttireOrderPage() {
                 <div className="mt-3">
                   <KalenderSlot
                     serviceId={paket.service_id}
+                    kategori="attire"
                     tanggal={tglSewa}
                     jam={jam}
                     labelJam="Jam Pengambilan"

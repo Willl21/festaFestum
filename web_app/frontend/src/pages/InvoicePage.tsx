@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { categories, namaKota } from '../data/categories'
 import { rupiahBulat } from '../lib/format'
 import { getBooking, type ApiBooking } from '../lib/api'
+import { rentangJam } from '../lib/durasi'
 
 /** Invoice satu pesanan, siap dicetak.
  *
@@ -134,7 +135,7 @@ export default function InvoicePage() {
             <Baris label="Jenis acara" nilai={labelAcara[booking.event_type] ?? booking.event_type} />
             <Baris
               label="Tanggal & jam"
-              nilai={`${tanggalPanjang(booking.event_date)} · ${booking.start_time}`}
+              nilai={`${tanggalPanjang(booking.event_date)} · ${rentangJam(booking)}`}
             />
             <Baris label="Lokasi" nilai={booking.event_location_detail} />
           </div>

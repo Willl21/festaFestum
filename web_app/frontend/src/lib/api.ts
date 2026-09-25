@@ -172,6 +172,8 @@ export type AuthResponse = {
  *  supaya gampang dicocokkan waktu menelusuri dari halaman ke query. */
 export type ApiVendor = {
   vendor_id: string
+  /** Jeda perjalanan antar-pesanan (menit), hanya berarti untuk MUA & fotografer. */
+  jeda_menit?: number
   business_name: string
   city: string | null
   /** Hanya ada di GET /vendors/:id, bukan di listing. */
@@ -227,6 +229,12 @@ export type ApiService = {
    *  layanan yang belum mengisinya. Kuncinya didefinisikan di
    *  data/layananFields.ts — pakai rincianLayanan() untuk menampilkannya. */
   details?: Record<string, string>
+  /** Paket berbasis jam, khusus MUA & fotografer (migrasi 016). NULL untuk
+   *  kategori harian. Kalau per_orang, durasinya PER ORANG. Hitung dengan
+   *  durasiPesanan() / hargaPesanan() di lib/durasi.ts. */
+  durasi_menit?: number | null
+  per_orang?: boolean
+  harga_per_jam_tambahan?: string | null
 }
 
 /** `portfolio` membawa nomor SLOT, bukan gambarnya — pasang lewat
@@ -256,9 +264,24 @@ export type Availability = {
   minimum_notice_days: number
 }
 
+/** start_time/quantity/jam_tambahan cuma berarti untuk MUA & fotografer:
+ *  dengan itu yang dijawab "masih ada tim kosong di jam itu", bukan cuma
+ *  "tanggalnya bisa". */
 export const cekKetersediaan = (body: {
   service_id: string; event_date: string
+  start_time?: string; quantity?: number; jam_tambahan?: number
 }) => post<Availability>('/schedules/check', body)
+
+/** Rentang yang sudah terkunci per tim di sekitar satu tanggal, dalam menit
+ *  dari 00:00 tanggal itu (boleh negatif / lewat 1440). Sudah termasuk jeda
+ *  perjalanan. Khusus layanan berbasis jam. */
+export type JamTerisi = {
+  kapasitas: number
+  jeda_menit: number
+  terisi: { slot_ke: number; mulai: number; selesai: number }[]
+}
+export const listJamTerisi = (serviceId: string, date: string) =>
+  get<JamTerisi>(`/services/${serviceId}/jam`, { date })
 
 /** Satu TANGGAL, bukan satu shift — shift dibuang di migrasi 014. */
 export type SlotKetersediaan = {
@@ -312,6 +335,11 @@ export type ApiBooking = {
   /** Jam acara (EO/MUA/fotografer) atau jam kirim (florist/sewa), 'HH:MM'.
    *  Tidak mengunci apa pun — yang habis kapasitas harian vendor. */
   start_time: string
+  /** Rentang jam MUA & fotografer (migrasi 016). NULL untuk kategori harian.
+   *  end_time sudah termasuk jam tambahan, tanpa jeda perjalanan. */
+  durasi_menit: number | null
+  jam_tambahan: number
+  end_time: string | null
   payments: ApiPayment[]
 }
 
@@ -322,6 +350,7 @@ export type ApiBooking = {
 export const buatBooking = (body: {
   service_id: string; event_date: string; start_time: string
   event_type: string; event_location_detail: string; quantity?: number
+  jam_tambahan?: number
 }) => post<{ booking: ApiBooking }>('/bookings', body)
 
 /** Vendor menjawab pesanan yang masuk. `note` opsional — dipakai untuk
@@ -371,12 +400,15 @@ export type ApiPaymentDetail = ApiPayment & {
   dp_amount: string
   payment_status: string
   event_location_detail: string
+  /** Untuk foto layanan di ringkasan pesanan (urlFotoLayanan). */
+  service_id: string
   service_name: string
   category: string
   business_name: string
   city: string | null
   event_date: string
   start_time: string
+  end_time: string | null
 }
 
 export const getPayment = (id: string) =>
@@ -508,6 +540,11 @@ export const tutupTanggal = (dates: string[]) =>
  *  yang bisa keluar per hari. */
 export const ubahKapasitas = (vendorId: string, daily_capacity: number) =>
   kirim<{ vendor: ApiVendor }>(`/vendors/${vendorId}`, 'PATCH', { daily_capacity })
+
+/** Jeda perjalanan antar-pesanan MUA/fotografer, dalam menit (migrasi 016).
+ *  Hanya berlaku untuk pesanan BARU. */
+export const ubahJeda = (vendorId: string, jeda_menit: number) =>
+  kirim<{ vendor: ApiVendor }>(`/vendors/${vendorId}`, 'PATCH', { jeda_menit })
 
 export const tambahLayanan = (vendorId: string, body: Record<string, unknown>) =>
   post<{ service: ApiService }>(`/vendors/${vendorId}/services`, body)

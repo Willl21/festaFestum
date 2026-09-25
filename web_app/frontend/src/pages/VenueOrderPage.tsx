@@ -5,6 +5,7 @@ import TukarHalus from '../components/TukarHalus'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import OrderLayout, { OrderField, OrderSection, OrderTextarea } from '../components/OrderLayout'
 import { CalendarIcon, MapPinIcon, NoteIcon } from '../components/icons'
+import { berbasisJam, hargaPesanan } from '../lib/durasi'
 import { categories, type CategoryKey } from '../data/categories'
 import {
   getVendor, getVendorServices, buatBooking,
@@ -24,27 +25,18 @@ import {
 
 type Variant = {
   kategori: CategoryKey
-  /** Satu angka perkiraan yang ditanyakan di bawah tanggal & jam. */
-  estimate: { id: string; label: string; type?: string; placeholder: string }
+  /** Satu angka perkiraan yang ditanyakan di bawah tanggal & jam. Cuma EO:
+   *  "jumlah tamu" itu ukuran acara, bukan jumlah pesanan, jadi tidak
+   *  mengalikan harga. MUA & fotografer tidak butuh lagi sejak migrasi 016 —
+   *  jumlah orang dan durasinya diatur di kalender (mode jam). */
+  estimate?: { id: string; label: string; type?: string; placeholder: string }
   venueLabel: string
   note: { label?: string; placeholder?: string }
-  /** true kalau isi field estimate berarti JUMLAH yang dipesan, jadi harga
-   *  dikali angka itu. Cuma MUA: satu pesanan bisa merias beberapa orang,
-   *  dan harganya per orang. "Jumlah tamu" milik EO adalah ukuran acara,
-   *  bukan jumlah pesanan — mengalikannya akan salah besar. */
-  kuantitas?: boolean
 }
 
 const variants = {
   mua: {
     kategori: 'mua',
-    estimate: {
-      id: 'jumlah-orang',
-      label: 'JUMLAH ORANG YANG AKAN DIRIAS',
-      type: 'number',
-      placeholder: 'Contoh: 3',
-    },
-    kuantitas: true,
     venueLabel: 'NAMA VENUE/ LOKASI',
     note: { label: 'PREFERENSI MAKEUP & REQUEST KHUSUS' },
   },
@@ -62,11 +54,6 @@ const variants = {
   },
   fotografer: {
     kategori: 'fotografer',
-    estimate: {
-      id: 'durasi',
-      label: 'ESTIMASI DURASI ACARA',
-      placeholder: 'Contoh: 8 jam',
-    },
     venueLabel: 'NAMA VENUE/ LOKASI PEMOTRETAN',
     note: { label: 'REQUEST KONSEP ATAU MOMEN KHUSUS' },
   },
@@ -83,7 +70,7 @@ const JENIS_ACARA = [
 ]
 
 export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }) {
-  const v = variants[kind]
+  const v: Variant = variants[kind]
   const kat = categories[v.kategori]
   const { id = '' } = useParams()
   const [params] = useSearchParams()
@@ -103,6 +90,9 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
   // dibuka dari halaman detail dengan ?jam=, nilai itu dipakai sebagai
   // isian awal.
   const [jam, setJam] = useState(params.get('jam') ?? '')
+  // Paket berbasis jam (MUA & fotografer): dibawa dari halaman detail.
+  const [jumlah, setJumlah] = useState(() => Math.max(1, Number(params.get('orang')) || 1))
+  const [tambahan, setTambahan] = useState(() => Math.max(0, Number(params.get('tambah')) || 0))
 
   const [jenisAcara, setJenisAcara] = useState(JENIS_ACARA[0].value)
   const [estimasi, setEstimasi] = useState('')
@@ -123,19 +113,20 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
   }, [id, params, kat.apiCategory])
 
   const paket = layanan.find((s) => s.service_id === serviceId) ?? layanan[0]
-  const satuanHarga = paket ? Number(paket.price) : 0
-  // Untuk MUA, kapasitas harian vendor tetap terpotong SATU berapa pun jumlah
-  // orangnya — yang habis timnya, bukan stok. Yang berlipat cuma harganya.
-  const jumlah = ('kuantitas' in v && v.kuantitas)
-    ? Math.min(999, Math.max(1, Number(estimasi) || 1))
-    : 1
-  const harga = satuanHarga * jumlah
+  // Jumlah orang cuma berlaku di paket MUA per orang; paket per sesi dan
+  // kategori lain selalu 1 (backend menolak angka lain untuk paket per sesi).
+  // Yang habis tetap SATU tim, yang berlipat cuma harga dan durasinya.
+  const jamBased = berbasisJam(paket)
+  const qty = jamBased && paket?.per_orang ? jumlah : 1
+  const jamTambah = jamBased ? tambahan : 0
+  const harga = paket ? hargaPesanan(paket, qty, jamTambah) : 0
 
   async function ajukan() {
     setGalat('')
 
     if (!paket) return setGalat('Vendor ini belum punya layanan aktif.')
     if (!tanggal) return setGalat('Tanggal acara wajib diisi.')
+    if (!jam) return setGalat('Jam mulai wajib dipilih.')
     if (!venue.trim() || !alamat.trim()) return setGalat('Venue dan alamat lengkap wajib diisi.')
 
     // Catatan & estimasi digabung ke event_location_detail: tabel bookings
@@ -143,7 +134,7 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
     // halaman bukan tukar-tambah yang sepadan menjelang tenggat.
     const detail = [
       `${venue.trim()} — ${alamat.trim()}`,
-      estimasi && `${v.estimate.label}: ${estimasi}`,
+      v.estimate && estimasi && `${v.estimate.label}: ${estimasi}`,
       catatan.trim() && `Catatan: ${catatan.trim()}`,
     ].filter(Boolean).join('\n')
 
@@ -155,7 +146,8 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
         start_time: jam,
         event_type: jenisAcara,
         event_location_detail: detail,
-        quantity: jumlah,
+        quantity: qty,
+        ...(jamTambah ? { jam_tambahan: jamTambah } : {}),
       })
       navigate(`/checkout/${r.booking.booking_id}`)
     } catch (e) {
@@ -177,7 +169,8 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
             order={{
               vendor: vendor.business_name,
               packageName: paket?.service_name ?? 'Belum ada paket',
-              satuan: jumlah > 1 ? `× ${jumlah} orang` : undefined,
+              satuan: [qty > 1 && `× ${qty} orang`, jamTambah > 0 && `+ ${jamTambah} jam`]
+                .filter(Boolean).join(' ') || undefined,
               price: harga,
               // DP 30% mengikuti backend. Angka yang MENGIKAT tetap dp_amount yang
               // dikembalikan POST /bookings dan ditampilkan di halaman checkout.
@@ -198,7 +191,7 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
                   <select
                     id="paket"
                     value={serviceId}
-                    onChange={(e) => setServiceId(e.target.value)}
+                    onChange={(e) => { setServiceId(e.target.value); setJumlah(1); setTambahan(0) }}
                     className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
                   >
                     {layanan.map((s) => (
@@ -218,9 +211,14 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
                 <div className="mt-3">
                   <KalenderSlot
                     serviceId={paket.service_id}
+                    kategori={kind}
                     tanggal={tanggal}
                     jam={jam}
                     onPilih={(t, j) => { setTanggal(t); setJam(j) }}
+                    paket={paket}
+                    jumlah={jumlah}
+                    tambahan={tambahan}
+                    onUbahDurasi={(n, t) => { setJumlah(n); setTambahan(t) }}
                   />
                 </div>
               ) : (
@@ -245,7 +243,7 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
                     ))}
                   </select>
                 </div>
-                <OrderField {...v.estimate} value={estimasi} onChange={setEstimasi} />
+                {v.estimate && <OrderField {...v.estimate} value={estimasi} onChange={setEstimasi} />}
               </div>
             </OrderSection>
 

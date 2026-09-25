@@ -7,6 +7,7 @@ import { rupiahBulat } from '../lib/format'
 import {
   listVendorBookings, konfirmasiBooking, bukaPercakapan, type ApiBooking,
 } from '../lib/api'
+import { rentangJam } from '../lib/durasi'
 
 /** Jenis acara di DB pakai snake_case; ini tampilannya. */
 const JENIS: Record<string, string> = {
@@ -157,7 +158,7 @@ export default function VendorPemesananPage() {
                             })}
                           </p>
                           <p className="mt-0.5 text-[13px] text-ink/70">
-                            {b.start_time}
+                            {rentangJam(b)}
                           </p>
                         </td>
                         <td className="px-6 py-5 text-right">

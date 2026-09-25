@@ -295,9 +295,10 @@ async function getPayment(req, res, next) {
     const { rows } = await pool.query(
       `SELECT p.*, b.booking_id, b.total_price, b.dp_amount, b.payment_status,
               b.event_location_detail,
-              s.service_name, s.category,
+              s.service_id, s.service_name, s.category,
               v.business_name, v.city,
-              b.event_date, to_char(b.start_time, 'HH24:MI') AS start_time
+              b.event_date, to_char(b.start_time, 'HH24:MI') AS start_time,
+              to_char(b.start_time + b.durasi_menit * interval '1 minute', 'HH24:MI') AS end_time
          FROM payments p
          JOIN bookings b ON b.booking_id = p.booking_id
          JOIN services s ON s.service_id = b.service_id

@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { periksaDetail } = require('../lib/layananDetail');
+const { berbasisJam, DURASI_BAWAAN } = require('../lib/kategori');
 const { gambarBermasalah, urlFotoAbsolut } = require('../lib/gambar');
 
 const VALID_CATEGORIES = [
@@ -15,6 +16,7 @@ const FOTO_MAX_CHARS = 200_000;
 // gambarnya diambil terpisah lewat GET /services/:serviceId/photo.
 const KOLOM_LAYANAN = `service_id, vendor_id, service_name, category, description,
          price, minimum_notice_days, is_active, created_at, details,
+         durasi_menit, per_orang, harga_per_jam_tambahan,
          (image_url IS NOT NULL) AS has_photo`;
 
 /** null kalau tidak ada gambar yang dikirim, string kosong kalau diminta
@@ -54,6 +56,28 @@ async function kategoriLain(vendorId, category, kecualiServiceId = null) {
   return rows.map((r) => r.category);
 }
 
+/** Paket berbasis jam (MUA & fotografer, migrasi 016): durasi, per orang,
+ *  harga jam tambahan. Kategori lain selalu NULL/false — mereka tidak dipesan
+ *  per jam, dan nilai sisa dari kategori lama tidak boleh ikut terbawa. */
+function periksaJam(body, category) {
+  if (!berbasisJam(category)) {
+    return { nilai: { durasi: null, perOrang: false, harga: null } };
+  }
+  const durasi = body.durasi_menit == null || body.durasi_menit === ''
+    ? DURASI_BAWAAN[category] : Number(body.durasi_menit);
+  if (!Number.isInteger(durasi) || durasi < 15 || durasi > 1440) {
+    return { salah: 'durasi_menit harus bilangan bulat 15-1440' };
+  }
+  const harga = body.harga_per_jam_tambahan == null || body.harga_per_jam_tambahan === ''
+    ? null : Number(body.harga_per_jam_tambahan);
+  if (harga !== null && (!Number.isFinite(harga) || harga < 0)) {
+    return { salah: 'harga_per_jam_tambahan tidak boleh negatif' };
+  }
+  // Paket per orang cuma masuk akal untuk MUA (merias per kepala).
+  const perOrang = category === 'makeup_artist' && body.per_orang === true;
+  return { nilai: { durasi, perOrang, harga } };
+}
+
 async function createService(req, res, next) {
   try {
     const { vendorId } = req.params;
@@ -77,6 +101,9 @@ async function createService(req, res, next) {
     const rinci = periksaDetail(details, category);
     if (rinci.salah) return res.status(400).json({ message: rinci.salah });
 
+    const jam = periksaJam(req.body, category);
+    if (jam.salah) return res.status(400).json({ message: jam.salah });
+
     const isOwner = await assertVendorOwnership(vendorId, req.user.user_id);
     if (!isOwner) {
       return res.status(404).json({ message: 'Vendor tidak ditemukan atau bukan milik Anda' });
@@ -94,12 +121,14 @@ async function createService(req, res, next) {
     const result = await pool.query(
       `INSERT INTO services
          (vendor_id, service_name, category, description, price, minimum_notice_days,
-          image_url, details)
-       VALUES ($1, $2, $3, $4, $5, COALESCE($6, 7), $7, COALESCE($8::jsonb, '{}'::jsonb))
+          image_url, details, durasi_menit, per_orang, harga_per_jam_tambahan)
+       VALUES ($1, $2, $3, $4, $5, COALESCE($6, 7), $7, COALESCE($8::jsonb, '{}'::jsonb),
+               $9, $10, $11)
        RETURNING ${KOLOM_LAYANAN}`,
       [vendorId, service_name, category, description || null, price,
        minimum_notice_days ?? null, foto.nilai || null,
-       rinci.nilai ? JSON.stringify(rinci.nilai) : null]
+       rinci.nilai ? JSON.stringify(rinci.nilai) : null,
+       jam.nilai.durasi, jam.nilai.perOrang, jam.nilai.harga]
     );
 
     res.status(201).json({ service: result.rows[0] });
@@ -120,6 +149,7 @@ async function listMyServices(req, res, next) {
     const result = await pool.query(
       `SELECT s.service_id, s.service_name, s.category, s.description, s.price,
               s.minimum_notice_days, s.is_active, s.created_at, s.details,
+              s.durasi_menit, s.per_orang, s.harga_per_jam_tambahan,
               (s.image_url IS NOT NULL) AS has_photo
          FROM services s
         WHERE s.vendor_id IN (SELECT vendor_id FROM vendors WHERE owner_user_id = $1)
@@ -153,6 +183,7 @@ async function listServices(req, res, next) {
     const result = await pool.query(
       `SELECT service_id, service_name, category, description, price,
               minimum_notice_days, is_active, created_at, details,
+              durasi_menit, per_orang, harga_per_jam_tambahan,
               (image_url IS NOT NULL) AS has_photo
        FROM services
        WHERE vendor_id = $1 AND is_active = TRUE
@@ -190,7 +221,13 @@ async function updateService(req, res, next) {
     // perubahan ini, bukan terhadap `category` di body — yang boleh saja tidak
     // dikirim sama sekali.
     let rinciJson = null;
-    if (category || details !== undefined) {
+    // Tiga field paket jam dikirim form sebagai SATU paket. Tidak dikirim sama
+    // sekali = biarkan; dikirim = ganti ketiganya (termasuk mengosongkan harga
+    // jam tambahan). Pindah kategori selalu menghitung ulang ketiganya.
+    const jamDikirim = ['durasi_menit', 'per_orang', 'harga_per_jam_tambahan']
+      .some((k) => req.body[k] !== undefined);
+    let jam = null;
+    if (category || details !== undefined || jamDikirim) {
       const milik = await pool.query(
         `SELECT s.vendor_id, s.category::text AS category FROM services s
            JOIN vendors v ON v.vendor_id = s.vendor_id
@@ -215,6 +252,11 @@ async function updateService(req, res, next) {
       }
 
       const kategoriEfektif = category || kategoriLama;
+      if (jamDikirim || (category && category !== kategoriLama)) {
+        const j = periksaJam(req.body, kategoriEfektif);
+        if (j.salah) return res.status(400).json({ message: j.salah });
+        jam = j.nilai;
+      }
       const rinci = periksaDetail(details, kategoriEfektif);
       if (rinci.salah) return res.status(400).json({ message: rinci.salah });
 
@@ -239,6 +281,10 @@ async function updateService(req, res, next) {
          minimum_notice_days = COALESCE($5, minimum_notice_days),
          is_active           = COALESCE($6, is_active),
          details             = COALESCE($10::jsonb, details),
+         durasi_menit        = CASE WHEN $11::boolean THEN $12::int ELSE durasi_menit END,
+         per_orang           = CASE WHEN $11::boolean THEN $13::boolean ELSE per_orang END,
+         harga_per_jam_tambahan = CASE WHEN $11::boolean THEN $14::numeric
+                                       ELSE harga_per_jam_tambahan END,
          -- Tiga keadaan, bukan dua: tidak dikirim = biarkan, string kosong =
          -- hapus fotonya, selain itu = ganti. COALESCE saja tidak cukup karena
          -- dia tidak bisa membedakan "tidak diubah" dari "dikosongkan".
@@ -251,7 +297,8 @@ async function updateService(req, res, next) {
        RETURNING ${KOLOM_LAYANAN}`,
       [service_name || null, category || null, description || null,
        price ?? null, minimum_notice_days ?? null, is_active ?? null,
-       foto.nilai, serviceId, req.user.user_id, rinciJson]
+       foto.nilai, serviceId, req.user.user_id, rinciJson,
+       jam !== null, jam?.durasi ?? null, jam?.perOrang ?? false, jam?.harga ?? null]
     );
 
     if (result.rows.length === 0) {

@@ -9,7 +9,7 @@ import { categories, type CategoryKey } from '../data/categories'
 import { cariMetode } from '../data/payments'
 import { rupiah } from '../lib/format'
 import {
-  getPayment, refreshPembayaran, simulasiBayar,
+  getPayment, refreshPembayaran, simulasiBayar, urlFotoLayanan,
   type ApiPaymentDetail,
 } from '../lib/api'
 
@@ -325,8 +325,13 @@ export default function VirtualAccountPage() {
                   </h2>
 
                   <div className="flex gap-4 pt-5">
+                    {/* Foto LAYANAN yang dipesan, pola yang sama dengan
+                        Pesanan Saya. Dulu <Img> ini tanpa src sama sekali,
+                        jadi selamanya kotak polos. Slot kosong dibalas 404
+                        dan Img jatuh ke blok polos lewat onError. */}
                     <Img
-                      alt={payment.business_name}
+                      src={urlFotoLayanan(payment.service_id)}
+                      alt={payment.service_name}
                       tint={kat.tint}
                       className="h-[90px] w-[90px] shrink-0 object-cover"
                     />

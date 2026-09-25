@@ -44,7 +44,16 @@ type BaruLayanan = {
    *  seluruh objeknya, jadi field yang dikosongkan vendor memang harus
    *  hilang. */
   details: Record<string, string>
+  /** Paket berbasis jam, hanya dikirim untuk MUA & fotografer (migrasi 016).
+   *  Ketiganya berangkat bersama — backend menggantinya sebagai satu paket. */
+  durasi_menit?: number
+  per_orang?: boolean
+  harga_per_jam_tambahan?: number | null
 }
+
+/** Kategori yang dipesan per rentang jam. Sama dengan BERBASIS_JAM di
+ *  backend/src/lib/kategori.js. */
+const KATEGORI_JAM = ['makeup_artist', 'photographer']
 
 /** Emoji per kategori, dipakai sebagai pengganti foto layanan. */
 const EMOJI: Record<string, { emoji: string; tint: string }> = {
@@ -424,6 +433,9 @@ function ServiceDialog({
   // dialah yang menentukan field tambahan mana yang tampil di bawah.
   const [kategori, setKategori] = useState(awal?.category ?? kunci ?? '')
   const fieldTambahan = FIELD_LAYANAN[kategori] ?? []
+  const pakaiJam = KATEGORI_JAM.includes(kategori)
+  // Menentukan arti angka durasi: jam per paket, atau menit per orang.
+  const [perOrang, setPerOrang] = useState(Boolean(awal?.per_orang))
 
   // undefined = fotonya tidak disentuh, '' = minta dihapus, string = foto baru.
   const [foto, setFoto] = useState<string | undefined>(undefined)
@@ -473,6 +485,27 @@ function ServiceDialog({
       return setError('Waktu persiapan harus berupa jumlah hari yang bulat.')
     }
 
+    // Paket berbasis jam: durasi disimpan dalam MENIT. Paket per sesi diisi
+    // dalam jam (lebih wajar untuk vendor), paket per orang dalam menit.
+    let jamPaket: Pick<BaruLayanan, 'durasi_menit' | 'per_orang' | 'harga_per_jam_tambahan'> = {}
+    if (KATEGORI_JAM.includes(category)) {
+      const po = category === 'makeup_artist' && perOrang
+      const angka = Number(data.get(po ? 'durasi_orang' : 'durasi_jam'))
+      const menit = po ? angka : angka * 60
+      if (!Number.isInteger(menit) || menit < 15 || menit > 1440) {
+        return setError(po ? 'Menit per orang harus 15-1440.' : 'Durasi paket harus 1-24 jam.')
+      }
+      const tambah = String(data.get('harga_per_jam_tambahan') || '').trim()
+      if (tambah && (!Number.isFinite(Number(tambah)) || Number(tambah) < 0)) {
+        return setError('Harga jam tambahan harus angka positif, atau kosongkan.')
+      }
+      jamPaket = {
+        durasi_menit: menit,
+        per_orang: po,
+        harga_per_jam_tambahan: tambah ? Number(tambah) : null,
+      }
+    }
+
     setMengirim(true)
     try {
       // Prefiks d_ supaya kunci seperti `durasi` tidak pernah bertabrakan
@@ -490,6 +523,7 @@ function ServiceDialog({
         price,
         minimum_notice_days: noticeDays,
         details,
+        ...jamPaket,
         // Dibiarkan hilang dari body kalau fotonya tidak disentuh — backend
         // membedakan "tidak dikirim" (biarkan) dari "" (hapus).
         ...(foto !== undefined ? { image: foto } : {}),
@@ -655,6 +689,66 @@ function ServiceDialog({
               className="mt-2 w-full rounded-sm border border-line bg-white px-3 py-2.5 text-[14px] outline-none placeholder:text-ink/35 focus:border-navy-900"
             />
           </div>
+
+          {/* Paket berbasis jam (MUA & fotografer). Menentukan panjang blok jam
+              yang terkunci saat pelanggan memesan, jadi bukan keterangan
+              biasa — letaknya dipisah dari keterangan opsional di bawah. */}
+          {pakaiJam && (
+            <div className="border-t border-line pt-5">
+              <p className="text-[11px] font-semibold tracking-[0.06em] text-ink/70">
+                PAKET BERBASIS JAM
+              </p>
+              <p className="mt-1 text-[12px] text-muted">
+                Tim Anda dikunci selama durasi ini (plus jeda perjalanan di halaman Jadwal).
+                Di luar jam itu tim yang sama tetap bisa dipesan orang lain.
+              </p>
+
+              {kategori === 'makeup_artist' && (
+                <label className="mt-4 flex items-center gap-2 text-[14px]">
+                  <input
+                    type="checkbox"
+                    checked={perOrang}
+                    onChange={(e) => setPerOrang(e.target.checked)}
+                    className="h-4 w-4 accent-navy-900"
+                  />
+                  Harga & durasi per orang (pelanggan mengisi jumlah orang)
+                </label>
+              )}
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {kategori === 'makeup_artist' && perOrang ? (
+                  <Field
+                    id="durasi_orang"
+                    label="MENIT PER ORANG"
+                    type="number"
+                    min={15}
+                    placeholder="45"
+                    defaultValue={awal?.per_orang ? awal.durasi_menit ?? undefined : 45}
+                  />
+                ) : (
+                  <Field
+                    id="durasi_jam"
+                    label="DURASI PAKET (JAM)"
+                    type="number"
+                    min={1}
+                    placeholder="4"
+                    defaultValue={awal?.durasi_menit && !awal.per_orang
+                      ? Math.ceil(awal.durasi_menit / 60)
+                      : kategori === 'photographer' ? 4 : 3}
+                  />
+                )}
+                <Field
+                  id="harga_per_jam_tambahan"
+                  label="HARGA PER JAM TAMBAHAN (RP)"
+                  type="number"
+                  min={0}
+                  placeholder="Kosong = tidak bisa tambah jam"
+                  defaultValue={awal?.harga_per_jam_tambahan != null
+                    ? Number(awal.harga_per_jam_tambahan) : undefined}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Keterangan khusus per kategori. Semuanya opsional — vendor yang
               baru mulai tidak perlu mengisi tujuh kotak sekaligus, tapi yang
