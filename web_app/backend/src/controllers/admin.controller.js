@@ -1,5 +1,7 @@
 const pool = require('../config/db');
 const { PLATFORM_FEE_RATE } = require('../lib/saldo');
+const { kirimDokumen } = require('../lib/gambar');
+const { beriTahuVendor } = require('../lib/notifikasi');
 
 // ------------------------------------------------------------
 // PUSAT KENDALI ADMIN
@@ -37,7 +39,8 @@ async function listVendorsForReview(req, res, next) {
               COALESCE(
                 (SELECT json_agg(json_build_object(
                           'doc_type', d.doc_type, 'file_name', d.file_name,
-                          'status', d.status, 'uploaded_at', d.uploaded_at)
+                          'status', d.status, 'uploaded_at', d.uploaded_at,
+                          'ada_berkas', d.file_url IS NOT NULL)
                         ORDER BY d.doc_type)
                    FROM vendor_documents d WHERE d.vendor_id = v.vendor_id),
                 '[]'::json) AS documents,
@@ -124,6 +127,14 @@ async function reviewVendor(req, res, next) {
         RETURNING document_id`,
       [action === 'approve' ? 'approved' : 'rejected', vendorId]
     );
+
+    await beriTahuVendor(client, vendorId, {
+      judul: action === 'approve' ? 'Akun vendor terverifikasi' : 'Verifikasi vendor ditolak',
+      isi: action === 'approve'
+        ? 'Selamat, profil Anda kini tampil dengan lencana terverifikasi.'
+        : `Alasan: ${note.trim()}. Perbaiki dokumen Anda lalu unggah ulang.`,
+      tautan: '/vendor/profil',
+    });
 
     await client.query('COMMIT');
 
@@ -232,15 +243,27 @@ async function decidePayout(req, res, next) {
 
     // Status lama ikut di klausa WHERE, jadi keputusan kedua atas payout yang
     // sama tidak mengubah apa pun (dan dibalas 409, bukan diam-diam sukses).
+    // Notifikasi lonceng ditulis di pernyataan yang SAMA (CTE) — handler ini
+    // tidak memakai transaksi, dan satu pernyataan sudah atomik.
     const { rows } = await pool.query(
-      `UPDATE payouts
-          SET status     = $1,
-              note       = $2,
-              decided_at = now(),
-              decided_by = $3
-        WHERE payout_id = $4 AND status = 'pending'
-        RETURNING payout_id, vendor_id, amount, status, note, decided_at`,
-      [action === 'approve' ? 'paid' : 'rejected', note?.trim() || null, req.user.user_id, payoutId]
+      `WITH p AS (
+         UPDATE payouts
+            SET status     = $1,
+                note       = $2,
+                decided_at = now(),
+                decided_by = $3
+          WHERE payout_id = $4 AND status = 'pending'
+          RETURNING payout_id, vendor_id, amount, status, note, decided_at
+       ), n AS (
+         INSERT INTO notifikasi (user_id, judul, isi, tautan)
+         SELECT v.owner_user_id, $5,
+                'Rp' || replace(to_char(p.amount, 'FM999,999,999,999'), ',', '.') || COALESCE('. Catatan admin: ' || p.note, ''),
+                '/vendor/keuangan'
+           FROM p JOIN vendors v ON v.vendor_id = p.vendor_id
+       )
+       SELECT * FROM p`,
+      [action === 'approve' ? 'paid' : 'rejected', note?.trim() || null, req.user.user_id, payoutId,
+       action === 'approve' ? 'Penarikan dana disetujui' : 'Penarikan dana ditolak']
     );
 
     if (rows.length === 0) {
@@ -376,8 +399,24 @@ async function verifyUser(req, res, next) {
   }
 }
 
+// GET /api/v1/admin/vendors/:vendorId/documents/:docType/berkas
+// Isi dokumen legal untuk kurasi. Listing di atas cuma membawa penanda
+// `ada_berkas` — data URL-nya bisa ratusan KB per dokumen.
+async function getVendorDocumentFile(req, res, next) {
+  try {
+    const r = await pool.query(
+      `SELECT file_url FROM vendor_documents
+        WHERE vendor_id::text = $1 AND doc_type::text = $2`,
+      [req.params.vendorId, req.params.docType]
+    );
+    kirimDokumen(res, r.rows[0]?.file_url);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   listVendorsForReview, vendorReviewStats, reviewVendor,
   listPayouts, escrowSummary, decidePayout,
-  listBookings, listUsers, verifyUser,
+  listBookings, listUsers, verifyUser, getVendorDocumentFile,
 };

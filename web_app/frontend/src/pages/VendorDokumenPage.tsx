@@ -2,15 +2,14 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ShieldIcon, NoteIcon, FolderIcon, UserCircleIcon } from '../components/icons'
 import { get, kirim } from '../lib/api'
+import { bacaDokumen } from '../lib/gambar'
 
 /** Langkah 2 onboarding vendor: unggah dokumen legalitas.
  *
- *  CATATAN PENTING: backend hanya menyimpan NAMA BERKAS-nya
- *  (`vendor_documents.file_name`), bukan isinya — belum ada object storage.
- *  Jadi file yang dipilih di sini tidak benar-benar terkirim; yang tercatat
- *  cuma namanya, dan status kurasinya jadi `pending`.
- *  ponytail: metadata saja, cukup untuk demo lomba. Upgrade: Supabase
- *  Storage + simpan URL-nya di kolom yang sama. */
+ *  Sejak 26 Sep 2026 isinya ikut tersimpan (`vendor_documents.file_url`,
+ *  data URL) dan bisa dibuka admin saat kurasi. Gambar diperkecil di browser
+ *  tanpa dipotong, PDF maksimal 700 KB — lihat bacaDokumen(). Berkasnya tidak
+ *  pernah publik: cuma pemiliknya dan admin, lewat endpoint ber-token. */
 
 type ApiDocument = {
   document_id: string
@@ -26,7 +25,7 @@ const jenisDokumen = [
     judul: 'KTP Penanggung Jawab',
     catatan: 'Scan atau foto KTP asli, pastikan tulisan terbaca jelas.',
     tombol: 'Pilih File KTP',
-    batas: 'Maksimal 5MB (JPG, PNG, PDF)',
+    batas: 'JPG, PNG, atau PDF maks. 700 KB',
     Icon: UserCircleIcon,
   },
   {
@@ -34,7 +33,7 @@ const jenisDokumen = [
     judul: 'NPWP Perusahaan / Pribadi',
     catatan: 'Dokumen NPWP yang masih berlaku.',
     tombol: 'Pilih File NPWP',
-    batas: 'Maksimal 5MB (JPG, PNG, PDF)',
+    batas: 'JPG, PNG, atau PDF maks. 700 KB',
     Icon: NoteIcon,
   },
   {
@@ -43,7 +42,7 @@ const jenisDokumen = [
     catatan:
       'Surat Izin Usaha Perdagangan atau dokumen portofolio komprehensif yang menunjukkan layanan Anda.',
     tombol: 'Pilih File SIUP/Portofolio',
-    batas: 'Maksimal 10MB (PDF disarankan)',
+    batas: 'JPG, PNG, atau PDF maks. 700 KB',
     Icon: FolderIcon,
   },
 ]
@@ -59,7 +58,8 @@ export default function VendorDokumenPage() {
   const lanjutan = (useLocation().state ?? {}) as { category?: string }
 
   const [tersimpan, setTersimpan] = useState<Record<string, ApiDocument>>({})
-  const [dipilih, setDipilih] = useState<Record<string, string>>({})
+  // Nama + isi (data URL) berkas yang dipilih tapi belum dikirim.
+  const [dipilih, setDipilih] = useState<Record<string, { nama: string; isi: string }>>({})
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -85,9 +85,10 @@ export default function VendorDokumenPage() {
 
     setLoading(true)
     try {
-      for (const [docType, fileName] of baru) {
+      for (const [docType, { nama, isi }] of baru) {
         await kirim<{ document: ApiDocument }>(`/vendors/me/documents/${docType}`, 'PUT', {
-          file_name: fileName,
+          file_name: nama,
+          file: isi,
         })
       }
       navigate('/vendor/onboarding', { state: lanjutan })
@@ -135,7 +136,7 @@ export default function VendorDokumenPage() {
 
           {jenisDokumen.map(({ type, judul, catatan, tombol, batas, Icon }) => {
             const doc = tersimpan[type]
-            const namaBaru = dipilih[type]
+            const namaBaru = dipilih[type]?.nama
 
             return (
               <div key={type} className="mt-8">
@@ -162,19 +163,22 @@ export default function VendorDokumenPage() {
                   type="file"
                   accept=".jpg,.jpeg,.png,.pdf"
                   className="sr-only"
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const f = e.target.files?.[0]
-                    if (f) setDipilih((d) => ({ ...d, [type]: f.name }))
+                    e.target.value = ''
+                    if (!f) return
+                    setError('')
+                    try {
+                      const isi = await bacaDokumen(f)
+                      setDipilih((d) => ({ ...d, [type]: { nama: f.name, isi } }))
+                    } catch (err) {
+                      setError((err as Error).message)
+                    }
                   }}
                 />
               </div>
             )
           })}
-
-          <p className="mt-8 rounded border border-line bg-cream px-4 py-3 text-[12px] leading-relaxed text-muted">
-            Untuk demo lomba, yang tercatat baru <b>nama berkasnya</b> — isinya belum diunggah ke
-            penyimpanan. Tim kurasi tetap melihat dokumen apa saja yang Anda lampirkan.
-          </p>
 
           {error && (
             <p role="alert" className="mt-5 text-[14px] text-maroon">

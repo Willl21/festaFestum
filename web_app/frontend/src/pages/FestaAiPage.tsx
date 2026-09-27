@@ -5,8 +5,8 @@ import { Link } from 'react-router-dom'
 import Img from '../components/Img'
 import { ChevronDown, SearchIcon } from '../components/icons'
 import { rupiah } from '../lib/format'
-import { categories, namaKota, type CategoryKey } from '../data/categories'
-import { listVendors, urlFotoVendor, type ApiVendor } from '../lib/api'
+import { categories, KOTA, namaKota, type CategoryKey } from '../data/categories'
+import { rekomendasiAi, urlFotoLayanan, type RekomendasiAi } from '../lib/api'
 import Bagian from '../components/Bagian'
 
 /** Umur minimum rangka hasil pencarian, diteruskan ke <TukarHalus>. Lebih
@@ -23,9 +23,8 @@ const KATEGORI: Record<string, CategoryKey> = {
   event_organizer: 'eo',
 }
 
-/** Fokus acara -> kategori vendor yang dicari. Dipakai sebagai pencocokan
- *  SEMENTARA sampai AI Engineer menyediakan POST /api/v1/ai/recommend.
- *  Satu fokus = satu kategori yang memang kita layani. "Katering" dan
+/** Fokus acara -> kategori vendor. Dikirim ke backend, yang menyaring hasil AI
+ *  ke kategori ini. Satu fokus = satu kategori yang memang kita layani. "Katering" dan
  *  "Hiburan" dibuang (revisi PM): dua-duanya diam-diam dipetakan ke EO,
  *  padahal kategori itu tidak ada. */
 const FOKUS_KE_KATEGORI: Record<string, string> = {
@@ -36,36 +35,39 @@ const FOKUS_KE_KATEGORI: Record<string, string> = {
   Rias: 'makeup_artist',
 }
 
-/** Batas atas budget, dibaca dari label pilihan di form. */
+/** AI menerima angka, bukan rentang: yang dikirim batas ATAS tiap pilihan
+ *  (AI memang tidak akan melewati budget). Rentang terbuka diberi atap wajar. */
 const BATAS_BUDGET: Record<string, number> = {
   'Rp 10.000.000 - 50.000.000': 50_000_000,
   'Rp 50.000.000 - 100.000.000': 100_000_000,
   'Rp 100.000.000 - 250.000.000': 250_000_000,
-  '> Rp 250.000.000': Number.MAX_SAFE_INTEGER,
+  '> Rp 250.000.000': 500_000_000,
 }
 
-const parameterFields = [
-  { id: 'tipe', label: 'Tipe Acara', options: ['Pernikahan', 'Wisuda', 'Gala Dinner', 'Konferensi'] },
-  { id: 'tamu', label: 'Jumlah Tamu', options: ['< 50', '50-100', '100-150', '150-300', '> 300'] },
-  {
-    id: 'budget',
-    label: 'Target Budget',
-    options: [
-      'Rp 10.000.000 - 50.000.000',
-      'Rp 50.000.000 - 100.000.000',
-      'Rp 100.000.000 - 250.000.000',
-      '> Rp 250.000.000',
-    ],
-  },
-]
+const JUMLAH_TAMU: Record<string, number> = {
+  '< 50': 50,
+  '50-100': 100,
+  '100-150': 150,
+  '150-300': 300,
+  '> 300': 500,
+}
+
+const TIPE_ACARA = ['Pernikahan', 'Wisuda', 'Gala Dinner', 'Konferensi']
 
 const fokusOptions = Object.keys(FOKUS_KE_KATEGORI)
 
 
 export default function FestaAiPage() {
   const [fokus, setFokus] = useState<string[]>([])
-  const [budget, setBudget] = useState('')
-  const [rekomendasi, setRekomendasi] = useState<ApiVendor[]>([])
+  const [nilai, setNilai] = useState({
+    tipe: TIPE_ACARA[0],
+    tamu: Object.keys(JUMLAH_TAMU)[0],
+    budget: Object.keys(BATAS_BUDGET)[0],
+    lokasi: KOTA[0],
+  })
+  const [rekomendasi, setRekomendasi] = useState<RekomendasiAi[]>([])
+  const [total, setTotal] = useState(0)
+  const [catatan, setCatatan] = useState({ pembuka: '', saran: '' })
   // Halaman ini tidak mengambil data saat dibuka, jadi tidak ada yang bisa
   // dipakai sebagai penanda "sedang memuat". Penanda ini murni untuk animasi
   // masuk: dinyalakan saat dipasang lalu dimatikan seketika, dan <TukarHalus>
@@ -81,30 +83,20 @@ export default function FestaAiPage() {
   const [galat, setGalat] = useState('')
   const [sudahCari, setSudahCari] = useState(false)
 
-  const total = rekomendasi.reduce((sum, r) => sum + Number(r.price_start_from ?? 0), 0)
-
-  // Pencocokan SEMENTARA: ambil vendor teratas dari kategori yang dipilih,
-  // saring dengan batas budget. Ini BUKAN model rekomendasi — begitu AI
-  // Engineer menyediakan POST /api/v1/ai/recommend, ganti isi fungsi ini saja.
   async function cariPaket() {
     setMencari(true)
     setGalat('')
     try {
-      const kategoriDicari = fokus.length
-        ? [...new Set(fokus.map((f) => FOKUS_KE_KATEGORI[f]).filter(Boolean))]
-        : Object.keys(KATEGORI)
-
-      const hasil = await Promise.all(
-        kategoriDicari.map((c) => listVendors({ category: c, limit: 3 }))
-      )
-
-      const batas = BATAS_BUDGET[budget] ?? Number.MAX_SAFE_INTEGER
-      const semua = hasil
-        .flatMap((r) => r.data)
-        .filter((v) => Number(v.price_start_from ?? 0) <= batas)
-
-      semua.sort((a, b) => Number(b.rating_avg) - Number(a.rating_avg))
-      setRekomendasi(semua.slice(0, 5))
+      const r = await rekomendasiAi({
+        event_type: nilai.tipe,
+        budget: BATAS_BUDGET[nilai.budget],
+        guest_count: JUMLAH_TAMU[nilai.tamu],
+        location: nilai.lokasi,
+        kategori: fokus.map((f) => FOKUS_KE_KATEGORI[f]),
+      })
+      setRekomendasi(r.data)
+      setTotal(r.total)
+      setCatatan({ pembuka: r.pesan_pembuka, saran: r.saran_penghematan })
     } catch (e) {
       setGalat((e as Error).message)
     } finally {
@@ -128,7 +120,14 @@ export default function FestaAiPage() {
               </h1>
 
               <div className="mt-6 space-y-5">
-                {parameterFields.map((f) => (
+                {(
+                  [
+                    { id: 'tipe', label: 'Tipe Acara', options: TIPE_ACARA },
+                    { id: 'lokasi', label: 'Lokasi', options: KOTA },
+                    { id: 'tamu', label: 'Jumlah Tamu', options: Object.keys(JUMLAH_TAMU) },
+                    { id: 'budget', label: 'Target Budget', options: Object.keys(BATAS_BUDGET) },
+                  ] as const
+                ).map((f) => (
                   <div key={f.id}>
                     <label htmlFor={f.id} className="block text-[15px]">
                       {f.label}
@@ -136,12 +135,14 @@ export default function FestaAiPage() {
                     <div className="relative mt-2">
                       <select
                         id={f.id}
-                        value={f.id === 'budget' ? budget : undefined}
-                        onChange={f.id === 'budget' ? (e) => setBudget(e.target.value) : undefined}
+                        value={nilai[f.id]}
+                        onChange={(e) => setNilai((n) => ({ ...n, [f.id]: e.target.value }))}
                         className="h-12 w-full appearance-none rounded-sm border border-line bg-white px-4 pr-10 text-[15px] outline-none focus:border-navy-900"
                       >
                         {f.options.map((o) => (
-                          <option key={o}>{o}</option>
+                          <option key={o} value={o}>
+                            {f.id === 'lokasi' ? namaKota(o) : o}
+                          </option>
                         ))}
                       </select>
                       <ChevronDown className="pointer-events-none absolute top-1/2 right-4 h-5 w-5 -translate-y-1/2 text-ink/50" />
@@ -171,8 +172,6 @@ export default function FestaAiPage() {
                 ))}
               </div>
 
-              {/* Sementara memakai pencocokan sederhana di frontend. Diganti
-                  POST /api/v1/ai/recommend begitu AI Engineer menyediakannya. */}
               <button
                 type="button"
                 onClick={cariPaket}
@@ -182,6 +181,13 @@ export default function FestaAiPage() {
                 <SearchIcon className="h-5 w-5" />
                 {mencari ? 'Mencari...' : 'Cari Paket'}
               </button>
+              {/* Layanan AI di hosting gratis tertidur saat sepi; permintaan
+                  pertama menunggu dia bangun. */}
+              {mencari && (
+                <p className="mt-3 text-center text-[13px] text-muted">
+                  Permintaan pertama bisa memakan waktu hingga satu menit.
+                </p>
+              )}
             </aside>
 
             {/* HASIL */}
@@ -190,9 +196,8 @@ export default function FestaAiPage() {
                 <div>
                   <h2 className="font-display text-[32px] font-semibold">Rekomendasi Festa AI</h2>
                   <p className="mt-2 max-w-[500px] text-[14px] leading-relaxed text-ink/75">
-                    Berdasarkan parameter acara yang Anda masukkan, Festa AI memilih vendor yang paling
-                    sesuai. Saat ini pencocokannya masih sederhana (kategori + budget + rating) sambil
-                    menunggu model rekomendasi dari tim AI.
+                    {catatan.pembuka ||
+                      'Berdasarkan parameter acara yang Anda masukkan, Festa AI menyusun paket vendor yang muat di budget Anda.'}
                   </p>
                 </div>
                 <p className="font-display text-[24px] font-semibold">{rupiah(total)}</p>
@@ -226,14 +231,14 @@ export default function FestaAiPage() {
                 {() => (
                   <div className="mt-6 space-y-6">
                     {rekomendasi.map((r) => {
-                      const kat = categories[KATEGORI[r.categories[0]] ?? 'eo']
+                      const kat = categories[KATEGORI[r.category] ?? 'eo']
                       return (
                         <article
-                          key={r.vendor_id}
+                          key={r.service_id}
                           className="grid gap-6 rounded-sm border border-line bg-white p-4 sm:grid-cols-[320px_1fr]"
                         >
                           <Img
-                            src={r.has_photo ? urlFotoVendor(r.vendor_id) : undefined}
+                            src={r.has_photo ? urlFotoLayanan(r.service_id) : undefined}
                             alt={r.business_name}
                             tint={kat.tint}
                             className="h-[200px] w-full object-cover"
@@ -242,7 +247,7 @@ export default function FestaAiPage() {
                           <div className="flex flex-col py-2 pr-2">
                             <h3 className="font-display text-[26px] font-semibold">{r.business_name}</h3>
                             <p className="mt-2 max-w-[420px] text-[14px] leading-relaxed text-ink/75">
-                              {r.description || 'Vendor ini belum menuliskan deskripsi.'}
+                              {r.service_name}
                             </p>
                             <span className="mt-3 w-fit rounded-sm bg-[#fdeceb] px-3 py-1.5 text-[13px] text-[#c0392b]">
                               {kat.label} - {namaKota(r.city)} - rating {Number(r.rating_avg)}
@@ -255,7 +260,7 @@ export default function FestaAiPage() {
                                 Lihat Profil
                               </Link>
                               <p className="font-display text-[24px] font-semibold">
-                                {rupiah(Number(r.price_start_from ?? 0))}
+                                {rupiah(Number(r.price))}
                               </p>
                             </div>
                           </div>
@@ -263,6 +268,12 @@ export default function FestaAiPage() {
                         )
                       })}
 
+
+                    {catatan.saran && rekomendasi.length > 0 && (
+                      <p className="border border-line bg-white px-5 py-4 text-[14px] leading-relaxed text-ink/75">
+                        {catatan.saran}
+                      </p>
+                    )}
 
                     {galat && (
                       <p className="border border-maroon/30 bg-maroon/5 px-5 py-4 text-[14px] text-maroon">
@@ -272,7 +283,8 @@ export default function FestaAiPage() {
 
                     {sudahCari && !mencari && rekomendasi.length === 0 && !galat && (
                       <p className="border border-line bg-white py-16 text-center text-[15px] text-muted">
-                        Tidak ada vendor yang cocok dengan parameter itu. Coba longgarkan budget atau fokusnya.
+                        {catatan.saran ||
+                          'Tidak ada vendor yang cocok dengan parameter itu. Coba longgarkan budget atau fokusnya.'}
                       </p>
                     )}
 

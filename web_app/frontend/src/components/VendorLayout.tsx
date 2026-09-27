@@ -2,12 +2,13 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { cekAkses } from './PenjagaAkses'
 import { useEffect, useState } from 'react'
 import {
-  clearAuth, getMyVendor, pesanBelumDibaca, usePengguna, type ApiVendor,
+  clearAuth, getMyVendor, pesanBelumDibaca, urlFotoVendor, usePengguna, type ApiVendor,
 } from '../lib/api'
 import Img from './Img'
+import Lonceng from './Lonceng'
 import {
   GridIcon, CalendarIcon, ClockIcon, FolderIcon, WalletIcon,
-  BellIcon, ChatIcon, UserCircleIcon, HelpIcon, SettingsIcon, MenuIcon,
+  ChatIcon, UserCircleIcon, HelpIcon, SettingsIcon, MenuIcon,
 } from './icons'
 
 /** Kerangka dashboard vendor: sidebar kiri tetap + topbar, isinya lewat
@@ -33,7 +34,12 @@ const menu = [
   { to: '/vendor/layanan', label: 'Layanan & Portofolio', icon: FolderIcon },
   { to: '/vendor/keuangan', label: 'Keuangan & Payout', icon: WalletIcon },
   { to: '/vendor/pesan', label: 'Pusat Obrolan', icon: ChatIcon },
+  { to: '/vendor/profil', label: 'Profil Vendor', icon: UserCircleIcon },
 ]
+
+/** Diteruskan ke halaman lewat <Outlet context>, supaya halaman Profil Vendor
+ *  bisa memperbarui nama di sidebar tanpa memuat ulang. */
+export type KonteksVendor = { setVendor: (v: ApiVendor) => void }
 
 export default function VendorLayout() {
   const navigate = useNavigate()
@@ -102,8 +108,14 @@ export default function VendorLayout() {
         }`}
       >
         <div className="px-6 pt-8 pb-6 text-center">
+          {/* Dulu jatuh ke /img/vendor-avatar.jpg, berkas yang tidak pernah
+              ada — jadi vendor tanpa foto profil selalu dapat kotak kosong.
+              Sekarang: foto profil, kalau belum ada foto hero portofolionya. */}
           <Img
-            src={user?.avatar_url || '/img/vendor-avatar.jpg'}
+            src={
+              user?.avatar_url
+              || (vendor?.photos?.[0] ? urlFotoVendor(vendor.vendor_id, 0) : undefined)
+            }
             alt="Foto profil vendor"
             className="mx-auto h-[74px] w-[74px] rounded-lg object-cover"
           />
@@ -157,9 +169,9 @@ export default function VendorLayout() {
             <span className="flex items-center gap-1.5">
               <HelpIcon /> Bantuan
             </span>
-            <span className="flex items-center gap-1.5">
+            <Link to="/vendor/profil" className="flex items-center gap-1.5 hover:text-navy-900">
               <SettingsIcon /> Pengaturan
-            </span>
+            </Link>
           </div>
         </div>
       </aside>
@@ -172,13 +184,13 @@ export default function VendorLayout() {
                 header-nya melar 13px dan SELURUH halaman vendor bisa digeser
                 ke samping. Ikon obrolan DIKECUALIKAN: sejak punya halaman
                 sungguhan dia satu-satunya yang bisa diklik, jadi tetap tampil
-                di HP. Lonceng & avatar masih hiasan, itu yang dikorbankan. */}
+                di HP. Lonceng ikut dikecualikan sejak berfungsi (migrasi 019). */}
             <span className="hidden items-center gap-4 sm:flex">
               <span className="rounded-full bg-lavender/50 px-3 py-1 text-[12px] font-semibold text-navy-900">
                 <span className="mr-1 inline-block h-2 w-2 rounded-full bg-amber align-middle" aria-hidden /> Status: Aktif
               </span>
-              <BellIcon />
             </span>
+            <Lonceng />
             <Link
               to="/vendor/pesan"
               aria-label={
@@ -195,9 +207,9 @@ export default function VendorLayout() {
                 </span>
               )}
             </Link>
-            <span className="hidden sm:flex">
+            <Link to="/vendor/profil" aria-label="Profil Vendor" className="hidden hover:text-navy-900 sm:flex">
               <UserCircleIcon className="h-6 w-6" />
-            </span>
+            </Link>
             {/* Tombol Keluar yang dulu di sini dibuang: sidebar sudah punya
                 satu, dan sekarang sidebarnya terjangkau dari HP. */}
             <button
@@ -215,7 +227,7 @@ export default function VendorLayout() {
 
         <main className="flex-1 px-6 py-9 md:px-10">
           <div className="mx-auto max-w-[980px]">
-            <Outlet />
+            <Outlet context={{ setVendor } satisfies KonteksVendor} />
           </div>
         </main>
 

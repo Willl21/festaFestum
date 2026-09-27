@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import Lonceng from './Lonceng'
 import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { ChatIcon, MenuIcon } from './icons'
@@ -127,6 +128,7 @@ export default function Navbar() {
         <div className="flex items-center gap-2 sm:gap-3">
           {user ? (
             <div className="flex items-center gap-3">
+              <Lonceng />
               {/* Vendor yang sedang membuka sisi marketplace tetap dibawa ke
                   pusat obrolannya sendiri, sama seperti tautan avatar. */}
               <Link

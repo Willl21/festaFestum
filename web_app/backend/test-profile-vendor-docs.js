@@ -19,6 +19,9 @@ async function api(path, { method = 'GET', body, token } = {}) {
 
 const uniq = () => Math.random().toString(36).slice(2, 10);
 
+// PNG 1x1 — dokumen sekarang wajib membawa isinya, bukan cuma nama berkas.
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
 // Semua email yang dibuat run ini, supaya bisa disapu di akhir.
 const DIBUAT = [];
 
@@ -77,12 +80,31 @@ async function register(role) {
   r = await api('/vendors/me/documents/ktp', {
     method: 'PUT', token: vendorToken, body: { file_name: 'ktp-clara.jpg' },
   });
+  assert.strictEqual(r.status, 400, 'dokumen tanpa isi berkas seharusnya ditolak');
+
+  r = await api('/vendors/me/documents/ktp', {
+    method: 'PUT', token: vendorToken, body: { file_name: 'ktp-clara.jpg', file: PNG },
+  });
   assert.strictEqual(r.status, 201, `unggah ktp gagal: ${JSON.stringify(r.body)}`);
   assert.strictEqual(r.body.document.status, 'pending');
+  assert.strictEqual(r.body.document.ada_berkas, true);
+
+  // Isinya bisa diambil lagi oleh pemiliknya, persis byte yang dikirim.
+  const berkas = await fetch(`${BASE}/vendors/me/documents/ktp/berkas`, {
+    headers: { Authorization: `Bearer ${vendorToken}` },
+  });
+  assert.strictEqual(berkas.status, 200);
+  assert.strictEqual(berkas.headers.get('content-type'), 'image/png');
+  assert.strictEqual(
+    Buffer.from(await berkas.arrayBuffer()).toString('base64'), PNG.split(',')[1],
+    'isi berkas berubah di jalan'
+  );
+  // Tanpa token tidak ada apa-apa.
+  assert.strictEqual((await fetch(`${BASE}/vendors/me/documents/ktp/berkas`)).status, 401);
 
   // Unggah ulang jenis yang sama harus menimpa, bukan bikin baris kedua.
   r = await api('/vendors/me/documents/ktp', {
-    method: 'PUT', token: vendorToken, body: { file_name: 'ktp-clara-revisi.jpg' },
+    method: 'PUT', token: vendorToken, body: { file_name: 'ktp-clara-revisi.jpg', file: PNG },
   });
   assert.strictEqual(r.status, 201);
   r = await api('/vendors/me/documents', { token: vendorToken });
@@ -90,7 +112,7 @@ async function register(role) {
   assert.strictEqual(r.body.documents[0].file_name, 'ktp-clara-revisi.jpg');
 
   r = await api('/vendors/me/documents/paspor', {
-    method: 'PUT', token: vendorToken, body: { file_name: 'x.jpg' },
+    method: 'PUT', token: vendorToken, body: { file_name: 'x.jpg', file: PNG },
   });
   assert.strictEqual(r.status, 400, 'jenis dokumen asing seharusnya ditolak');
 

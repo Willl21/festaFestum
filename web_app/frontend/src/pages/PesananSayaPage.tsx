@@ -9,7 +9,7 @@ import { SearchIcon, ChevronDown, StarIcon, HelpIcon } from '../components/icons
 import { categories, namaKota, type CategoryKey } from '../data/categories'
 import { rupiah } from '../lib/format'
 import {
-  getToken, listMyBookings, batalBooking, kirimUlasan, bukaPercakapan, urlFotoLayanan,
+  getToken, listMyBookings, batalBooking, kirimUlasan, bukaPercakapan, urlFotoLayanan, ajukanLaporan,
   type ApiBooking,
 } from '../lib/api'
 import { rentangJam } from '../lib/durasi'
@@ -84,6 +84,11 @@ export default function PesananSayaPage() {
   const [ulasanUntuk, setUlasanUntuk] = useState('')
   const [nilai, setNilai] = useState(5)
   const [komentar, setKomentar] = useState('')
+  // Form refund/laporan (migrasi 020): pola satu-form-untuk-seluruh-daftar
+  // yang sama dengan ulasan.
+  const [laporUntuk, setLaporUntuk] = useState('')
+  const [jenisLapor, setJenisLapor] = useState<'refund' | 'laporan'>('refund')
+  const [alasan, setAlasan] = useState('')
 
   // Satu-satunya pintu masuk obrolan pelanggan ke vendor: ruangannya lahir
   // dari pesanan. Backend idempoten, jadi tombol ini selalu mendarat di
@@ -108,6 +113,22 @@ export default function PesananSayaPage() {
     try {
       const r = await batalBooking(p.booking_id)
       setPesanan((lama) => lama.map((x) => (x.booking_id === p.booking_id ? r.booking : x)))
+    } catch (e) {
+      setGalat((e as Error).message)
+    } finally {
+      setSibuk('')
+    }
+  }
+
+  async function kirimLaporan(p: ApiBooking) {
+    setSibuk(p.booking_id)
+    setGalat('')
+    try {
+      await ajukanLaporan(p.booking_id, jenisLapor, alasan.trim())
+      const baru = { jenis: jenisLapor, status: 'menunggu' as const, catatan_admin: null, dibuat_at: new Date().toISOString() }
+      setPesanan((lama) => lama.map((x) => (x.booking_id === p.booking_id ? { ...x, laporan: baru } : x)))
+      setLaporUntuk('')
+      setAlasan('')
     } catch (e) {
       setGalat((e as Error).message)
     } finally {
@@ -457,6 +478,37 @@ export default function PesananSayaPage() {
                         </button>
                       )}
 
+                      {/* Refund hanya bisa dipilih kalau sudah ada uang masuk;
+                          sebelum itu cukup dibatalkan. Laporan boleh kapan saja.
+                          Disembunyikan selama pengajuan sebelumnya menunggu —
+                          backend juga menolaknya (409). */}
+                      {p.laporan?.status !== 'menunggu'
+                        && p.payment_status !== 'cancelled' && p.payment_status !== 'expired' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLaporUntuk((v) => (v === p.booking_id ? '' : p.booking_id))
+                            setJenisLapor(p.payment_status === 'pending' ? 'laporan' : 'refund')
+                          }}
+                          className="rounded-sm border border-line px-3.5 py-2 text-[11px] font-semibold tracking-[0.04em] text-maroon transition-colors hover:border-maroon"
+                        >
+                          {laporUntuk === p.booking_id ? 'TUTUP' : 'REFUND / LAPORKAN VENDOR'}
+                        </button>
+                      )}
+
+                      {p.laporan && (
+                        <span
+                          className={`rounded-sm px-3.5 py-2 text-[11px] font-semibold tracking-[0.04em] ${
+                            p.laporan.status === 'menunggu' ? 'bg-amber/15 text-[#8a5a00]'
+                            : p.laporan.status === 'disetujui' ? 'bg-[#2e6b52]/10 text-[#2e6b52]'
+                            : 'bg-maroon/10 text-maroon'
+                          }`}
+                        >
+                          {p.laporan.jenis === 'refund' ? 'REFUND' : 'LAPORAN'}{' '}
+                          {p.laporan.status === 'menunggu' ? 'DITINJAU ADMIN' : p.laporan.status.toUpperCase()}
+                        </span>
+                      )}
+
                       {p.review && (
                         <span className="rounded-sm bg-lavender/40 px-3.5 py-2 text-[11px] font-semibold tracking-[0.04em]">
                           ULASAN ANDA <Bintang nilai={p.review.rating} className="h-3 w-3" />
@@ -479,6 +531,66 @@ export default function PesananSayaPage() {
                       )}
                     </div>
                   </footer>
+
+                  {p.laporan?.catatan_admin && (
+                    <p className="border-t border-line px-6 py-3 text-[12px] text-ink/75">
+                      Catatan admin: {p.laporan.catatan_admin}
+                    </p>
+                  )}
+
+                  {laporUntuk === p.booking_id && (
+                    <div className="muncul-halus border-t border-line px-6 py-5">
+                      <p className="text-[11px] font-semibold tracking-[0.04em] text-ink/70">
+                        AJUKAN KE ADMIN FESTA FESTUM
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Jenis pengajuan">
+                        {([
+                          ['refund', 'Minta refund dana'],
+                          ['laporan', 'Laporkan vendor saja'],
+                        ] as const).map(([v, label]) => {
+                          const mati = v === 'refund' && p.payment_status === 'pending'
+                          return (
+                            <button
+                              key={v}
+                              type="button"
+                              role="radio"
+                              aria-checked={jenisLapor === v}
+                              disabled={mati}
+                              title={mati ? 'Belum ada pembayaran, cukup batalkan pesanannya' : undefined}
+                              onClick={() => setJenisLapor(v)}
+                              className={`rounded-sm border px-3.5 py-2 text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                                jenisLapor === v ? 'border-navy-900 bg-navy-900 text-white' : 'border-line hover:border-navy-900'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <textarea
+                        value={alasan}
+                        onChange={(e) => setAlasan(e.target.value)}
+                        rows={3}
+                        maxLength={1000}
+                        aria-label="Alasan pengajuan"
+                        placeholder="Ceritakan masalahnya (minimal 10 karakter)"
+                        className="mt-3 w-full rounded-sm border border-line px-3 py-2 text-[14px] outline-none focus:border-navy-900"
+                      />
+                      <p className="mt-1 text-[12px] text-muted">
+                        {jenisLapor === 'refund'
+                          ? 'Kalau disetujui, pesanan dibatalkan dan dana dikembalikan manual oleh admin ke rekening di Profil Anda.'
+                          : 'Admin akan meninjau laporan Anda dan menindaklanjutinya dengan vendor.'}
+                      </p>
+                      <button
+                        type="button"
+                        disabled={sibuk === p.booking_id || alasan.trim().length < 10}
+                        onClick={() => kirimLaporan(p)}
+                        className="mt-3 h-10 rounded-sm bg-maroon px-6 text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                      >
+                        {sibuk === p.booking_id ? 'Mengirim…' : 'Kirim Pengajuan'}
+                      </button>
+                    </div>
+                  )}
 
                   {ulasanUntuk === p.booking_id && (
                     <div className="muncul-halus border-t border-line px-6 py-5">

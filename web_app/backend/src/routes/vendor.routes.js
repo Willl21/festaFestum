@@ -1,7 +1,7 @@
 const express = require('express');
 const {
   createVendor, listVendors, getMyVendor, getVendorDetail, updateVendor,
-  upsertMyDocument, listMyDocuments, setMyPhoto, getVendorPhoto,
+  upsertMyDocument, listMyDocuments, getMyDocumentFile, setMyPhoto, getVendorPhoto,
 } = require('../controllers/vendor.controller');
 const { createService, listServices, listMyServices } = require('../controllers/service.controller');
 const { listUlasanVendor } = require('../controllers/review.controller');
@@ -19,6 +19,7 @@ router.get('/me', requireAuth, requireRole('vendor_owner'), getMyVendor);
 router.get('/me/services', requireAuth, requireRole('vendor_owner'), listMyServices);
 router.get('/me/documents', requireAuth, requireRole('vendor_owner'), listMyDocuments);
 router.put('/me/documents/:docType', requireAuth, requireRole('vendor_owner'), upsertMyDocument);
+router.get('/me/documents/:docType/berkas', requireAuth, requireRole('vendor_owner'), getMyDocumentFile);
 router.put('/me/photos/:slot', requireAuth, requireRole('vendor_owner'), setMyPhoto);
 
 router.get('/:vendorId', getVendorDetail);

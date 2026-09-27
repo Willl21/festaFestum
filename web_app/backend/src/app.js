@@ -8,6 +8,8 @@ const bookingRoutes = require('./routes/booking.routes');
 const payoutRoutes = require('./routes/payout.routes');
 const adminRoutes = require('./routes/admin.routes');
 const chatRoutes = require('./routes/chat.routes');
+const notifikasiRoutes = require('./routes/notifikasi.routes');
+const aiRoutes = require('./routes/ai.routes');
 const paymentRoutes = require('./routes/payment.routes');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -44,6 +46,8 @@ app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/payouts', payoutRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/chat', chatRoutes);
+app.use('/api/v1/notifikasi', notifikasiRoutes);
+app.use('/api/v1/ai', aiRoutes);
 
 app.use(errorHandler);
 

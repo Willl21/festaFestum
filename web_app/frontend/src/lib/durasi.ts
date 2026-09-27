@@ -29,6 +29,7 @@ export function tambahJam(jam: string, menit: number) {
   return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
 }
 
-/** "06:00 – 09:00" untuk pesanan berbasis jam, "06:00" untuk yang harian. */
-export const rentangJam = (b: { start_time: string; end_time?: string | null }) =>
-  b.end_time ? `${b.start_time} – ${b.end_time}` : b.start_time
+/** "06:00 – 09:00" untuk pesanan berbasis jam, "06:00" untuk yang harian.
+ *  Florist memesan tanpa jam (start_time NULL, migrasi 018). */
+export const rentangJam = (b: { start_time: string | null; end_time?: string | null }) =>
+  !b.start_time ? 'jam menyesuaikan' : b.end_time ? `${b.start_time} – ${b.end_time}` : b.start_time

@@ -36,4 +36,29 @@ function urlFotoAbsolut(value) {
   return frontend ? frontend.replace(/\/$/, '') + value : value;
 }
 
-module.exports = { gambarBermasalah, urlFotoAbsolut };
+// Dokumen legal vendor (KTP/NPWP/SIUP): gambar ATAU PDF. Plafonnya ~700 KB
+// berkas asli — base64 menggelembungkannya ke ~950 ribu karakter, masih di
+// bawah express.json() 1 MB. Gambar sudah diperkecil browser (bacaDokumen).
+// ponytail: PII di kolom TEXT database utama. Upgrade-nya bucket privat +
+// kebijakan retensi; yang penting sekarang berkasnya tidak pernah publik.
+const DOKUMEN_MAX_CHARS = 950_000;
+const POLA_DOKUMEN = /^data:(image\/(?:png|jpeg|webp)|application\/pdf);base64,([A-Za-z0-9+/=]+)$/;
+
+function dokumenBermasalah(value) {
+  if (typeof value !== 'string') return 'Berkas harus berupa teks';
+  if (value.length > DOKUMEN_MAX_CHARS) return 'Berkas terlalu besar, maksimal ~700 KB';
+  if (!POLA_DOKUMEN.test(value)) return 'Berkas harus gambar JPG/PNG/WebP atau PDF';
+  return null;
+}
+
+/** Mengirim dokumen tersimpan sebagai berkas. `private, no-store`: isinya
+ *  data pribadi, jangan sampai tertahan di cache bersama. */
+function kirimDokumen(res, dataUrl) {
+  const cocok = POLA_DOKUMEN.exec(dataUrl || '');
+  if (!cocok) return res.status(404).json({ message: 'Berkas belum diunggah' });
+  res.set('Content-Type', cocok[1]);
+  res.set('Cache-Control', 'private, no-store');
+  res.send(Buffer.from(cocok[2], 'base64'));
+}
+
+module.exports = { gambarBermasalah, urlFotoAbsolut, dokumenBermasalah, kirimDokumen };

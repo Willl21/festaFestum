@@ -33,6 +33,23 @@ type Payout = {
   decided_by_name: string | null
 }
 
+/** Pengajuan refund/laporan dari Pesanan Saya (migrasi 020). */
+type Laporan = {
+  laporan_id: string
+  jenis: 'refund' | 'laporan'
+  alasan: string
+  status: 'menunggu' | 'disetujui' | 'ditolak'
+  catatan_admin: string | null
+  dibuat_at: string
+  event_date: string
+  service_name: string
+  business_name: string
+  customer_name: string
+  customer_email: string
+  /** Total pembayaran 'success' pesanan itu = yang dikembalikan kalau disetujui. */
+  dibayar: string
+}
+
 type Escrow = {
   tertahan: number
   dirilis_kotor: number
@@ -62,17 +79,20 @@ export default function AdminEscrowPage() {
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
   const [sibuk, setSibuk] = useState('')
+  const [laporan, setLaporan] = useState<Laporan[]>([])
 
   const muat = useCallback(async () => {
     setMemuat(true)
     setGalat('')
     try {
-      const [p, e] = await Promise.all([
+      const [p, e, l] = await Promise.all([
         get<{ data: Payout[] }>(`/admin/payouts?status=${tab}`),
         get<{ escrow: Escrow }>('/admin/escrow'),
+        get<{ data: Laporan[] }>('/admin/laporan?status=all'),
       ])
       setDaftar(p.data)
       setEscrow(e.escrow)
+      setLaporan(l.data)
     } catch (err) {
       setGalat((err as Error).message)
     } finally {
@@ -99,6 +119,30 @@ export default function AdminEscrowPage() {
     try {
       await kirim(`/admin/payouts/${po.payout_id}`, 'PATCH', { action, note: note || undefined })
       setCatatan((c) => ({ ...c, [po.payout_id]: '' }))
+      await muat()
+    } catch (err) {
+      setGalat((err as Error).message)
+    } finally {
+      setSibuk('')
+    }
+  }
+
+  async function putuskanLaporan(l: Laporan, action: 'setujui' | 'tolak') {
+    const note = catatan[l.laporan_id]?.trim()
+    if (action === 'tolak' && !note) {
+      setGalat('Alasan penolakan wajib diisi, klien membacanya di Pesanan Saya.')
+      return
+    }
+    if (action === 'setujui' && l.jenis === 'refund'
+      && !window.confirm(`Setujui refund ${rupiahBulat(Number(l.dibayar))}? Pesanan dibatalkan dan dana ditarik dari escrow/saldo vendor.`)) {
+      return
+    }
+
+    setSibuk(l.laporan_id)
+    setGalat('')
+    try {
+      await kirim(`/admin/laporan/${l.laporan_id}`, 'PATCH', { action, catatan: note || undefined })
+      setCatatan((c) => ({ ...c, [l.laporan_id]: '' }))
       await muat()
     } catch (err) {
       setGalat((err as Error).message)
@@ -268,6 +312,95 @@ export default function AdminEscrowPage() {
               <LockIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
               Menyetujui hanya mencatat pencairan di buku besar Festa Festum. Transfer ke rekening
               vendor dilakukan di luar sistem — gateway tidak pernah meneruskan dana ke vendor.
+            </p>
+          </section>
+
+          {/* Penyelesaian: refund & laporan klien (migrasi 020). */}
+          <section className="mt-7 rounded-lg border border-line bg-white">
+            <div className="border-b border-line p-5 md:px-6">
+              <h2 className="font-display text-[22px] font-semibold text-navy-900">Refund &amp; Laporan Klien</h2>
+              <p className="mt-1 text-[13px] text-muted">
+                {laporan.filter((l) => l.status === 'menunggu').length} pengajuan menunggu keputusan.
+              </p>
+            </div>
+
+            {laporan.length === 0 ? (
+              <p className="p-8 text-[14px] text-muted">Belum ada pengajuan refund atau laporan.</p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {laporan.map((l) => (
+                  <li key={l.laporan_id} className="p-5 md:px-6">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-navy-900">
+                          {l.jenis === 'refund' ? 'Refund' : 'Laporan'}: {l.business_name}
+                        </p>
+                        <p className="mt-1 text-[12px] text-muted">
+                          {l.customer_name} · {l.customer_email} · {l.service_name}, acara {tanggal(l.event_date)}
+                        </p>
+                        <p className="mt-1 text-[12px] text-muted">Diajukan {tanggal(l.dibuat_at)}</p>
+                        <p className="mt-2 max-w-[640px] rounded border border-line bg-cream px-3 py-2 text-[13px] text-ink/80">
+                          {l.alasan}
+                        </p>
+                        {l.catatan_admin && (
+                          <p className="mt-2 text-[12px] text-ink/70">Catatan admin: {l.catatan_admin}</p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[22px] font-semibold tracking-tight tabular-nums text-navy-900">
+                          {rupiahBulat(Number(l.dibayar))}
+                        </p>
+                        <p className="text-[11px] text-muted">sudah dibayar klien</p>
+                        <span
+                          className={`mt-1 inline-block rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide uppercase ${
+                            l.status === 'disetujui'
+                              ? 'bg-[#2e6b52]/10 text-[#2e6b52]'
+                              : l.status === 'ditolak'
+                                ? 'bg-maroon/10 text-maroon'
+                                : 'bg-amber/20 text-navy-900'
+                          }`}
+                        >
+                          {l.status}
+                        </span>
+                      </div>
+                    </div>
+
+                    {l.status === 'menunggu' && (
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <input
+                          value={catatan[l.laporan_id] ?? ''}
+                          onChange={(e) => setCatatan((c) => ({ ...c, [l.laporan_id]: e.target.value }))}
+                          placeholder="Catatan untuk klien & vendor (wajib kalau menolak)"
+                          aria-label="Catatan keputusan"
+                          className="h-10 min-w-[240px] flex-1 rounded border border-line px-4 text-[13px] outline-none focus:border-navy-900"
+                        />
+                        <button
+                          type="button"
+                          disabled={sibuk === l.laporan_id}
+                          onClick={() => putuskanLaporan(l, 'setujui')}
+                          className="h-10 rounded bg-navy-900 px-5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                        >
+                          {sibuk === l.laporan_id ? 'Memproses…' : l.jenis === 'refund' ? 'Setujui Refund' : 'Tandai Ditindaklanjuti'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={sibuk === l.laporan_id}
+                          onClick={() => putuskanLaporan(l, 'tolak')}
+                          className="h-10 rounded border border-maroon/40 px-5 text-[13px] font-semibold text-maroon transition-colors hover:bg-maroon/5 disabled:opacity-50"
+                        >
+                          Tolak
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <p className="flex gap-3 border-t border-line bg-cream px-6 py-4 text-[12px] leading-relaxed text-muted">
+              <InfoIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
+              Refund yang disetujui membatalkan pesanan dan menarik dananya dari escrow/saldo vendor.
+              Pengembalian ke rekening klien dilakukan manual, sama seperti pencairan.
             </p>
           </section>
         </>

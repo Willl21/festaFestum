@@ -2,7 +2,9 @@ const express = require('express');
 const {
   listVendorsForReview, vendorReviewStats, reviewVendor,
   listPayouts, escrowSummary, decidePayout, listBookings, listUsers, verifyUser,
+  getVendorDocumentFile,
 } = require('../controllers/admin.controller');
+const { listLaporan, putuskanLaporan } = require('../controllers/laporan.controller');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -14,10 +16,14 @@ router.use(requireAuth, requireRole('admin'));
 router.get('/vendors', listVendorsForReview);
 router.get('/stats', vendorReviewStats);
 router.patch('/vendors/:vendorId/verification', reviewVendor);
+router.get('/vendors/:vendorId/documents/:docType/berkas', getVendorDocumentFile);
 
 router.get('/payouts', listPayouts);
 router.get('/escrow', escrowSummary);
 router.patch('/payouts/:payoutId', decidePayout);
+
+router.get('/laporan', listLaporan);
+router.patch('/laporan/:laporanId', putuskanLaporan);
 
 router.get('/bookings', listBookings);
 router.get('/users', listUsers);

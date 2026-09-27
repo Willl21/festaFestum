@@ -5,6 +5,7 @@ const {
   konfirmasiBooking, batalBooking,
 } = require('../controllers/booking.controller');
 const { buatUlasan } = require('../controllers/review.controller');
+const { ajukanLaporan } = require('../controllers/laporan.controller');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -27,5 +28,8 @@ router.post('/:bookingId/batal', requireAuth, batalBooking);
 // Ulasan menempel pada pesanan, bukan pada vendor: satu pesanan satu ulasan,
 // dan itulah yang membuktikan pengulas benar-benar pernah memakai jasanya.
 router.post('/:bookingId/ulasan', requireAuth, buatUlasan);
+
+// Refund / laporan vendor (migrasi 020) — diputuskan admin di /admin/laporan.
+router.post('/:bookingId/laporan', requireAuth, ajukanLaporan);
 
 module.exports = router;

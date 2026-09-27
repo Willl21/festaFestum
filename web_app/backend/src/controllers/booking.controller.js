@@ -4,6 +4,7 @@ const { acquireLock, lockHolder, releaseLock } = require('../config/redis');
 const { perTim: kategoriPerTim, BOOKING_AKTIF, berbasisJam } = require('../lib/kategori');
 const { timKosong, bacaDurasi } = require('./schedule.controller');
 const { kirimEmail, urlFrontend } = require('../lib/email');
+const { beriTahu, beriTahuVendor } = require('../lib/notifikasi');
 
 const VALID_EVENT_TYPES = [
   'wedding', 'engagement', 'graduation', 'gala_dinner', 'corporate_seminar',
@@ -41,9 +42,11 @@ async function createBooking(req, res, next) {
     jam_tambahan, konsultasi_id,
   } = req.body;
 
-  if (!service_id || !event_date || !start_time || !event_type || !event_location_detail) {
+  // start_time tidak diperiksa di sini: florist memesan TANPA jam (revisi PM
+  // 26 Sep 2026), dan kategorinya baru ketahuan sesudah layanan dibaca.
+  if (!service_id || !event_date || !event_type || !event_location_detail) {
     return res.status(400).json({
-      message: 'service_id, event_date, start_time, event_type, dan event_location_detail wajib diisi',
+      message: 'service_id, event_date, event_type, dan event_location_detail wajib diisi',
     });
   }
   if (!isValidDate(event_date)) {
@@ -52,7 +55,7 @@ async function createBooking(req, res, next) {
   // Jam acara/kirim. HH:MM 24 jam — bentuk yang dikirim <input type="time">.
   // Menit bebas, bukan kelipatan tertentu: kelima mockup "Isi data diri"
   // memakai input jam biasa, bukan daftar pilihan.
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(start_time)) {
+  if (start_time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(start_time)) {
     return res.status(400).json({ message: 'start_time harus format HH:MM (24 jam)' });
   }
   if (!VALID_EVENT_TYPES.includes(event_type)) {
@@ -111,6 +114,13 @@ async function createBooking(req, res, next) {
     // kapasitasnya 1. Yang menentukan perlu-tidaknya lock Redis.
     // MUA & fotografer: yang habis JAM tim-nya, bukan harinya (migrasi 016).
     const perJam = berbasisJam(category);
+    // Florist: jam tidak mengunci apa pun dan tidak ditanyakan, jadi NULL
+    // (migrasi 018) — bukan jam karangan yang tampil di invoice. Yang dikirim
+    // pemanggil lama diabaikan saja.
+    const jamMulai = category === 'florist' ? null : start_time;
+    if (category !== 'florist' && !jamMulai) {
+      return res.status(400).json({ message: 'start_time wajib diisi' });
+    }
     const eksklusif = perTim && daily_capacity === 1 && !perJam;
     vendorId = vendor_id;
 
@@ -120,7 +130,7 @@ async function createBooking(req, res, next) {
       // Jadwalnya dipilih per jam penuh, dan rentang kuncinya dihitung dari
       // situ — menit bebas akan membuat dua pesanan saling mengunci 15 menit
       // yang tidak pernah bisa dipakai siapa pun.
-      if (!/^([01]\d|2[0-3]):00$/.test(start_time)) {
+      if (!/^([01]\d|2[0-3]):00$/.test(jamMulai)) {
         return res.status(400).json({ message: 'start_time harus jam penuh, format HH:00' });
       }
       const d = bacaDurasi(layanan, jumlah, jam_tambahan);
@@ -194,7 +204,7 @@ async function createBooking(req, res, next) {
     // dan sore di hari yang sama.
     if (perJam) {
       slotKe = await timKosong(client, {
-        vendor_id, event_date, start_time,
+        vendor_id, event_date, start_time: jamMulai,
         durasi, jeda: layanan.jeda_menit, kapasitas: daily_capacity,
       });
       if (slotKe === null) {
@@ -288,7 +298,7 @@ async function createBooking(req, res, next) {
        VALUES ($1, $2, $3, $4::date, $5::time, $6, $7, $8, $9, $10, $11, $12,
                now() + interval '24 hours', $13, $14, $15, $16)
        RETURNING *`,
-      [userId, service_id, vendor_id, event_date, start_time, perTim,
+      [userId, service_id, vendor_id, event_date, jamMulai, perTim,
        slotKe, jumlah, event_type, event_location_detail, totalPrice, dpAmount,
        durasi, tambahan, perJam ? layanan.jeda_menit : 0, konsultasiId]
     );
@@ -305,11 +315,18 @@ async function createBooking(req, res, next) {
          INSERT INTO messages (conversation_id, sender_user_id, body)
          SELECT conversation_id, $2,
                 '[Otomatis] Pesanan dibuat: ' || $3::text || ' untuk ' || to_char($4::date, 'DD/MM/YYYY')
-                || ' pukul ' || $5::text || '. Menunggu konfirmasi vendor.'
+                || COALESCE(' pukul ' || $5::text, '') || '. Menunggu konfirmasi vendor.'
            FROM c`,
-        [konsultasiId, userId, layanan.service_name || 'paket', event_date, start_time]
+        [konsultasiId, userId, layanan.service_name || 'paket', event_date, jamMulai]
       );
     }
+
+    await beriTahuVendor(client, vendor_id, {
+      judul: 'Pesanan baru menunggu jawaban',
+      isi: `${layanan.service_name || 'Paket'} untuk ${event_date.split('-').reverse().join('/')}. `
+        + 'Terima atau tolak sebelum batas waktunya.',
+      tautan: '/vendor/pemesanan',
+    });
 
     await client.query('COMMIT');
 
@@ -398,7 +415,14 @@ const BOOKING_SELECT = `
          -- tombol "Beri Ulasan" dan bintang yang sudah terlanjur diberi.
          (SELECT json_build_object('rating', rv.rating, 'comment', rv.comment,
                                    'created_at', rv.created_at)
-            FROM reviews rv WHERE rv.booking_id = b.booking_id) AS review
+            FROM reviews rv WHERE rv.booking_id = b.booking_id) AS review,
+         -- Pengajuan refund/laporan TERAKHIR (migrasi 020), null kalau belum
+         -- pernah. Pesanan Saya memakainya untuk menyembunyikan tombolnya
+         -- selama masih ada yang menunggu, dan menampilkan keputusan admin.
+         (SELECT json_build_object('jenis', l.jenis, 'status', l.status,
+                                   'catatan_admin', l.catatan_admin, 'dibuat_at', l.dibuat_at)
+            FROM laporan l WHERE l.booking_id = b.booking_id
+           ORDER BY l.dibuat_at DESC LIMIT 1) AS laporan
     FROM bookings b
     JOIN services s         ON s.service_id  = b.service_id
     JOIN vendors  v         ON v.vendor_id   = s.vendor_id
@@ -557,7 +581,7 @@ async function konfirmasiBooking(req, res, next) {
               b.user_id, v.vendor_id, v.business_name, s.service_name,
               -- Tanggal + jam untuk pesan otomatis & email. MUA & fotografer
               -- ikut menyebut rentangnya (migrasi 016).
-              to_char(b.event_date, 'DD/MM/YYYY') || ' pukul ' || to_char(b.start_time, 'HH24:MI')
+              to_char(b.event_date, 'DD/MM/YYYY') || COALESCE(' pukul ' || to_char(b.start_time, 'HH24:MI'), '')
                 || COALESCE('–' || to_char(b.start_time + b.durasi_menit * interval '1 minute', 'HH24:MI'), '')
                 AS tanggal,
               c.email AS customer_email, c.name AS customer_name
@@ -660,6 +684,15 @@ async function konfirmasiBooking(req, res, next) {
       [booking.booking_id, req.user.user_id, isi, booking.konsultasi_id]
     );
 
+    // 3. Lonceng (migrasi 019) — di dalam transaksi, sama seperti pesan chat.
+    await beriTahu(client, booking.user_id, {
+      judul: diterima ? 'Pesanan diterima vendor' : 'Pesanan ditolak vendor',
+      isi: diterima
+        ? `${booking.business_name} menerima "${booking.service_name}". Bayar DP dalam 24 jam.`
+        : `${booking.business_name} menolak "${booking.service_name}".${note ? ` Catatan: ${note}` : ''}`,
+      tautan: '/pesanan',
+    });
+
     await client.query('COMMIT');
 
     // 2. Email — SESUDAH commit dan tidak ditunggu. Layanan luar yang lambat
@@ -698,7 +731,8 @@ async function batalBooking(req, res, next) {
     await client.query('BEGIN');
 
     const bk = await client.query(
-      `SELECT booking_id, payment_status
+      `SELECT booking_id, payment_status, vendor_id,
+              to_char(event_date, 'DD/MM/YYYY') AS tanggal
          FROM bookings
         WHERE booking_id = $1 AND user_id = $2
         FOR UPDATE`,
@@ -726,6 +760,12 @@ async function batalBooking(req, res, next) {
         WHERE booking_id = $1`,
       [booking.booking_id]
     );
+
+    await beriTahuVendor(client, booking.vendor_id, {
+      judul: 'Pesanan dibatalkan klien',
+      isi: `Pesanan untuk ${booking.tanggal} dibatalkan sebelum dibayar. Slotnya sudah lepas lagi.`,
+      tautan: '/vendor/pemesanan',
+    });
 
     await client.query('COMMIT');
 

@@ -27,6 +27,7 @@ import FestaAiPage from './pages/FestaAiPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import VendorLayout from './components/VendorLayout'
+import VendorProfilPage from './pages/VendorProfilPage'
 import VendorDashboardPage from './pages/VendorDashboardPage'
 import VendorPemesananPage from './pages/VendorPemesananPage'
 import VendorJadwalPage from './pages/VendorJadwalPage'
@@ -162,6 +163,7 @@ export default function App() {
           <Route path="layanan" element={<VendorLayananPage />} />
           <Route path="keuangan" element={<VendorKeuanganPage />} />
           <Route path="pesan" element={<VendorPesanPage />} />
+          <Route path="profil" element={<VendorProfilPage />} />
         </Route>
 
         {/* Pusat Kendali admin. Tidak ada rute pendaftaran — akun admin

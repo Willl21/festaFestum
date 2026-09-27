@@ -3,7 +3,7 @@ import TabelSkeleton from '../components/TabelSkeleton'
 import TukarHalus from '../components/TukarHalus'
 import { ShieldIcon, CheckCircleIcon, NoteIcon, ClockIcon, XCircleIcon } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
-import { get, kirim } from '../lib/api'
+import { bukaBerkas, get, kirim } from '../lib/api'
 
 /** Persetujuan Vendor — antrean kurasi di Pusat Kendali admin.
  *
@@ -21,6 +21,8 @@ type Dokumen = {
   file_name: string
   status: 'pending' | 'approved' | 'rejected'
   uploaded_at: string
+  /** Isi berkasnya tersimpan (sejak 26 Sep 2026). Dokumen lama cuma nama. */
+  ada_berkas: boolean
 }
 
 type VendorReview = {
@@ -326,6 +328,18 @@ export default function AdminVendorPage() {
                                 : 'Belum diunggah'}
                             </span>
                           </span>
+                          {d?.ada_berkas && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                bukaBerkas(`/admin/vendors/${vendor.vendor_id}/documents/${jenis}/berkas`)
+                                  .catch((e) => setGalat((e as Error).message))
+                              }
+                              className="shrink-0 rounded border border-line px-2.5 py-1 text-[11px] font-semibold text-navy-900 transition-colors hover:border-navy-900"
+                            >
+                              Lihat
+                            </button>
+                          )}
                           {d && (
                             <span
                               className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATUS_DOKUMEN[d.status].kelas}`}
@@ -339,7 +353,8 @@ export default function AdminVendorPage() {
                     })}
                   </div>
                   <p className="mt-2 text-[11px] leading-relaxed text-muted">
-                    Pratinjau isi berkas belum tersedia — yang tercatat baru nama dan tanggal unggahnya.
+                    Berkas dibuka di tab baru. Dokumen yang diunggah sebelum 26 Sep 2026 cuma
+                    tercatat namanya, tanpa isi.
                   </p>
 
                   {vendor.verification_note && (

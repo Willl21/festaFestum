@@ -57,9 +57,11 @@ const tone = {
   'Menunggu Admin': 'warn', Ditolak: 'danger',
 } as const
 
-/** Biaya platform tidak dikenakan pada penarikan dana, hanya pada pemasukan. */
+/** Biaya platform tidak dikenakan pada penarikan dana, hanya pada pemasukan.
+ *  Penarikan DITOLAK ditulis positif (uangnya tidak keluar), jadi harus
+ *  dikecualikan eksplisit — kalau tidak, dia tampil seolah kena potongan 2,5%. */
 function feeLabel(row: Row) {
-  if (row.amount < 0) return '-'
+  if (row.amount < 0 || row.status === 'Ditolak') return '-'
   const fee = `- ${rupiahBulat(Math.round(row.amount * 0.025))}`
   return row.status === 'In Escrow' ? `(Estimasi) ${fee}` : fee
 }

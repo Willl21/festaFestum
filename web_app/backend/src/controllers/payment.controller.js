@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { beriTahu, beriTahuVendor } = require('../lib/notifikasi');
 const midtrans = require('../config/midtrans');
 
 const VALID_TYPES = ['down_payment', 'settlement'];
@@ -21,7 +22,7 @@ async function applySuccess(client, paymentId, gatewayTxnId) {
             paid_at = COALESCE(paid_at, now()),
             gateway_transaction_id = COALESCE(gateway_transaction_id, $2)
       WHERE payment_id = $1 AND gateway_status <> 'success'
-      RETURNING booking_id, payment_type`,
+      RETURNING booking_id, payment_type, amount`,
     [paymentId, gatewayTxnId || null]
   );
 
@@ -42,6 +43,26 @@ async function applySuccess(client, paymentId, gatewayTxnId) {
       [booking_id]
     );
   }
+
+  // Lonceng (migrasi 019). Di sini, bukan di pemanggil: webhook, refresh,
+  // dan simulasi semuanya lewat fungsi ini, dan cabang `changed: false` di
+  // atas memastikan notifikasi Midtrans yang dikirim berulang tidak ikut
+  // menggandakan notifikasinya.
+  const { rows: [bk] } = await client.query(
+    'SELECT user_id, vendor_id FROM bookings WHERE booking_id = $1', [booking_id]
+  );
+  const jenis = payment_type === 'down_payment' ? 'DP' : 'Pelunasan';
+  const nominal = `Rp${Number(upd.rows[0].amount).toLocaleString('id-ID')}`;
+  await beriTahu(client, bk.user_id, {
+    judul: `${jenis} berhasil dibayar`,
+    isi: `Pembayaran ${nominal} sudah kami terima dan ditahan di escrow sampai acara selesai.`,
+    tautan: '/pesanan',
+  });
+  await beriTahuVendor(client, bk.vendor_id, {
+    judul: `${jenis} klien masuk`,
+    isi: `${nominal} masuk ke escrow. Dilepas ke saldo sesudah tanggal acara lewat.`,
+    tautan: '/vendor/keuangan',
+  });
 
   return { changed: true, booking_id, payment_type };
 }

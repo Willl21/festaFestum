@@ -37,11 +37,9 @@ export default function FloristDetailPage() {
   // Nomor slot yang benar-benar terisi; gambarnya diambil terpisah.
   const [fotoSlot, setFotoSlot] = useState<number[]>([])
 
-  // Tanggal & jam yang dipilih user, lalu hasil pengecekannya ke backend.
+  // Tanggal yang dipilih user, lalu hasil pengecekannya ke backend. Florist
+  // tidak menanyakan jam (revisi PM 26 Sep 2026).
   const [tanggal, setTanggal] = useState('')
-  // Sengaja kosong: jam diisi sendiri oleh pemesan, tanpa nilai bawaan yang
-  // diam-diam ikut terkirim.
-  const [jam, setJam] = useState('')
   const [cek, setCek] = useState<{ ada: boolean; alasan: string | null } | null>(null)
   const [mengecek, setMengecek] = useState(false)
 
@@ -76,7 +74,7 @@ export default function FloristDetailPage() {
       setCek({ ada: r.available, alasan: r.reason })
       if (r.available) {
         navigate(`/${kategori.slug}/${id}/pesan?service=${utama.service_id}`
-          + `&date=${tanggal}&jam=${jam}`)
+          + `&date=${tanggal}`)
       }
     } catch (e) {
       setCek({ ada: false, alasan: (e as Error).message })
@@ -210,10 +208,8 @@ export default function FloristDetailPage() {
                     serviceId={utama.service_id}
                     kategori="florist"
                     tanggal={tanggal}
-                    jam={jam}
-                    labelJam="Jam Kirim"
-                    keteranganJam="Jam buket dikirim ke alamat tujuan."
-                    onPilih={(t, j) => { setTanggal(t); setJam(j); setCek(null) }}
+                    jam=""
+                    onPilih={(t) => { setTanggal(t); setCek(null) }}
                   />
                 </div>
               ) : (

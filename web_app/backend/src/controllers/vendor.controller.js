@@ -1,6 +1,6 @@
 const pool = require('../config/db');
 const { BOOKING_AKTIF } = require('../lib/kategori');
-const { gambarBermasalah, urlFotoAbsolut } = require('../lib/gambar');
+const { gambarBermasalah, urlFotoAbsolut, dokumenBermasalah, kirimDokumen } = require('../lib/gambar');
 
 const VALID_CITIES = [
   'jakarta_pusat', 'jakarta_utara', 'jakarta_barat', 'jakarta_selatan', 'jakarta_timur',
@@ -354,11 +354,13 @@ async function findMyVendorId(userId) {
 }
 
 // PUT /api/v1/vendors/me/documents/:docType  (role: vendor_owner)
-// Unggah ulang jenis yang sama menimpa baris lama dan mengulang kurasi.
+// Body: { file_name, file } — `file` data URL gambar/PDF (lihat
+// dokumenBermasalah). Unggah ulang jenis yang sama menimpa baris lama dan
+// mengulang kurasi.
 async function upsertMyDocument(req, res, next) {
   try {
     const docType = req.params.docType;
-    const { file_name } = req.body;
+    const { file_name, file } = req.body;
 
     if (!VALID_DOC_TYPES.includes(docType)) {
       return res.status(400).json({ message: 'Jenis dokumen tidak valid', allowed: VALID_DOC_TYPES });
@@ -367,6 +369,8 @@ async function upsertMyDocument(req, res, next) {
     if (!file_name || typeof file_name !== 'string') {
       return res.status(400).json({ message: 'file_name wajib diisi' });
     }
+    const galatBerkas = dokumenBermasalah(file);
+    if (galatBerkas) return res.status(400).json({ message: galatBerkas });
 
     const vendorId = await findMyVendorId(req.user.user_id);
     if (!vendorId) {
@@ -374,14 +378,16 @@ async function upsertMyDocument(req, res, next) {
     }
 
     const result = await pool.query(
-      `INSERT INTO vendor_documents (vendor_id, doc_type, file_name)
-       VALUES ($1, $2, $3)
+      `INSERT INTO vendor_documents (vendor_id, doc_type, file_name, file_url)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT (vendor_id, doc_type) DO UPDATE
          SET file_name = EXCLUDED.file_name,
+             file_url    = EXCLUDED.file_url,
              status      = 'pending',
              uploaded_at = now()
-       RETURNING document_id, doc_type, file_name, status, uploaded_at`,
-      [vendorId, docType, file_name.slice(0, 255)]
+       RETURNING document_id, doc_type, file_name, status, uploaded_at,
+                 TRUE AS ada_berkas`,
+      [vendorId, docType, file_name.slice(0, 255), file]
     );
 
     res.status(201).json({ document: result.rows[0] });
@@ -399,13 +405,31 @@ async function listMyDocuments(req, res, next) {
     }
 
     const result = await pool.query(
-      `SELECT document_id, doc_type, file_name, status, uploaded_at
+      `SELECT document_id, doc_type, file_name, status, uploaded_at,
+              (file_url IS NOT NULL) AS ada_berkas
        FROM vendor_documents WHERE vendor_id = $1
        ORDER BY uploaded_at ASC`,
       [vendorId]
     );
 
     res.json({ documents: result.rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/v1/vendors/me/documents/:docType/berkas  (role: vendor_owner)
+// Isi berkasnya, hanya untuk pemiliknya. Kembarannya untuk admin ada di
+// admin.controller. Tidak pernah ikut di listing — lihat kirimDokumen.
+async function getMyDocumentFile(req, res, next) {
+  try {
+    const r = await pool.query(
+      `SELECT d.file_url FROM vendor_documents d
+         JOIN vendors v ON v.vendor_id = d.vendor_id
+        WHERE v.owner_user_id = $1 AND d.doc_type::text = $2`,
+      [req.user.user_id, req.params.docType]
+    );
+    kirimDokumen(res, r.rows[0]?.file_url);
   } catch (err) {
     next(err);
   }
@@ -524,5 +548,5 @@ module.exports = {
   setMyPhoto,
   getVendorPhoto,
   createVendor, listVendors, getMyVendor, getVendorDetail, updateVendor,
-  upsertMyDocument, listMyDocuments,
+  upsertMyDocument, listMyDocuments, getMyDocumentFile,
 };

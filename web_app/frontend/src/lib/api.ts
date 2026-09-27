@@ -157,6 +157,26 @@ export async function get<T>(path: string, query: Record<string, string | undefi
   return hasil<T>(res, path)
 }
 
+/** Membuka berkas yang butuh token (dokumen legal vendor) di tab baru.
+ *  <a href> tidak bisa membawa header Authorization, jadi diambil sebagai blob
+ *  dulu. Tabnya dibuka SEBELUM await: window.open sesudah await dianggap
+ *  popup dan diblokir browser. */
+export async function bukaBerkas(path: string) {
+  const tab = window.open('', '_blank')
+  try {
+    const res = await fetch(BASE + path, {
+      headers: { ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+    })
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Berkas tidak bisa dibuka.')
+    const url = URL.createObjectURL(await res.blob())
+    if (tab) tab.location.href = url
+    else window.location.href = url
+  } catch (e) {
+    tab?.close()
+    throw e
+  }
+}
+
 export type AuthResponse = {
   token: string
   user: {
@@ -213,6 +233,33 @@ export function listVendors(opts: {
     limit: String(opts.limit ?? 24),
   })
 }
+
+/** Satu layanan hasil Festa AI, sudah dicocokkan backend ke DB (harga dari DB). */
+export type RekomendasiAi = {
+  service_id: string
+  vendor_id: string
+  service_name: string
+  category: string
+  price: string
+  has_photo: boolean
+  business_name: string
+  city: string
+  rating_avg: string
+}
+
+/** Lewat backend kita, bukan langsung ke layanan AI: backend yang mengubah
+ *  nama vendor dari AI jadi ID, membuang yang dikarang, dan menghitung total. */
+export const rekomendasiAi = (body: {
+  event_type: string
+  budget: number
+  guest_count: number
+  location: string
+  kategori: string[]
+}) =>
+  post<{ pesan_pembuka: string; saran_penghematan: string; data: RekomendasiAi[]; total: number }>(
+    '/ai/recommend',
+    body
+  )
 
 export type ApiService = {
   service_id: string
@@ -322,6 +369,13 @@ export type ApiBooking = {
   confirmed_at: string | null
   /** null selama pesanan ini belum diulas. */
   review: { rating: number; comment: string | null; created_at: string } | null
+  /** Pengajuan refund/laporan terakhir (migrasi 020), null kalau belum pernah. */
+  laporan: {
+    jenis: 'refund' | 'laporan'
+    status: 'menunggu' | 'disetujui' | 'ditolak'
+    catatan_admin: string | null
+    dibuat_at: string
+  } | null
   created_at: string
   service_id: string
   service_name: string
@@ -332,9 +386,9 @@ export type ApiBooking = {
   customer_name: string
   customer_phone: string
   event_date: string
-  /** Jam acara (EO/MUA/fotografer) atau jam kirim (florist/sewa), 'HH:MM'.
-   *  Tidak mengunci apa pun — yang habis kapasitas harian vendor. */
-  start_time: string
+  /** Jam acara (EO/MUA/fotografer) atau jam ambil (sewa), 'HH:MM'. NULL
+   *  untuk florist, yang memesan tanpa jam (migrasi 018). */
+  start_time: string | null
   /** Rentang jam MUA & fotografer (migrasi 016). NULL untuk kategori harian.
    *  end_time sudah termasuk jam tambahan, tanpa jeda perjalanan. */
   durasi_menit: number | null
@@ -348,7 +402,7 @@ export type ApiBooking = {
  *  angka ini, dan untuk florist/sewa ikut memotong kapasitas harian vendor
  *  sebanyak itu — untuk MUA tetap memotong 1, karena yang habis timnya. */
 export const buatBooking = (body: {
-  service_id: string; event_date: string; start_time: string
+  service_id: string; event_date: string; start_time?: string
   event_type: string; event_location_detail: string; quantity?: number
   jam_tambahan?: number
   /** Ruang konsultasi asal rekomendasi paketnya, kalau ada (migrasi 017). */
@@ -409,7 +463,7 @@ export type ApiPaymentDetail = ApiPayment & {
   business_name: string
   city: string | null
   event_date: string
-  start_time: string
+  start_time: string | null
   end_time: string | null
 }
 
@@ -675,3 +729,20 @@ export const mulaiKonsultasi = (vendorId: string, body: {
 /** Satu angka untuk lencana. Dipisah dari daftar supaya halaman mana pun bisa
  *  menanyakannya tanpa menarik seluruh percakapan. */
 export const pesanBelumDibaca = () => get<{ jumlah: number }>('/chat/belum-dibaca')
+
+/** Lonceng (migrasi 019). `tautan` = path frontend tujuan klik. */
+export type Notifikasi = {
+  notifikasi_id: string
+  judul: string
+  isi: string
+  tautan: string | null
+  dibaca: boolean
+  dibuat_at: string
+}
+export const listNotifikasi = () =>
+  get<{ data: Notifikasi[]; belum_dibaca: number }>('/notifikasi')
+export const bacaSemuaNotifikasi = () => post<{ belum_dibaca: number }>('/notifikasi/baca', {})
+
+/** Refund / laporan vendor dari Pesanan Saya (migrasi 020). */
+export const ajukanLaporan = (bookingId: string, jenis: 'refund' | 'laporan', alasan: string) =>
+  post<{ laporan: { laporan_id: string } }>(`/bookings/${bookingId}/laporan`, { jenis, alasan })

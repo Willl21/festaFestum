@@ -121,6 +121,10 @@ export default function KalenderSlot({
   const pilihanJam = useMemo(() => daftarJam(RENTANG_JAM[kategori]), [kategori])
 
   const modeJam = paket && berbasisJam(paket) ? paket : null
+  // Florist tidak menanyakan jam sama sekali (revisi PM 26 Sep 2026): jam
+  // tidak mengunci apa pun di kategori ini, dan waktu kirim diatur lewat
+  // catatan/chat. bookings.start_time-nya NULL (migrasi 018).
+  const tanpaJam = kategori === 'florist'
   const durasi = modeJam ? durasiPesanan(modeJam, jumlah, tambahan) : 0
 
   // Jam yang sudah terpilih (mis. dibawa dari halaman detail ke halaman
@@ -220,13 +224,13 @@ export default function KalenderSlot({
   const jamDipilihMuat = !jam || muat(jam)
 
   let keterangan: string
-  if (!tanggal) keterangan = 'Pilih tanggal dulu, lalu jamnya.'
+  if (!tanggal) keterangan = tanpaJam ? 'Pilih tanggal dulu.' : 'Pilih tanggal dulu, lalu jamnya.'
   else if (modeJam) keterangan = jam
     ? `${jam} – ${tambahJam(jam, durasi)} · ${durasi / 60} jam`
     : `Pilih jam mulai. Durasi ${durasi / 60} jam akan terpilih otomatis.`
   else keterangan = keteranganJam
     ?? (sisa !== undefined && sisa > 0
-      ? `Masih ada ${sisa} slot di tanggal ini. Jam tidak mengurangi slot.`
+      ? `Masih ada ${sisa} slot di tanggal ini.${tanpaJam ? '' : ' Jam tidak mengurangi slot.'}`
       : 'Jam bebas — vendor menyesuaikan.')
 
   return (
@@ -263,7 +267,7 @@ export default function KalenderSlot({
           )}
         </div>
 
-        <div className="mt-5 sm:mt-0 sm:w-[88px] sm:shrink-0">
+        {!tanpaJam && <div className="mt-5 sm:mt-0 sm:w-[88px] sm:shrink-0">
           <p id="label-jam" className="flex h-9 items-center text-[13px] font-semibold sm:justify-center">
             {modeJam ? 'Jam Mulai' : labelJam}
           </p>
@@ -305,9 +309,11 @@ export default function KalenderSlot({
               })}
             </div>
           )}
-        </div>
+        </div>}
       </div>
 
+      {/* Galat biasanya tampil di kolom jam; florist tidak punya kolom itu. */}
+      {galat && tanpaJam && <p className="mt-3 text-[13px] text-maroon">{galat}</p>}
       {!galat && (
         <p className={`mt-3 text-[12px] leading-relaxed ${jamDipilihMuat ? 'text-muted' : 'text-maroon'}`}>
           {jamDipilihMuat ? keterangan : `${jam} bentrok dengan pesanan lain untuk durasi ini. Pilih jam lain.`}
