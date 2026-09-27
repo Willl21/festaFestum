@@ -167,7 +167,7 @@ def get_recommendation(req: EventRequest):
         )
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash", # Gunakan model standar yang stabil
+            model="gemini-3.8-flash", # Gunakan model standar yang stabil
             contents=prompt_user,
             config=genai.types.GenerateContentConfig(
                 system_instruction=system_instruction,
