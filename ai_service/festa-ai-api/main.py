@@ -4,10 +4,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from google import genai
+from groq import Groq
+import json
 
-API_KEY = os.environ.get("GEMINI_API_KEY")
-client = genai.Client(api_key=API_KEY)
+API_KEY = os.environ.get("GROQ_API_KEY")
+client = Groq(api_key=API_KEY)
 
 app = FastAPI(title="Festa Festum AI API")
 
@@ -161,26 +162,33 @@ def get_recommendation(req: EventRequest):
         katalog_layanan = format_katalog(catalog_lokasi)
 
         system_instruction = build_system_instruction(katalog_layanan, req)
+        
+        # SUNTIKAN SKEMA UNTUK GROQ
+        skema_json = json.dumps(RekomendasiEvent.model_json_schema(), indent=2)
+        system_instruction += f"\n\nOUTPUT WAJIB DALAM FORMAT JSON DENGAN SKEMA BERIKUT:\n{skema_json}"
+
         prompt_user = (
             f"Klien ingin mengadakan {req.event_type} di {req.location} "
             f"untuk {req.guest_count} orang."
         )
 
-        response = client.models.generate_content(
-            model="gemini-3.6-flash", # Gunakan model standar yang stabil
-            contents=prompt_user,
-            config=genai.types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                response_mime_type="application/json",
-                response_schema=RekomendasiEvent,
-                temperature=0.1,
-            ),
+        # PEMANGGILAN GROQ API
+        response = client.chat.completions.create(
+            model="llama-3.1-70b-versatile", # Atau llama3-8b-8192
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt_user}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1,
         )
 
-        if not response.text:
-            raise ValueError("Model tidak mengembalikan output teks, kemungkinan diblokir safety filter.")
+        # EKSTRAKSI OUTPUT GROQ
+        output_text = response.choices[0].message.content
+        if not output_text:
+            raise ValueError("Model Groq tidak mengembalikan output teks.")
 
-        hasil = RekomendasiEvent.model_validate_json(response.text)
+        hasil = RekomendasiEvent.model_validate_json(output_text)
         return hasil.model_dump()
 
     except Exception as e:
