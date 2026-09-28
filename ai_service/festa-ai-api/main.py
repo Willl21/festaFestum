@@ -5,7 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from groq import Groq
-import json
 
 API_KEY = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=API_KEY)
@@ -92,10 +91,12 @@ def format_katalog(df: pd.DataFrame) -> str:
     def rp(angka) -> str:
         return f"{int(angka):,}".replace(",", ".")
 
+    # Kota, gaya, dan status verifikasi sengaja tidak dikirim supaya muat
+    # batas 8.000 token/menit Groq: katalog sudah disaring per kota, dan
+    # preferred_style selalu kosong dari backend.
     lines = [
-        f"[{s.service_id}] {s.business_name} | Kategori: {s.category} | "
-        f"Layanan: {s.service_name} | Kota: {s.city} | Harga: Rp{rp(s.price)} | "
-        f"Gaya: {s.gaya} | Rating: {s.rating_avg} | Terverifikasi: {s.is_verified}"
+        f"{s.business_name} | Kategori: {s.category} | "
+        f"Layanan: {s.service_name} | Harga: Rp{rp(s.price)} | Rating: {s.rating_avg}"
         for _, s in df.iterrows()
     ]
     return "\n".join(lines)
@@ -160,13 +161,13 @@ def get_recommendation(req: EventRequest):
     try:
         catalog = load_catalog()
         catalog_lokasi = filter_by_location(catalog, req.location)
+        # Groq gratisan dibatasi 8.000 token/menit; katalog penuh satu kota
+        # sudah melewatinya. Kategori di luar fokus juga dibuang backend.
+        if req.fokus_prioritas:
+            catalog_lokasi = catalog_lokasi[catalog_lokasi["category"].isin(req.fokus_prioritas)]
         katalog_layanan = format_katalog(catalog_lokasi)
 
         system_instruction = build_system_instruction(katalog_layanan, req)
-        
-        # SUNTIKAN SKEMA UNTUK GROQ
-        skema_json = json.dumps(RekomendasiEvent.model_json_schema(), indent=2)
-        system_instruction += f"\n\nOUTPUT WAJIB DALAM FORMAT JSON DENGAN SKEMA BERIKUT:\n{skema_json}"
 
         prompt_user = (
             f"Klien ingin mengadakan {req.event_type} di {req.location} "
