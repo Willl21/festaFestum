@@ -3,7 +3,7 @@ import pandas as pd
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from groq import Groq
 import json
 
@@ -30,12 +30,16 @@ class EventRequest(BaseModel):
     location: str = Field(..., min_length=1)
     fokus_prioritas: list[str] = []
     
+# extra="forbid" + tanpa nilai default: syarat strict mode Groq
+# (additionalProperties: false, semua field required).
 class ItemEstimasi(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     kategori: str
-    vendor_terpilih: str = ""
+    vendor_terpilih: str
     harga: int
 
 class RekomendasiEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     pesan_pembuka: str
     rincian_estimasi: list[ItemEstimasi]
     total_estimasi: int
@@ -176,7 +180,16 @@ def get_recommendation(req: EventRequest):
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": prompt_user}
             ],
-            response_format={"type": "json_object"},
+            # json_object cuma menjamin JSON sah; field boleh hilang. Strict
+            # memaksa balasan persis mengikuti skema.
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "rekomendasi_event",
+                    "strict": True,
+                    "schema": RekomendasiEvent.model_json_schema(),
+                },
+            },
             temperature=0.1,
         )
 
