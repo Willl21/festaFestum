@@ -1,5 +1,5 @@
 fastapi
 uvicorn
 pandas
-google-genai
 pydantic
+groq
