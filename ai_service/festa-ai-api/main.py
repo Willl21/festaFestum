@@ -171,7 +171,7 @@ def get_recommendation(req: EventRequest):
 
         # PEMANGGILAN GROQ API
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile", # 3.1-70b dimatikan Groq sejak 24 Jan 2025
+            model="openai/gpt-oss-120b", # model Llama di Groq kini khusus Enterprise
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": prompt_user}
