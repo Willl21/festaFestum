@@ -136,6 +136,12 @@ export default function VendorLoginPage() {
             Daftar sebagai Vendor
           </Link>
         </p>
+        <p className="mt-3 text-center text-[14px] text-ink">
+          Bukan vendor?{' '}
+          <Link to="/masuk" className="font-semibold hover:underline">
+            Masuk sebagai pelanggan
+          </Link>
+        </p>
       </div>
 
       <div className="mt-10 text-center text-[13px] text-muted">

@@ -80,7 +80,8 @@ export default function Navbar() {
       onKeyDown={(e) => e.key === 'Escape' && setMenuBuka(false)}
     >
       <div className="mx-auto flex h-[70px] max-w-[1440px] items-center justify-between gap-3 px-4 sm:px-6 md:px-12">
-        <Link to="/" className="font-display text-2xl font-semibold tracking-tight md:text-[28px]">
+        <Link to="/" className="flex items-center gap-2 font-display text-2xl font-semibold tracking-tight md:text-[28px]">
+          <img src="/img/logo.png" alt="" className="h-10 w-auto" />
           Festa Festum
         </Link>
 

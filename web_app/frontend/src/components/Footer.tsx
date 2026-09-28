@@ -18,11 +18,11 @@ export default function Footer() {
   return (
     <footer className="bg-navy-900 text-white/70">
       <div className="mx-auto max-w-[1440px] px-6 py-14 md:px-12">
-        <div className="grid gap-10 md:grid-cols-4">
+        <div className="grid gap-10 md:grid-cols-3 lg:grid-cols-5">
           <div className="max-w-[240px]">
             <h3 className="font-display text-xl font-semibold text-white">Festa Festum</h3>
             <p className="mt-4 text-[13px] leading-relaxed text-white/50">
-              Festa Festum — Temukan kebutuhan acara formal Anda dalam satu tempat.
+              Festa Festum - Pusat Acara Formal Anda
             </p>
           </div>
 

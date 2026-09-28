@@ -129,6 +129,13 @@ export default function LoginPage() {
         </Link>
       </p>
 
+      <p className="mt-3 text-center text-[14px] text-ink">
+        Apakah Anda vendor?{' '}
+        <Link to="/vendor/masuk" className="ml-1 font-semibold text-[#2e6b52] hover:underline">
+          Masuk di sini
+        </Link>
+      </p>
+
       <p className="mt-7 text-center text-[11px] tracking-[0.06em] text-muted">
         BY SIGNING IN, YOU AGREE TO OUR TERMS OF SERVICE & PRIVACY POLICY.
       </p>
