@@ -25,7 +25,7 @@ LAYANAN_CSV_PATH = "layanan.csv"
 class EventRequest(BaseModel):
     event_type: str = Field(..., min_length=1)
     budget: int = Field(..., ge=0)
-    guest_count: str = Field(..., ge=0)
+    guest_count: int = Field(..., ge=0)
     preferred_style: list[str] = []
     location: str = Field(..., min_length=1)
     fokus_prioritas: list[str] = []
@@ -171,7 +171,7 @@ def get_recommendation(req: EventRequest):
 
         # PEMANGGILAN GROQ API
         response = client.chat.completions.create(
-            model="llama-3.1-70b-versatile", # Atau llama3-8b-8192
+            model="llama-3.3-70b-versatile", # 3.1-70b dimatikan Groq sejak 24 Jan 2025
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": prompt_user}

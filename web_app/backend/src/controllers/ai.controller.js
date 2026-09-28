@@ -42,7 +42,7 @@ async function rekomendasi(req, res, next) {
       const r = await fetch(`${AI_URL}/api/v1/ai/recommend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event_type, budget, guest_count, location, preferred_style: [] }),
+        body: JSON.stringify({ event_type, budget, guest_count, location, preferred_style: [], fokus_prioritas: kategori }),
         signal: AbortSignal.timeout(BATAS_WAKTU_MS),
       });
       ai = await r.json();
@@ -78,10 +78,9 @@ async function rekomendasi(req, res, next) {
         )
       : { rows: [] };
 
-    // Fokus Prioritas disaring di sini, bukan dikirim ke AI: kontrak AI tidak
-    // punya parameter kategori, dan preferred_style miliknya berarti GAYA.
-    // ponytail: budget dialokasikan AI ke semua kategori lalu disaring; kalau
-    // perlu budget khusus kategori terpilih, AI harus menerima parameter kategori.
+    // Fokus Prioritas dikirim ke AI sebagai fokus_prioritas (budget didahulukan
+    // untuk kategori itu), tapi AI boleh menambah kategori lain kalau budget
+    // sisa, jadi tetap disaring di sini.
     const data = rows.filter((r) => !kategori.length || kategori.includes(r.category));
     const total = data.reduce((sum, r) => sum + Number(r.price), 0);
 
