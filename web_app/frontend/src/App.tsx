@@ -24,6 +24,7 @@ import InvoicePage from './pages/InvoicePage'
 import PesananSayaPage from './pages/PesananSayaPage'
 import ChatPage from './pages/ChatPage'
 import FestaAiPage from './pages/FestaAiPage'
+import PesanSemuaPage from './pages/PesanSemuaPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import VendorLayout from './components/VendorLayout'
@@ -137,6 +138,7 @@ export default function App() {
             navigasi) supaya user tidak keluar alur di tengah pengisian.
             Semuanya butuh login — tamu diantar ke /masuk lalu dibawa balik. */}
         <Route element={<WajibMasuk />}>
+          <Route path="/festa-ai/pesan" element={<PesanSemuaPage />} />
           <Route path="/florist/:id/pesan" element={<FloristOrderPage />} />
           <Route path="/jas-kebaya/:id/pesan" element={<AttireOrderPage />} />
           <Route path="/mua/:id/pesan" element={<VenueOrderPage kind="mua" />} />

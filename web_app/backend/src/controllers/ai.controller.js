@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { isValidDate, cekTanggal } = require('./schedule.controller');
 
 // Festa AI: perantara ke layanan AI tim AI Engineer (FastAPI + Gemini, Render).
 // Backend yang memanggil, bukan browser, karena balasan AI cuma menyebut
@@ -18,10 +19,10 @@ function galat(status, message) {
 }
 
 // POST /api/v1/ai/recommend
-// { event_type, budget, guest_count, location, kategori?: string[] }
+// { event_type, budget, guest_count, location, kategori?: string[], tanggal?: 'YYYY-MM-DD' }
 async function rekomendasi(req, res, next) {
   try {
-    const { event_type, budget, guest_count, location } = req.body;
+    const { event_type, budget, guest_count, location, tanggal } = req.body;
     const kategori = Array.isArray(req.body.kategori) ? req.body.kategori : [];
 
     if (typeof event_type !== 'string' || !event_type.trim() || event_type.length > 60) {
@@ -35,6 +36,9 @@ async function rekomendasi(req, res, next) {
     }
     if (kategori.some((k) => !KATEGORI.includes(k))) {
       throw galat(400, 'Kategori tidak dikenal');
+    }
+    if (tanggal !== undefined && (typeof tanggal !== 'string' || !isValidDate(tanggal))) {
+      throw galat(400, 'Tanggal acara harus format YYYY-MM-DD');
     }
 
     let ai;
@@ -81,7 +85,23 @@ async function rekomendasi(req, res, next) {
     // Fokus Prioritas dikirim ke AI sebagai fokus_prioritas (budget didahulukan
     // untuk kategori itu), tapi AI boleh menambah kategori lain kalau budget
     // sisa, jadi tetap disaring di sini.
-    const data = rows.filter((r) => !kategori.length || kategori.includes(r.category));
+    const sesuaiFokus = rows.filter((r) => !kategori.length || kategori.includes(r.category));
+
+    // Tanggal acara: buang yang tidak bisa dipesan hari itu (ditutup vendor,
+    // kapasitas habis, atau kurang dari minimal hari pemesanan). Katalog AI
+    // tidak tahu jadwal, jadi disaring di sini dengan verdict yang sama
+    // dengan /schedules/check. MUA & fotografer baru dicek per JAM saat
+    // dipesan; di level tanggal mereka cuma bisa ditutup.
+    // ponytail: satu query per item (paling banyak 5), cukup untuk ukuran ini.
+    const cek = tanggal
+      ? await Promise.all(sesuaiFokus.map((r) => cekTanggal(r.service_id, tanggal)))
+      : [];
+    const data = tanggal
+      ? sesuaiFokus.filter((_, i) => {
+          const c = cek[i];
+          return c && c.notice_ok && c.horizon_ok && c.status === 'available';
+        })
+      : sesuaiFokus;
     const total = data.reduce((sum, r) => sum + Number(r.price), 0);
 
     res.json({
@@ -90,6 +110,7 @@ async function rekomendasi(req, res, next) {
       data,
       total,
       dibuang: item.length - rows.length,
+      penuh: sesuaiFokus.length - data.length,
     });
   } catch (err) {
     next(err);

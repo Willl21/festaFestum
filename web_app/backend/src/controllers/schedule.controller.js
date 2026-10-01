@@ -596,7 +596,7 @@ async function bukaSlot(req, res, next) {
 }
 
 module.exports = {
-  listJamTerisi, timKosong, bacaDurasi,
+  isValidDate, cekTanggal, listJamTerisi, timKosong, bacaDurasi,
   tutupTanggal, checkAvailability, listAvailability, holdSlot, listMySchedules,
   bukaSlot,
 };

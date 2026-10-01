@@ -112,7 +112,9 @@ export default function AttireDetailPage() {
         setFotoSlot(r.portfolio.map((f) => f.sort_order))
         const aktif = s.data.filter((x) => x.is_active)
         setLayanan(aktif)
-        if (aktif[0]) setProdukId(aktif[0].service_id)
+        // ?layanan= dari kartu Festa AI: buka langsung di layanan yang direkomendasikan.
+        const awal = aktif.find((x) => x.service_id === new URLSearchParams(window.location.search).get('layanan')) ?? aktif[0]
+        if (awal) setProdukId(awal.service_id)
       })
       .catch((e) => setGalat(e.message))
       .finally(() => setMemuat(false))

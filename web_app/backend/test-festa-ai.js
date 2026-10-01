@@ -32,10 +32,10 @@ const tiruan = http.createServer((req, res) => {
   try {
     const { rows: [mua, fg] } = await pool.query(
       `(SELECT v.business_name, s.service_name, s.price, s.service_id FROM services s JOIN vendors v USING (vendor_id)
-         WHERE s.is_active AND s.category = 'makeup_artist' LIMIT 1)
+         WHERE s.is_active AND s.category = 'makeup_artist' AND s.minimum_notice_days > 0 LIMIT 1)
        UNION ALL
        (SELECT v.business_name, s.service_name, s.price, s.service_id FROM services s JOIN vendors v USING (vendor_id)
-         WHERE s.is_active AND s.category = 'photographer' LIMIT 1)`
+         WHERE s.is_active AND s.category = 'photographer' AND s.minimum_notice_days > 0 LIMIT 1)`
     );
     const permintaan = { event_type: 'Pernikahan', budget: 50000000, guest_count: 100, location: 'jakarta_selatan' };
 
@@ -64,13 +64,23 @@ const tiruan = http.createServer((req, res) => {
     r = await kirim({ ...permintaan, kategori: ['photographer'] });
     assert.deepStrictEqual(r.body.data.map((d) => d.service_id), [fg.service_id]);
     assert.strictEqual(r.body.total, Number(fg.price));
-    console.log('2. saring kategori: OK');
+    assert.deepStrictEqual(tiruan.terakhir.fokus_prioritas, ['photographer'], 'fokus ikut dikirim ke AI');
+    console.log('2. saring kategori + fokus_prioritas ke AI: OK');
+
+    // 2b. Tanggal acara HARI INI: kedua layanan butuh >= 1 hari pemesanan,
+    // jadi dua-duanya dibuang dan dihitung sebagai `penuh`.
+    r = await kirim({ ...permintaan, tanggal: new Date().toLocaleDateString('en-CA') });
+    assert.strictEqual(r.body.data.length, 0, JSON.stringify(r.body));
+    assert.strictEqual(r.body.penuh, 2);
+    assert.strictEqual(r.body.total, 0);
+    console.log('2b. saring tanggal (minimal hari pemesanan): OK');
 
     // 3. Validasi input: tidak sampai ke AI.
     for (const salah of [
       { ...permintaan, budget: '50jt' },
       { ...permintaan, location: '' },
       { ...permintaan, kategori: ['katering'] },
+      { ...permintaan, tanggal: '2026-13-40' },
     ]) {
       assert.strictEqual((await kirim(salah)).status, 400);
     }

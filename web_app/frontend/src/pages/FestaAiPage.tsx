@@ -8,6 +8,7 @@ import { rupiah } from '../lib/format'
 import { categories, KOTA, namaKota, type CategoryKey } from '../data/categories'
 import { rekomendasiAi, urlFotoLayanan, type RekomendasiAi } from '../lib/api'
 import Bagian from '../components/Bagian'
+import { KATEGORI_AI, KUNCI_HASIL, bacaSimpanan, type Simpanan } from '../lib/festaAi'
 
 /** Umur minimum rangka hasil pencarian, diteruskan ke <TukarHalus>. Lebih
  *  pendek dari bawaannya (1 detik) karena ini bukan animasi masuk halaman —
@@ -15,13 +16,7 @@ import Bagian from '../components/Bagian'
  *  rangkanya sempat terbaca. */
 const RANGKA_HASIL_MINIMUM_MS = 500
 
-const KATEGORI: Record<string, CategoryKey> = {
-  florist: 'florist',
-  makeup_artist: 'mua',
-  attire_rental: 'attire',
-  photographer: 'fotografer',
-  event_organizer: 'eo',
-}
+const KATEGORI: Record<string, CategoryKey> = KATEGORI_AI
 
 /** Fokus acara -> kategori vendor. Dikirim ke backend, yang menyaring hasil AI
  *  ke kategori ini. Satu fokus = satu kategori yang memang kita layani. "Katering" dan
@@ -44,6 +39,16 @@ const BATAS_BUDGET: Record<string, number> = {
   '> Rp 250.000.000': 500_000_000,
 }
 
+/** Wisuda: yang memesan umumnya mahasiswa, dan paketnya (buket, jas/kebaya,
+ *  foto, rias) di katalog totalnya cuma sekitar Rp0,8-3,7 juta. */
+const BUDGET_WISUDA: Record<string, number> = {
+  '< Rp 1.000.000': 1_000_000,
+  'Rp 1.000.000 - 2.500.000': 2_500_000,
+  'Rp 2.500.000 - 5.000.000': 5_000_000,
+  '> Rp 5.000.000': 10_000_000,
+}
+const budgetUntuk = (tipe: string) => (tipe === 'Wisuda' ? BUDGET_WISUDA : BATAS_BUDGET)
+
 const JUMLAH_TAMU: Record<string, number> = {
   '< 50': 50,
   '50-100': 100,
@@ -54,20 +59,28 @@ const JUMLAH_TAMU: Record<string, number> = {
 
 const TIPE_ACARA = ['Pernikahan', 'Wisuda', 'Gala Dinner', 'Konferensi']
 
-const fokusOptions = Object.keys(FOKUS_KE_KATEGORI)
+/** Wisuda tidak butuh EO: yang dicari buket, busana, foto, dan rias. */
+const fokusUntuk = (tipe: string) =>
+  Object.keys(FOKUS_KE_KATEGORI).filter((f) => tipe !== 'Wisuda' || f !== 'Perencanaan Acara')
 
+// en-CA = YYYY-MM-DD dalam zona waktu lokal (toISOString memakai UTC).
+const hariIni = () => new Date().toLocaleDateString('en-CA')
 
 export default function FestaAiPage() {
-  const [fokus, setFokus] = useState<string[]>([])
+  const [simpanan] = useState(bacaSimpanan)
+  const [fokus, setFokus] = useState<string[]>(simpanan?.fokus ?? [])
   const [nilai, setNilai] = useState({
     tipe: TIPE_ACARA[0],
     tamu: Object.keys(JUMLAH_TAMU)[0],
     budget: Object.keys(BATAS_BUDGET)[0],
     lokasi: KOTA[0],
+    tanggal: '',
+    ...simpanan?.nilai,
   })
-  const [rekomendasi, setRekomendasi] = useState<RekomendasiAi[]>([])
-  const [total, setTotal] = useState(0)
-  const [catatan, setCatatan] = useState({ pembuka: '', saran: '' })
+  const [penuh, setPenuh] = useState(simpanan?.penuh ?? 0)
+  const [rekomendasi, setRekomendasi] = useState<RekomendasiAi[]>(simpanan?.rekomendasi ?? [])
+  const [total, setTotal] = useState(simpanan?.total ?? 0)
+  const [catatan, setCatatan] = useState(simpanan?.catatan ?? { pembuka: '', saran: '' })
   // Halaman ini tidak mengambil data saat dibuka, jadi tidak ada yang bisa
   // dipakai sebagai penanda "sedang memuat". Penanda ini murni untuk animasi
   // masuk: dinyalakan saat dipasang lalu dimatikan seketika, dan <TukarHalus>
@@ -81,22 +94,38 @@ export default function FestaAiPage() {
 
   const [mencari, setMencari] = useState(false)
   const [galat, setGalat] = useState('')
-  const [sudahCari, setSudahCari] = useState(false)
+  const [sudahCari, setSudahCari] = useState(simpanan !== null)
+
+  const wisuda = nilai.tipe === 'Wisuda'
 
   async function cariPaket() {
-    setMencari(true)
     setGalat('')
+    if (!nilai.tanggal) {
+      setGalat('Pilih tanggal acara dulu: rekomendasi cuma berisi vendor yang masih bisa dipesan di tanggal itu.')
+      setSudahCari(true)
+      return
+    }
+    setMencari(true)
     try {
       const r = await rekomendasiAi({
         event_type: nilai.tipe,
-        budget: BATAS_BUDGET[nilai.budget],
-        guest_count: JUMLAH_TAMU[nilai.tamu],
+        budget: budgetUntuk(nilai.tipe)[nilai.budget],
+        // Wisuda tidak menanyakan tamu; backend & AI tetap butuh angka positif.
+        guest_count: wisuda ? 1 : JUMLAH_TAMU[nilai.tamu],
         location: nilai.lokasi,
-        kategori: fokus.map((f) => FOKUS_KE_KATEGORI[f]),
+        // Tanpa fokus, wisuda tetap tidak boleh ditawari EO.
+        kategori: (fokus.length ? fokus : wisuda ? fokusUntuk('Wisuda') : []).map((f) => FOKUS_KE_KATEGORI[f]),
+        tanggal: nilai.tanggal,
       })
-      setRekomendasi(r.data)
-      setTotal(r.total)
-      setCatatan({ pembuka: r.pesan_pembuka, saran: r.saran_penghematan })
+      const hasil: Simpanan = {
+        fokus, nilai, rekomendasi: r.data, total: r.total, penuh: r.penuh,
+        catatan: { pembuka: r.pesan_pembuka, saran: r.saran_penghematan },
+      }
+      setRekomendasi(hasil.rekomendasi)
+      setTotal(hasil.total)
+      setPenuh(hasil.penuh)
+      setCatatan(hasil.catatan)
+      try { sessionStorage.setItem(KUNCI_HASIL, JSON.stringify(hasil)) } catch { /* penyimpanan diblokir: hasil cuma hilang saat kembali */ }
     } catch (e) {
       setGalat((e as Error).message)
     } finally {
@@ -107,6 +136,14 @@ export default function FestaAiPage() {
 
   const toggleFokus = (f: string) =>
     setFokus((prev) => (prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]))
+
+  /** Ganti tipe acara: budget pindah skala kalau pilihan lama tidak ada di
+   *  skala baru, dan fokus yang tidak berlaku (EO untuk wisuda) dilepas. */
+  function gantiTipe(tipe: string) {
+    const skala = budgetUntuk(tipe)
+    setNilai((n) => ({ ...n, tipe, budget: n.budget in skala ? n.budget : Object.keys(skala)[0] }))
+    setFokus((prev) => prev.filter((f) => fokusUntuk(tipe).includes(f)))
+  }
 
   return (
     <TukarHalus memuat={masuk} rangka={<FestaAiSkeleton label="Memuat Festa AI…" />}>
@@ -125,9 +162,9 @@ export default function FestaAiPage() {
                     { id: 'tipe', label: 'Tipe Acara', options: TIPE_ACARA },
                     { id: 'lokasi', label: 'Lokasi', options: KOTA },
                     { id: 'tamu', label: 'Jumlah Tamu', options: Object.keys(JUMLAH_TAMU) },
-                    { id: 'budget', label: 'Target Budget', options: Object.keys(BATAS_BUDGET) },
+                    { id: 'budget', label: 'Target Budget', options: Object.keys(budgetUntuk(nilai.tipe)) },
                   ] as const
-                ).map((f) => (
+                ).filter((f) => !(wisuda && f.id === 'tamu')).map((f) => (
                   <div key={f.id}>
                     <label htmlFor={f.id} className="block text-[15px]">
                       {f.label}
@@ -136,7 +173,9 @@ export default function FestaAiPage() {
                       <select
                         id={f.id}
                         value={nilai[f.id]}
-                        onChange={(e) => setNilai((n) => ({ ...n, [f.id]: e.target.value }))}
+                        onChange={(e) =>
+                          f.id === 'tipe' ? gantiTipe(e.target.value) : setNilai((n) => ({ ...n, [f.id]: e.target.value }))
+                        }
                         className="h-12 w-full appearance-none rounded-sm border border-line bg-white px-4 pr-10 text-[15px] outline-none focus:border-navy-900"
                       >
                         {f.options.map((o) => (
@@ -149,19 +188,35 @@ export default function FestaAiPage() {
                     </div>
                   </div>
                 ))}
+
+                <div>
+                  <label htmlFor="tanggal" className="block text-[15px]">
+                    Tanggal Acara
+                  </label>
+                  <input
+                    id="tanggal"
+                    type="date"
+                    min={hariIni()}
+                    value={nilai.tanggal}
+                    onChange={(e) => setNilai((n) => ({ ...n, tanggal: e.target.value }))}
+                    className="mt-2 h-12 w-full rounded-sm border border-line bg-white px-4 text-[15px] outline-none focus:border-navy-900"
+                  />
+                </div>
               </div>
 
               {/* Mockup menampilkan dua kotak kosong; diisi pilihan fokus yang
                   bisa dicentang lebih dari satu. */}
               <p className="mt-5 text-[15px]">Fokus Prioritas</p>
               <div className="mt-2 grid grid-cols-2 gap-2.5">
-                {fokusOptions.map((f) => (
+                {fokusUntuk(nilai.tipe).map((f, i, semua) => (
                   <button
                     key={f}
                     type="button"
                     onClick={() => toggleFokus(f)}
                     aria-pressed={fokus.includes(f)}
-                    className={`rounded-sm border py-2.5 text-[13px] transition-colors first:col-span-2 ${
+                    className={`rounded-sm border py-2.5 text-[13px] transition-colors ${
+                      semua.length % 2 && i === 0 ? 'col-span-2' : ''
+                    } ${
                       fokus.includes(f)
                         ? 'border-navy-900 bg-navy-900 text-white'
                         : 'border-line bg-white hover:border-navy-900'
@@ -239,25 +294,26 @@ export default function FestaAiPage() {
                         >
                           <Img
                             src={r.has_photo ? urlFotoLayanan(r.service_id) : undefined}
-                            alt={r.business_name}
+                            alt={r.service_name}
                             tint={kat.tint}
                             className="h-[200px] w-full object-cover"
                           />
 
                           <div className="flex flex-col py-2 pr-2">
-                            <h3 className="font-display text-[26px] font-semibold">{r.business_name}</h3>
+                            {/* Yang direkomendasikan LAYANAN, bukan vendornya. */}
+                            <h3 className="font-display text-[26px] font-semibold">{r.service_name}</h3>
                             <p className="mt-2 max-w-[420px] text-[14px] leading-relaxed text-ink/75">
-                              {r.service_name}
+                              oleh {r.business_name}
                             </p>
                             <span className="mt-3 w-fit rounded-sm bg-[#fdeceb] px-3 py-1.5 text-[13px] text-[#c0392b]">
                               {kat.label} - {namaKota(r.city)} - rating {Number(r.rating_avg)}
                             </span>
                             <div className="mt-auto flex items-end justify-between gap-4 pt-6">
                               <Link
-                                to={`/${kat.slug}/${r.vendor_id}`}
+                                to={`/${kat.slug}/${r.vendor_id}?layanan=${r.service_id}&dari=festa-ai`}
                                 className="rounded-sm border border-line px-4 py-2 text-[13px] transition-colors hover:border-navy-900"
                               >
-                                Lihat Profil
+                                Lihat Layanan
                               </Link>
                               <p className="font-display text-[24px] font-semibold">
                                 {rupiah(Number(r.price))}
@@ -268,6 +324,22 @@ export default function FestaAiPage() {
                         )
                       })}
 
+
+                    {penuh > 0 && (
+                      <p className="border border-line bg-white px-5 py-4 text-[14px] leading-relaxed text-ink/75">
+                        {penuh} rekomendasi lain dilewati karena vendornya sudah penuh atau tidak bisa dipesan
+                        di tanggal itu.
+                      </p>
+                    )}
+
+                    {rekomendasi.length > 0 && (
+                      <Link
+                        to="/festa-ai/pesan"
+                        className="flex h-14 w-full items-center justify-center rounded-sm bg-navy-900 text-[17px] font-semibold text-white transition-opacity hover:opacity-90"
+                      >
+                        Pesan Semua ({rekomendasi.length} layanan)
+                      </Link>
+                    )}
 
                     {catatan.saran && rekomendasi.length > 0 && (
                       <p className="border border-line bg-white px-5 py-4 text-[14px] leading-relaxed text-ink/75">

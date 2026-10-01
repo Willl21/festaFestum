@@ -255,8 +255,10 @@ export const rekomendasiAi = (body: {
   guest_count: number
   location: string
   kategori: string[]
+  /** Tanggal acara; yang tidak bisa dipesan hari itu dibuang backend. */
+  tanggal?: string
 }) =>
-  post<{ pesan_pembuka: string; saran_penghematan: string; data: RekomendasiAi[]; total: number }>(
+  post<{ pesan_pembuka: string; saran_penghematan: string; data: RekomendasiAi[]; total: number; penuh: number }>(
     '/ai/recommend',
     body
   )

@@ -174,7 +174,13 @@ export default function EoDetailPage() {
 
             <div className="mt-6 grid gap-6 lg:grid-cols-2">
               {layanan.map((p) => (
-                <article key={p.service_id} className="flex flex-col border border-line bg-white p-6">
+                // Paket yang direkomendasikan Festa AI (?layanan=) disorot.
+                <article
+                  key={p.service_id}
+                  className={`flex flex-col border bg-white p-6 ${
+                    p.service_id === new URLSearchParams(window.location.search).get('layanan') ? 'border-navy-900 ring-1 ring-navy-900' : 'border-line'
+                  }`}
+                >
                   <h3 className="font-display text-[24px] font-semibold">{p.service_name}</h3>
                   <p className="mt-3 text-[12px] leading-relaxed text-ink/70">{p.description}</p>
 

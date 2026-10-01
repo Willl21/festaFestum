@@ -56,8 +56,9 @@ export default function FloristDetailPage() {
 
   // Layanan pertama dipakai sebagai acuan harga & pengecekan jadwal. Satu
   // vendor bisa punya banyak layanan; pemilihan paket dilakukan di halaman
-  // pesan berikutnya.
-  const utama = layanan[0]
+  // pesan berikutnya. Kecuali datang dari kartu Festa AI (?layanan=): layanan
+  // yang direkomendasikan itulah acuannya.
+  const utama = layanan.find((s) => s.service_id === new URLSearchParams(window.location.search).get('layanan')) ?? layanan[0]
 
   async function ajukan() {
     if (!utama) return

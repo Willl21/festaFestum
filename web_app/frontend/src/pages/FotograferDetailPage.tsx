@@ -61,7 +61,9 @@ export default function FotograferDetailPage() {
         setVendor(v.vendor)
         setFotoSlot(v.portfolio.map((f) => f.sort_order))
         setLayanan(aktif)
-        if (aktif[0]) setPaketId(aktif[0].service_id)
+        // ?layanan= dari kartu Festa AI: buka langsung di layanan yang direkomendasikan.
+        const awal = aktif.find((x) => x.service_id === new URLSearchParams(window.location.search).get('layanan')) ?? aktif[0]
+        if (awal) setPaketId(awal.service_id)
       })
       .catch((e) => setGalat(e.message))
       .finally(() => setMemuat(false))
