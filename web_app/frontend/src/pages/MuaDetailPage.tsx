@@ -8,7 +8,7 @@ import BackButton from '../components/BackButton'
 import KalenderSlot from '../components/KalenderSlot'
 import DetailSkeleton from '../components/DetailSkeleton'
 import TukarHalus from '../components/TukarHalus'
-import { ArrowRight, ChevronDown, PhotoIcon, ClockIcon } from '../components/icons'
+import { ArrowRight, ClockIcon } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
 import { rupiah } from '../lib/format'
 import { hargaPesanan } from '../lib/durasi'
@@ -16,6 +16,7 @@ import {
   getVendor, getVendorServices, cekKetersediaan, urlFotoVendor,
   type ApiService, type ApiVendor,
 } from '../lib/api'
+import Dropdown from '../components/Dropdown'
 
 const kategori = categories.mua
 
@@ -135,13 +136,6 @@ export default function MuaDetailPage() {
               className="h-[300px] w-full object-cover md:h-[520px]"
             />
 
-            <button
-              type="button"
-              className="absolute right-4 bottom-4 flex items-center gap-2 rounded-sm bg-white/90 px-3 py-1.5 text-[12px] shadow-sm backdrop-blur transition-colors hover:bg-white"
-            >
-              <PhotoIcon />
-              Lihat Semua Foto
-            </button>
           </section>
 
           <div className="mt-14 grid gap-12 lg:grid-cols-[1fr_420px]">
@@ -193,17 +187,16 @@ export default function MuaDetailPage() {
                 Jenis Paket
               </label>
               <div className="relative mt-2">
-                <select
+                <Dropdown
                   id="paket"
                   value={paketId}
-                  onChange={(e) => { setPaketId(e.target.value); setCek(null); setJumlah(1); setTambahan(0) }}
+                  onChange={(v) => { setPaketId(v); setCek(null); setJumlah(1); setTambahan(0) }}
                   className="h-11 w-full appearance-none rounded-sm border border-line bg-white px-3 pr-9 text-[14px] outline-none focus:border-navy-900"
                 >
                   {layanan.map((p) => (
                     <option key={p.service_id} value={p.service_id}>{p.service_name}</option>
                   ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/50" />
+                </Dropdown>
               </div>
 
               <p className="mt-5 text-[15px] font-semibold">Tanggal Acara</p>
@@ -257,7 +250,7 @@ export default function MuaDetailPage() {
           </div>
 
           <div className="mt-16">
-            <VendorLocation />
+            <VendorLocation alamat={vendor.address} kota={vendor.city ? namaKota(vendor.city) : null} />
           </div>
 
           <div className="mt-16">

@@ -64,11 +64,23 @@ export function saveAuth(auth: AuthResponse) {
   simpanUser(auth.user)
 }
 
+/** Token pengganti dari ganti sandi & menyalakan 2FA: server mencabut semua
+ *  sesi lama (users.sesi_sejak), termasuk token yang sedang dipakai halaman
+ *  ini — tanpa menyimpan yang baru, request berikutnya terlempar ke /masuk. */
+export function gantiToken(token: string) {
+  localStorage.setItem(TOKEN_KEY, token)
+}
+
 /** Endpoint yang membalas 401 karena INPUT salah, bukan sesi habis: sandi
- *  keliru waktu masuk, dan sandi lama keliru waktu menggantinya. Kalau dua ini
- *  ikut dilempar ke halaman masuk, pesan salahnya hilang dan orang yang cuma
- *  salah ketik ikut dikeluarkan. */
-const BUKAN_SESI_HABIS = ['/auth/login', '/auth/password']
+ *  keliru waktu masuk, waktu menggantinya, dan waktu mengganti rekening. Kalau
+ *  ini ikut dilempar ke halaman masuk, pesan salahnya hilang dan orang yang
+ *  cuma salah ketik ikut dikeluarkan. */
+const BUKAN_SESI_HABIS = [
+  '/auth/login', '/auth/password', '/auth/rekening',
+  // Kode 6 digit (migrasi 022): kode salah juga 401, bukan sesi habis.
+  '/auth/login/kode', '/auth/reset-sandi',
+  '/auth/dua-langkah', '/auth/dua-langkah/konfirmasi', '/auth/dua-langkah/matikan',
+]
 
 const PESAN_SESI_HABIS = 'Sesi Anda sudah berakhir. Silakan masuk lagi.'
 
@@ -176,6 +188,10 @@ export async function bukaBerkas(path: string) {
     throw e
   }
 }
+
+/** Balasan /auth/login untuk akun ber-2FA (dan SEMUA admin): belum ada token,
+ *  cuma tiket untuk POST /auth/login/kode. `email` sudah disamarkan server. */
+export type TantanganKode = { butuh_kode: true; tiket: string; email: string }
 
 export type AuthResponse = {
   token: string

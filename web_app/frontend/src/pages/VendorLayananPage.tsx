@@ -4,7 +4,7 @@ import TukarHalus from '../components/TukarHalus'
 import { VendorPageHeader } from '../components/VendorLayout'
 import Img from '../components/Img'
 import {
-  ChevronDown, EyeIcon, EyeOffIcon, PlusIcon, UploadCloudIcon,
+  EyeIcon, EyeOffIcon, PlusIcon, UploadCloudIcon,
 } from '../components/icons'
 import { rupiahBulat } from '../lib/format'
 import { categories as katalogKategori } from '../data/categories'
@@ -14,6 +14,7 @@ import {
   simpanFotoVendor, urlFotoLayanan, urlFotoVendor, type ApiService,
 } from '../lib/api'
 import { kecilkanGambar, PORTOFOLIO } from '../lib/gambar'
+import Dropdown from '../components/Dropdown'
 
 /** Katalog layanan + galeri portofolio milik vendor.
  *
@@ -544,7 +545,7 @@ function ServiceDialog({
       onClose={onTutup}
       className="ff-dialog m-auto w-[min(560px,92vw)] rounded-lg border border-line bg-white p-0 backdrop:bg-navy-900/40"
     >
-      <form onSubmit={handleSubmit} className="max-h-[86vh] overflow-y-auto p-7">
+      <form onSubmit={handleSubmit} className="max-h-[86dvh] overflow-y-auto overscroll-contain p-7">
         <h2 className="font-display text-[26px] font-semibold">
           {awal ? 'Ubah Layanan' : 'Tambah Layanan Baru'}
         </h2>
@@ -630,12 +631,12 @@ function ServiceDialog({
             ) : (
               <>
                 <div className="relative">
-                  <select
+                  <Dropdown
                     id="category"
                     name="category"
                     required
                     value={kategori}
-                    onChange={(e) => setKategori(e.target.value)}
+                    onChange={(v) => setKategori(v)}
                     className="mt-2 h-11 w-full appearance-none rounded-sm border border-line bg-white px-3 pr-9 text-[14px] outline-none focus:border-navy-900"
                   >
                     <option value="" disabled>
@@ -646,8 +647,7 @@ function ServiceDialog({
                         {c.label}
                       </option>
                     ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-3 bottom-3.5 h-4 w-4 text-ink/50" />
+                  </Dropdown>
                 </div>
                 <p className="mt-1.5 text-[12px] text-muted">
                   {awal
@@ -826,7 +826,7 @@ function FieldTambahan({
 
       {field.pilihan ? (
         <div className="relative">
-          <select
+          <Dropdown
             id={id}
             name={id}
             defaultValue={defaultValue}
@@ -836,8 +836,7 @@ function FieldTambahan({
             {field.pilihan.map((o) => (
               <option key={o} value={o}>{o}</option>
             ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 bottom-3.5 h-4 w-4 text-ink/50" />
+          </Dropdown>
         </div>
       ) : field.panjang ? (
         <textarea

@@ -5,7 +5,7 @@ import TukarHalus from '../components/TukarHalus'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
 import Img from '../components/Img'
-import { SearchIcon, ChevronDown, StarIcon, HelpIcon } from '../components/icons'
+import { SearchIcon, StarIcon, HelpIcon } from '../components/icons'
 import { categories, namaKota, type CategoryKey } from '../data/categories'
 import { rupiah } from '../lib/format'
 import {
@@ -13,6 +13,7 @@ import {
   type ApiBooking,
 } from '../lib/api'
 import { rentangJam } from '../lib/durasi'
+import Dropdown from '../components/Dropdown'
 
 const KATEGORI: Record<string, CategoryKey> = {
   florist: 'florist',
@@ -103,6 +104,18 @@ export default function PesananSayaPage() {
       setGalat((e as Error).message)
     } finally {
       setSibuk('')
+    }
+  }
+
+  // "Hubungi Concierge" = tiket ke tim admin, ruangan yang sama dengan tombol
+  // "Hubungi Tim Admin" di /pesan (backend idempoten: satu tiket per klien).
+  async function hubungiConcierge() {
+    setGalat('')
+    try {
+      const r = await bukaPercakapan({ jenis: 'admin_klien' })
+      navigate(`/pesan?c=${r.conversation.conversation_id}`)
+    } catch (e) {
+      setGalat((e as Error).message)
     }
   }
 
@@ -236,18 +249,17 @@ export default function PesananSayaPage() {
             </div>
 
             <div className="relative w-[280px]">
-              <select
+              <Dropdown
                 aria-label="Filter kategori"
                 value={filterKategori}
-                onChange={(e) => setFilterKategori(e.target.value)}
+                onChange={(v) => setFilterKategori(v)}
                 className="h-12 w-full appearance-none rounded-sm border border-line bg-white px-4 pr-9 text-[14px] outline-none focus:border-navy-900"
               >
                 <option value="semua">Semua Layanan</option>
                 {Object.entries(KATEGORI).map(([api, key]) => (
                   <option key={api} value={api}>{categories[key].label}</option>
                 ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-ink/50" />
+              </Dropdown>
             </div>
           </div>
 
@@ -668,14 +680,10 @@ export default function PesananSayaPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
+              {/* "Pusat Bantuan FAQ" dibuang: halaman FAQ-nya tidak ada. */}
               <button
                 type="button"
-                className="rounded-sm border border-line bg-lavender/25 px-4 py-2.5 text-[11px] font-semibold tracking-[0.04em] transition-colors hover:bg-lavender/40"
-              >
-                PUSAT BANTUAN FAQ
-              </button>
-              <button
-                type="button"
+                onClick={hubungiConcierge}
                 className="rounded-sm bg-ink px-4 py-2.5 text-[11px] font-semibold tracking-[0.04em] text-white transition-opacity hover:opacity-90"
               >
                 HUBUNGI CONCIERGE

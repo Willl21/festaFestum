@@ -19,7 +19,8 @@ const KATEGORI: Record<string, CategoryKey> = {
 }
 import SearchPanel, { type Field } from '../components/SearchPanel'
 import AiBanner from '../components/AiBanner'
-import { StarIcon, ArrowRight } from '../components/icons'
+import { StarIcon } from '../components/icons'
+import { rupiahBulat } from '../lib/format'
 
 /** Panel cari landing = pintu masuk schedule-first discovery. Ketiganya
  *  diteruskan ke halaman kategori sebagai query string, bukan diproses di
@@ -52,7 +53,7 @@ const searchFields: Field[] = [
 const kategori: CardItem[] = [
   { id: 'mua', title: 'MUA', subtitle: 'Rias pengantin', imageUrl: '/img/kategori-mua.jpg', to: '/mua' },
   { id: 'attire', title: 'Jas & Kebaya', subtitle: 'Sewa busana', imageUrl: '/img/kategori-attire.jpg', to: '/jas-kebaya' },
-  { id: 'florist', title: 'Florist', subtitle: 'Buket & dekorasi', imageUrl: '/img/kategori-florist.png', to: '/florist' },
+  { id: 'florist', title: 'Florist', subtitle: 'Buket & dekorasi', imageUrl: '/img/kategori-florist.jpg', to: '/florist' },
   { id: 'fotografer', title: 'Fotografer', subtitle: 'Dokumentasi', imageUrl: '/img/kategori-fotografer.jpg', to: '/fotografer' },
   { id: 'eo', title: 'Event Organizer', subtitle: 'Perencana acara', imageUrl: '/img/kategori-eo.jpg', to: '/event-organizer' },
 ]
@@ -174,81 +175,15 @@ export default function LandingPage() {
 
           {/* REKOMENDASI */}
           <Reveal className="mx-auto max-w-[1290px] px-6 pt-24 md:px-12">
-            <div className="flex items-end justify-between">
-              <div>
-                <h2 className="font-display text-[30px] font-semibold">Rekomendasi Vendor</h2>
-                <p className="mt-2 text-[14px] text-muted">Pilihan terbaik untuk acara pentingmu</p>
-              </div>
-              <button type="button" aria-label="Lihat semua rekomendasi" className="text-ink">
-                <ArrowRight className="h-6 w-6" />
-              </button>
-            </div>
+            {/* Tombol panah "lihat semua" di sini dibuang: dia <button> tanpa
+                onClick, dan memang belum ada halaman "semua rekomendasi". */}
+            <h2 className="font-display text-[30px] font-semibold">Rekomendasi Vendor</h2>
+            <p className="mt-2 text-[14px] text-muted">Pilihan terbaik untuk acara pentingmu</p>
 
             <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_0.85fr]">
-              {/* Kartu besar */}
-              {besar && (() => {
-                const kat = categories[KATEGORI[besar.categories[0]] ?? 'eo']
-                return (
-                  <article className="flex flex-col border border-line bg-white transition-transform duration-200 motion-safe:hover:scale-[1.02]">
-                    <Img
-                      src={besar.has_photo ? urlFotoVendor(besar.vendor_id) : undefined}
-                      alt={besar.business_name}
-                      tint={kat.tint}
-                      className="h-[290px] w-full object-cover"
-                    />
-                    <div className="flex flex-1 flex-col px-7 py-7">
-                      <h3 className="font-display text-[30px] font-semibold">{besar.business_name}</h3>
-                      <div className="mt-3 flex items-center gap-4">
-                        <span className="rounded-sm bg-maroon px-3 py-1 text-[11px] font-medium text-white">
-                          {kat.label}
-                        </span>
-                        <span className="flex items-center gap-1 text-[12px] text-ink/80">
-                          <StarIcon className="h-3.5 w-3.5 text-star" />
-                          {Number(besar.rating_avg)} · {namaKota(besar.city)}
-                        </span>
-                      </div>
-                      <Link
-                        to={`/${kat.slug}/${besar.vendor_id}`}
-                        className="mt-auto w-full rounded-sm bg-navy-900 py-3.5 text-center text-[15px] font-semibold text-white transition-opacity hover:opacity-90"
-                      >
-                        Lihat Detail
-                      </Link>
-                    </div>
-                  </article>
-                )
-              })()}
-
-              {/* Dua kartu kecil */}
+              {besar && <KartuUnggulan v={besar} besar />}
               <div className="grid gap-6">
-                {kecil.map((v) => {
-                  const kat = categories[KATEGORI[v.categories[0]] ?? 'eo']
-                  return (
-                    <article key={v.vendor_id} className="flex flex-col border border-line bg-white transition-transform duration-200 motion-safe:hover:scale-[1.02]">
-                      <Img
-                        src={v.has_photo ? urlFotoVendor(v.vendor_id) : undefined}
-                        alt={v.business_name}
-                        tint={kat.tint}
-                        className="h-[150px] w-full object-cover"
-                      />
-                      <div className="px-5 py-4">
-                        <div className="flex items-start justify-between">
-                          <h3 className="font-display text-[23px] font-semibold">{v.business_name}</h3>
-                          <span className="pt-1.5 text-[11px] font-semibold">{namaKota(v.city)}</span>
-                        </div>
-                        <span className="mt-1 flex items-center gap-1 text-[12px] text-ink/80">
-                          <StarIcon className="h-3.5 w-3.5 text-star" />
-                          {Number(v.rating_avg)} · {kat.label}
-                        </span>
-                        <Link
-                          to={`/${kat.slug}/${v.vendor_id}`}
-                          className="mt-4 inline-block rounded-sm border border-line px-4 py-1.5 text-[12px] transition-colors hover:border-navy-900"
-                        >
-                          Lihat Profil
-                        </Link>
-                      </div>
-                    </article>
-                  )
-                })}
+                {kecil.map((v) => <KartuUnggulan key={v.vendor_id} v={v} />)}
               </div>
             </div>
           </Reveal>
@@ -285,5 +220,62 @@ export default function LandingPage() {
         </>
       )}
     </TukarHalus>
+  )
+}
+
+/** Kartu "Rekomendasi Vendor". Satu susunan untuk ketiga kartu: di HP mereka
+ *  ditumpuk berurutan, dan dulu kartu besar & kecil menaruh kategori, kota, dan
+ *  tombolnya di tempat berbeda. Yang beda di desktop cuma ukuran foto & judul.
+ *  Tombol dibungkus `mt-auto pt-5`: mt-auto saja bernilai 0 di HP (kartu
+ *  setinggi isinya), sehingga tombolnya dulu menempel ke baris lencana. */
+function KartuUnggulan({ v, besar = false }: { v: ApiVendor; besar?: boolean }) {
+  const kat = categories[KATEGORI[v.categories[0]] ?? 'eo']
+  const harga = Number(v.price_start_from)
+  return (
+    <article className="flex flex-col border border-line bg-white transition-transform duration-200 motion-safe:hover:scale-[1.02]">
+      <Img
+        src={v.has_photo ? urlFotoVendor(v.vendor_id) : undefined}
+        alt={v.business_name}
+        tint={kat.tint}
+        // Di desktop kartu besar setinggi dua kartu kecil; fotonya yang
+        // memanjang mengisi sisa tinggi itu, bukan ruang kosong di bawah judul.
+        className={`h-[200px] w-full object-cover ${besar ? 'lg:h-auto lg:min-h-[290px] lg:flex-1' : 'lg:h-[150px]'}`}
+      />
+      <div className={`flex flex-col p-5 ${besar ? 'lg:flex-none lg:p-7' : 'flex-1'}`}>
+        <span className="self-start rounded-sm bg-maroon px-2.5 py-1 text-[12px] font-medium text-white">
+          {kat.label}
+        </span>
+        <h3 className={`mt-3 font-display text-[24px] leading-tight font-semibold ${besar ? 'lg:text-[30px]' : ''}`}>
+          {v.business_name}
+        </h3>
+        <p className="mt-1.5 flex items-center gap-1 text-[13px] text-ink/80">
+          {/* Vendor tanpa ulasan dulu tampil "★ 0" — terbaca rating terburuk,
+              padahal artinya belum pernah dinilai. */}
+          {v.rating_count > 0 ? (
+            <>
+              <StarIcon className="h-3.5 w-3.5 text-star" />
+              {Number(v.rating_avg).toFixed(1)} ({v.rating_count} ulasan)
+            </>
+          ) : (
+            'Belum ada ulasan'
+          )}
+          {v.city && ` · ${namaKota(v.city)}`}
+        </p>
+        <div className="mt-auto flex items-end justify-between gap-4 pt-5">
+          {harga > 0 ? (
+            <div>
+              <p className="text-[12px] text-muted">Mulai dari</p>
+              <p className="font-display text-[21px] font-semibold">{rupiahBulat(harga)}</p>
+            </div>
+          ) : <span />}
+          <Link
+            to={`/${kat.slug}/${v.vendor_id}`}
+            className="shrink-0 rounded-sm bg-navy-900 px-5 py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
+          >
+            Lihat Detail
+          </Link>
+        </div>
+      </div>
+    </article>
   )
 }

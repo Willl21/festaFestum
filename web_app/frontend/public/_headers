@@ -1,0 +1,4 @@
+# Berkas hasil build Vite memakai hash di namanya (index-BJm5W-RW.js), jadi
+# isinya tidak pernah berubah di bawah nama yang sama: aman di-cache setahun.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

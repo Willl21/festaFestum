@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { cekAkses } from './PenjagaAkses'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import {
   clearAuth, getMyVendor, pesanBelumDibaca, urlFotoVendor, usePengguna, type ApiVendor,
 } from '../lib/api'
@@ -103,7 +103,7 @@ export default function VendorLayout() {
 
       <aside
         id="menu-vendor"
-        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-[258px] shrink-0 flex-col overflow-y-auto border-r border-line bg-white transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex h-dvh w-[258px] shrink-0 flex-col overflow-y-auto border-r border-line bg-white transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0 ${
           menuBuka ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -227,7 +227,10 @@ export default function VendorLayout() {
 
         <main className="flex-1 px-6 py-9 md:px-10">
           <div className="mx-auto max-w-[980px]">
-            <Outlet context={{ setVendor } satisfies KonteksVendor} />
+            {/* Halaman vendor dimuat saat dibuka (App.tsx); sidebar tetap di tempat. */}
+            <Suspense fallback={null}>
+              <Outlet context={{ setVendor } satisfies KonteksVendor} />
+            </Suspense>
           </div>
         </main>
 

@@ -4,12 +4,13 @@ import FormSkeleton from '../components/FormSkeleton'
 import TukarHalus from '../components/TukarHalus'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import OrderLayout, { OrderField, OrderSection, OrderTextarea } from '../components/OrderLayout'
-import { CalendarIcon, ChevronDown, NoteIcon } from '../components/icons'
+import { CalendarIcon, NoteIcon } from '../components/icons'
 import { categories } from '../data/categories'
 import {
   getVendor, getVendorServices, buatBooking,
   type ApiService, type ApiVendor,
 } from '../lib/api'
+import Dropdown from '../components/Dropdown'
 
 const kat = categories.attire
 
@@ -266,10 +267,10 @@ function Select({
         {label}
       </label>
       <div className="relative">
-        <select
+        <Dropdown
           id={id}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(v) => onChange(v)}
           className="mt-2 h-11 w-full appearance-none rounded-sm border border-line bg-white px-3 pr-9 text-[14px] outline-none focus:border-navy-900"
         >
           <option value="" disabled>
@@ -278,8 +279,7 @@ function Select({
           {options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-3 bottom-3.5 h-4 w-4 text-ink/50" />
+        </Dropdown>
       </div>
     </div>
   )

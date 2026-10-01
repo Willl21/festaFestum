@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { GridIcon, ShieldIcon, WalletIcon, UserCircleIcon, BellIcon, MenuIcon, ChatIcon } from './icons'
 import { cekAkses } from './PenjagaAkses'
@@ -77,7 +77,7 @@ export default function AdminLayout() {
 
       <aside
         id="menu-admin"
-        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-[268px] shrink-0 flex-col overflow-y-auto bg-navy-900 transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex h-dvh w-[268px] shrink-0 flex-col overflow-y-auto bg-navy-900 transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0 ${
           menuBuka ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -167,7 +167,10 @@ export default function AdminLayout() {
         </header>
 
         <main className="px-6 py-8 md:px-10">
-          <Outlet />
+          {/* Halaman admin dimuat saat dibuka (App.tsx); sidebar tetap di tempat. */}
+          <Suspense fallback={null}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

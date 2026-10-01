@@ -149,7 +149,9 @@ export default function ChatPage() {
   useEffect(() => {
     const el = kotakPesan.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [pesan.length, aktif])
+    // ruangDiHp ikut: di HP pesannya bisa sudah termuat selagi ruangannya
+    // masih display:none (tinggi 0), jadi gulungannya diulang saat dibuka.
+  }, [pesan.length, aktif, ruangDiHp])
 
   const terlihat = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -301,7 +303,7 @@ export default function ChatPage() {
             <div className="mt-8 grid gap-6 lg:grid-cols-[360px_1fr]">
               {/* --- daftar percakapan --- */}
               <section
-                className={`rounded-lg border border-line bg-white p-4 ${
+                className={`min-w-0 rounded-lg border border-line bg-white p-4 ${
                   ruangDiHp ? 'hidden lg:block' : ''
                 }`}
               >
@@ -382,15 +384,22 @@ export default function ChatPage() {
               </section>
 
               {/* --- ruang obrolan --- */}
+              {/* Di HP ruangannya mengambil SELURUH layar (fixed inset-0), seperti
+                  aplikasi pesan: pesan digulung di kotaknya sendiri, kotak ketik
+                  menempel di bawah, judul halaman & footer tertutup. Dulu ruangan
+                  ini duduk di tengah halaman panjang, jadi makin panjang obrolannya
+                  makin jauh kotak ketiknya. Keluar lewat tombol "Semua obrolan".
+                  ponytail: halaman di belakangnya tidak dikunci; tak terlihat, jadi
+                  dibiarkan sampai ada keluhan di HP sungguhan. */}
               <section
-                className={`min-h-[560px] flex-col rounded-lg border border-line bg-white ${
+                className={`flex-col bg-white max-lg:fixed max-lg:inset-0 max-lg:z-[60] lg:min-h-[560px] lg:rounded-lg lg:border lg:border-line ${
                   ruangDiHp ? 'flex' : 'hidden lg:flex'
                 }`}
               >
                 {/* Header selalu dirender, bahkan selagi isi ruangan dimuat:
                     tombol kembali ada di dalamnya, dan di HP menyembunyikannya
                     selama menunggu berarti tidak ada jalan keluar sama sekali. */}
-                <header className="border-b border-line p-5">
+                <header className="border-b border-line p-5 max-lg:pt-[calc(1.25rem+env(safe-area-inset-top,0px))]">
                     <button
                       type="button"
                       onClick={() => setRuangDiHp(false)}
@@ -449,7 +458,7 @@ export default function ChatPage() {
                     )}
                   </header>
 
-                <div ref={kotakPesan} className="flex-1 space-y-4 overflow-y-auto p-5">
+                <div ref={kotakPesan} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-5">
                   {!ruangSiap && (
                     <div className="space-y-4" role="status" aria-live="polite">
                       <span className="sr-only">Memuat pesan…</span>
@@ -528,7 +537,7 @@ export default function ChatPage() {
                   })}
                 </div>
 
-                <form onSubmit={kirimkan} className="flex items-end gap-3 border-t border-line p-4">
+                <form onSubmit={kirimkan} className="flex items-end gap-3 border-t border-line p-4 max-lg:pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
                   <label className="flex-1">
                     <span className="sr-only">Tulis pesan</span>
                     <textarea

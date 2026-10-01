@@ -2,20 +2,40 @@
 <html lang="id">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/img/logo.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/img/favicon-64.png" />
+    <!-- viewport-fit=cover: kotak ketik chat yang menempel di bawah memakai
+         env(safe-area-inset-bottom); tanpa ini nilainya selalu 0.
+         theme-color = latar header (cream), jadi bilah status HP senada. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="theme-color" content="#fdfcf9" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Font TIDAK memblokir tampilan (PageSpeed: ~750 ms di HP). media=print
+         membuat browser mengunduhnya dengan prioritas rendah tanpa menahan
+         render, lalu onload menyalakannya untuk layar. Teks tampil dulu dengan
+         font cadangan (display=swap), lalu berganti. -->
     <link
       href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
     <!-- Hero landing diunduh sejak HTML dibaca, sebelum React jalan. Selama
          rangka muat tampil, isi aslinya belum terpasang, jadi tanpa ini
          gambarnya baru mulai diunduh SESUDAH pertukaran — dan muncul
          belakangan sebagai sentakan kedua. -->
-    <link rel="preload" as="image" href="/img/hero-landing.jpg" fetchpriority="high" />
+    <!-- Varian WebP yang SAMA dengan yang dipilih <picture> di HeroSlideshow;
+         kalau beda, foto diunduh dua kali. -->
+    <link rel="preload" as="image" type="image/webp" href="/img/hero-landing-hp.webp" media="(max-width: 767px)" fetchpriority="high" />
+    <link rel="preload" as="image" type="image/webp" imagesrcset="/img/hero-landing-800.webp 800w, /img/hero-landing-1600.webp 1600w" imagesizes="100vw" media="(min-width: 768px)" fetchpriority="high" />
     <title>Festa Festum — Marketplace Vendor Acara Formal</title>
+    <meta name="description" content="Pesan MUA, fotografer, florist, sewa jas & kebaya, dan event organizer untuk acara formal di Jabodetabek. Cek jadwal vendor yang benar-benar kosong, lalu pesan tanpa bentrok." />
   </head>
   <body>
     <div id="root"></div>

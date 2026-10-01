@@ -3,9 +3,16 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 const { gambarBermasalah } = require('../lib/gambar');
+const { terbitkanKode, cocokkanKode, samarkanEmail } = require('../lib/kodeOtp');
 
 const SALT_ROUNDS = 10;
 const ALLOWED_SELF_REGISTER_ROLES = ['customer', 'vendor_owner'];
+
+/** Detik sekarang menurut jam NODE — sumber yang sama dengan iat di JWT.
+ *  sesi_sejak WAJIB ditulis dari sini, bukan now() Postgres: jam server DB
+ *  (Supabase) tidak sama persis dengan jam backend, dan selisih sedetik saja
+ *  membuat token yang baru diterbitkan ikut terbaca lebih tua dari sesi_sejak. */
+const detikIni = () => Math.floor(Date.now() / 1000);
 
 function signToken(user) {
   return jwt.sign(
@@ -58,7 +65,7 @@ async function login(req, res, next) {
     }
 
     const result = await pool.query(
-      `SELECT user_id, name, email, phone, password_hash, role, avatar_url
+      `SELECT user_id, name, email, phone, password_hash, role, avatar_url, dua_langkah
        FROM users WHERE email = $1`,
       [email]
     );
@@ -76,10 +83,24 @@ async function login(req, res, next) {
       return res.status(401).json({ message: 'Email atau password salah' });
     }
 
-    const token = signToken(user);
-    delete user.password_hash;
+    // Verifikasi dua langkah: sandi benar BELUM memberi token. Kode dikirim ke
+    // email, token baru terbit di POST /auth/login/kode. Admin SELALU lewat
+    // langkah ini (akun yang menyetujui pencairan dana), yang lain kalau
+    // menyalakannya sendiri.
+    if (user.dua_langkah || user.role === 'admin') {
+      let tiket;
+      try {
+        tiket = await terbitkanKode(user, 'login');
+      } catch (err) {
+        console.error('[2fa] gagal kirim kode:', err.message);
+        return res.status(502).json({ message: 'Kode masuk gagal dikirim ke email. Coba lagi sebentar lagi.' });
+      }
+      return res.json({ butuh_kode: true, tiket, email: samarkanEmail(user.email) });
+    }
 
-    res.json({ user, token });
+    delete user.password_hash;
+    delete user.dua_langkah;
+    res.json({ user, token: signToken(user) });
   } catch (err) {
     next(err);
   }
@@ -137,6 +158,10 @@ async function googleLogin(req, res, next) {
 
     let user = ada.rows[0];
     let baru = false;
+    // Pelanggan ber-2FA yang masuk lewat Google TIDAK diminta kode lagi: kode
+    // 2FA dikirim ke email yang sama, dan Google baru saja membuktikan orang
+    // ini memegang email itu. Vendor & admin (yang 2FA-nya bisa wajib) memang
+    // tidak boleh lewat jalur ini sama sekali.
     if (user && user.role !== 'customer') {
       return res.status(403).json({
         message: 'Akun vendor/admin masuk lewat halaman masuknya sendiri dengan sandi',
@@ -162,7 +187,7 @@ async function googleLogin(req, res, next) {
 
 const PROFILE_COLUMNS = `user_id, name, full_name, email, phone, birth_date, avatar_url,
           shipping_address, shipping_note, notification_prefs, role,
-          bank_name, bank_account_number, bank_account_holder,
+          bank_name, bank_account_number, bank_account_holder, dua_langkah,
           is_verified, verified_at, created_at`;
 
 // GET /api/v1/auth/me (protected)
@@ -185,13 +210,13 @@ async function me(req, res, next) {
 }
 
 // PATCH /api/v1/auth/me (protected)
-// Hanya field profil. email, password, dan role sengaja TIDAK bisa diubah di
-// sini: ganti email butuh verifikasi ulang, ganti password butuh password lama,
-// dan role yang bisa diubah sendiri = eskalasi hak akses.
+// Hanya field profil. email, password, role, dan REKENING sengaja TIDAK bisa
+// diubah di sini: ganti email butuh verifikasi ulang, ganti password & rekening
+// butuh password lama (lihat gantiRekening), dan role yang bisa diubah sendiri
+// = eskalasi hak akses.
 const EDITABLE_PROFILE_FIELDS = [
   'name', 'full_name', 'phone', 'birth_date', 'avatar_url',
   'shipping_address', 'shipping_note', 'notification_prefs',
-  'bank_name', 'bank_account_number', 'bank_account_holder',
 ];
 
 // Daftar bank tujuan transfer. Hanya kode yang divalidasi di sini; nama
@@ -246,8 +271,11 @@ const AVATAR_MAX_CHARS = 80_000; // ~60 KB setelah base64
 
 async function updateMe(req, res, next) {
   try {
-    const salahRekening = rekeningBermasalah(req.body);
-    if (salahRekening) return res.status(400).json({ message: salahRekening });
+    // Ditolak terang-terangan, bukan diabaikan diam-diam: klien lama yang masih
+    // mengirim rekening ke sini harus tahu rekeningnya TIDAK tersimpan.
+    if (BANK_FIELDS.some((f) => f in req.body)) {
+      return res.status(400).json({ message: 'Rekening diubah lewat PATCH /auth/rekening' });
+    }
 
     const sets = [];
     const values = [];
@@ -259,12 +287,6 @@ async function updateMe(req, res, next) {
       if (field === 'avatar_url' && value !== '' && value !== null) {
         const salah = gambarBermasalah(value, AVATAR_MAX_CHARS, 'Foto profil');
         if (salah) return res.status(400).json({ message: salah });
-      }
-
-      if (BANK_FIELDS.includes(field) && typeof value === 'string') {
-        value = value.trim();
-        if (field === 'bank_name') value = value.toLowerCase();
-        if (field === 'bank_account_holder') value = value.toUpperCase();
       }
 
       if (field === 'notification_prefs') {
@@ -331,20 +353,218 @@ async function changePassword(req, res, next) {
     const cocok = await bcrypt.compare(current_password, user.password_hash);
     if (!cocok) return res.status(401).json({ message: 'Sandi lama salah' });
 
-    await pool.query(
-      'UPDATE users SET password_hash = $1, updated_at = now() WHERE user_id = $2',
-      [await bcrypt.hash(new_password, SALT_ROUNDS), req.user.user_id]
+    // sesi_sejak (022): semua token lama — termasuk milik orang yang mungkin
+    // sedang memakai akun ini — ditolak requireAuth. Perangkat yang mengganti
+    // sandi dapat token baru di balasan supaya tidak ikut terlempar.
+    const { rows: [u] } = await pool.query(
+      `UPDATE users SET password_hash = $1, sesi_sejak = to_timestamp($3), updated_at = now()
+        WHERE user_id = $2 RETURNING user_id, role`,
+      [await bcrypt.hash(new_password, SALT_ROUNDS), req.user.user_id, detikIni()]
     );
-
-    // Token lama TIDAK dicabut: JWT di proyek ini stateless, mencabutnya butuh
-    // daftar hitam di Redis. Berarti sesi di perangkat lain tetap hidup sampai
-    // token kedaluwarsa.
-    // ponytail: tanpa pencabutan token. Tambah blacklist di Redis (sudah ada di
-    // proyek) kalau "keluarkan semua perangkat" jadi kebutuhan nyata.
-    res.json({ message: 'Sandi berhasil diganti' });
+    res.json({ message: 'Sandi berhasil diganti', token: signToken(u) });
   } catch (err) {
     next(err);
   }
 }
 
-module.exports = { register, login, googleLogin, me, updateMe, changePassword };
+// PATCH /api/v1/auth/rekening (protected, rate limit seperti login)
+// Body: { current_password, bank_name, bank_account_number, bank_account_holder }
+// Ketiga field rekening dikosongkan = rekening dicabut.
+//
+// Terpisah dari /auth/me dengan alasan yang sama dengan /auth/password: ini
+// jalur uang. Rekening ini tujuan transfer payout vendor dan refund klien, jadi
+// token yang dicuri saja tidak boleh cukup untuk membelokkannya — harus tahu
+// sandinya juga. Dan karena menerima sandi, dia butuh rate limit, yang tidak
+// dimiliki /auth/me.
+// ponytail: akun yang dibuat lewat Google punya sandi acak, jadi tidak bisa
+// menyimpan rekening. Tambahkan "atur sandi" untuk akun Google kalau itu dipakai.
+async function gantiRekening(req, res, next) {
+  try {
+    const { current_password } = req.body;
+    if (!current_password) {
+      return res.status(400).json({ message: 'Masukkan kata sandi Anda untuk mengganti rekening' });
+    }
+    if (!BANK_FIELDS.every((f) => f in req.body)) {
+      return res.status(400).json({
+        message: 'Kirim ketiga field rekening (kosongkan semuanya untuk mencabut)',
+      });
+    }
+    const salah = rekeningBermasalah(req.body);
+    if (salah) return res.status(400).json({ message: salah });
+
+    const result = await pool.query(
+      'SELECT password_hash FROM users WHERE user_id = $1',
+      [req.user.user_id]
+    );
+    const user = result.rows[0];
+    if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
+    if (!(await bcrypt.compare(current_password, user.password_hash))) {
+      return res.status(401).json({ message: 'Kata sandi salah' });
+    }
+
+    const rapi = (f) => {
+      const v = String(req.body[f] ?? '').trim();
+      if (!v) return null;
+      if (f === 'bank_name') return v.toLowerCase();
+      if (f === 'bank_account_holder') return v.toUpperCase();
+      return v;
+    };
+
+    const { rows } = await pool.query(
+      `UPDATE users
+          SET bank_name = $1, bank_account_number = $2, bank_account_holder = $3,
+              updated_at = now()
+        WHERE user_id = $4
+        RETURNING ${PROFILE_COLUMNS}`,
+      [...BANK_FIELDS.map(rapi), req.user.user_id]
+    );
+    res.json({ user: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/v1/auth/login/kode  { tiket, kode }  (rate limit)
+// Langkah kedua masuk untuk akun ber-2FA dan admin.
+async function loginKode(req, res, next) {
+  try {
+    const hasil = await cocokkanKode(req.body.tiket, 'login', req.body.kode);
+    if (hasil.salah) return res.status(401).json({ message: hasil.salah });
+
+    const { rows: [user] } = await pool.query(
+      'SELECT user_id, name, email, phone, role, avatar_url FROM users WHERE user_id = $1',
+      [hasil.user_id]
+    );
+    if (!user) return res.status(401).json({ message: 'Akun tidak ditemukan' });
+    res.json({ user, token: signToken(user) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/v1/auth/lupa-sandi  { email }
+// Balasannya SELALU sama, terdaftar atau tidak, dan termasuk saat email gagal
+// terkirim — kalau beda, endpoint ini jadi alat mengecek email mana yang
+// punya akun. Email tak terdaftar dapat tiket acak yang tidak cocok dengan apa
+// pun, jadi langkah berikutnya gagal dengan pesan yang sama persis.
+async function lupaSandi(req, res, next) {
+  try {
+    const email = String(req.body.email || '').trim();
+    if (!email) return res.status(400).json({ message: 'Email wajib diisi' });
+
+    const { rows: [user] } = await pool.query(
+      'SELECT user_id, name, email FROM users WHERE email = $1',
+      [email]
+    );
+    let tiket = crypto.randomUUID();
+    if (user) {
+      try {
+        tiket = await terbitkanKode(user, 'reset_sandi');
+      } catch (err) {
+        console.error('[lupa-sandi] gagal kirim kode:', err.message);
+      }
+    }
+    res.json({
+      tiket,
+      message: 'Kalau email itu terdaftar, kode 6 digit sudah dikirim. Berlaku 10 menit.',
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/v1/auth/reset-sandi  { tiket, kode, sandi_baru }  (rate limit)
+// Sukses = semua sesi di semua perangkat dicabut (sesi_sejak), lalu orangnya
+// masuk ulang seperti biasa — termasuk langkah 2FA kalau menyala.
+async function resetSandi(req, res, next) {
+  try {
+    const { tiket, kode, sandi_baru } = req.body;
+    if (!sandi_baru || String(sandi_baru).length < 8) {
+      return res.status(400).json({ message: 'Sandi baru minimal 8 karakter' });
+    }
+    const hasil = await cocokkanKode(tiket, 'reset_sandi', kode);
+    if (hasil.salah) return res.status(401).json({ message: hasil.salah });
+
+    await pool.query(
+      `UPDATE users SET password_hash = $1, sesi_sejak = to_timestamp($3), updated_at = now()
+        WHERE user_id = $2`,
+      [await bcrypt.hash(String(sandi_baru), SALT_ROUNDS), hasil.user_id, detikIni()]
+    );
+    res.json({ message: 'Kata sandi diganti. Silakan masuk dengan sandi baru.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function sandiCocok(userId, sandi) {
+  const { rows: [u] } = await pool.query(
+    'SELECT user_id, name, email, role, password_hash, dua_langkah FROM users WHERE user_id = $1',
+    [userId]
+  );
+  if (!u || !sandi || !(await bcrypt.compare(String(sandi), u.password_hash))) return null;
+  return u;
+}
+
+// POST /api/v1/auth/dua-langkah  { current_password }  (rate limit)
+// Langkah 1 menyalakan 2FA: kirim kode ke email. 2FA BELUM menyala sebelum
+// kodenya dikonfirmasi — membuktikan email itu memang menerima kode. Tanpa
+// bukti ini, akun dengan email yang tidak bisa menerima surat langsung
+// terkunci di luar begitu 2FA menyala.
+async function duaLangkahMulai(req, res, next) {
+  try {
+    const u = await sandiCocok(req.user.user_id, req.body.current_password);
+    if (!u) return res.status(401).json({ message: 'Kata sandi salah' });
+    if (u.dua_langkah) return res.status(409).json({ message: 'Verifikasi dua langkah sudah aktif' });
+
+    let tiket;
+    try {
+      tiket = await terbitkanKode(u, 'aktifkan_2fa');
+    } catch (err) {
+      console.error('[2fa] gagal kirim kode:', err.message);
+      return res.status(502).json({ message: 'Kode gagal dikirim ke email. Coba lagi sebentar lagi.' });
+    }
+    res.json({ tiket, email: samarkanEmail(u.email) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/v1/auth/dua-langkah/konfirmasi  { tiket, kode }  (rate limit)
+// Langkah 2: kode benar = 2FA menyala, dan sesi di perangkat lain dicabut
+// (yang tadinya masuk tanpa kode tidak boleh tetap di dalam).
+async function duaLangkahKonfirmasi(req, res, next) {
+  try {
+    const hasil = await cocokkanKode(req.body.tiket, 'aktifkan_2fa', req.body.kode, req.user.user_id);
+    if (hasil.salah) return res.status(401).json({ message: hasil.salah });
+
+    const { rows: [u] } = await pool.query(
+      `UPDATE users SET dua_langkah = true, sesi_sejak = to_timestamp($2), updated_at = now()
+        WHERE user_id = $1 RETURNING user_id, role`,
+      [req.user.user_id, detikIni()]
+    );
+    res.json({ dua_langkah: true, token: signToken(u) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/v1/auth/dua-langkah/matikan  { current_password }  (rate limit)
+// Admin tetap diminta kode walau kolomnya false — lihat login().
+async function duaLangkahMatikan(req, res, next) {
+  try {
+    const u = await sandiCocok(req.user.user_id, req.body.current_password);
+    if (!u) return res.status(401).json({ message: 'Kata sandi salah' });
+    await pool.query(
+      'UPDATE users SET dua_langkah = false, updated_at = now() WHERE user_id = $1',
+      [req.user.user_id]
+    );
+    res.json({ dua_langkah: false });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = {
+  register, login, googleLogin, me, updateMe, changePassword, gantiRekening,
+  loginKode, lupaSandi, resetSandi, duaLangkahMulai, duaLangkahKonfirmasi, duaLangkahMatikan,
+};

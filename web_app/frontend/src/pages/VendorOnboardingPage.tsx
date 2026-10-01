@@ -8,6 +8,7 @@ import {
   type ApiVendor,
 } from '../lib/api'
 import { PORTOFOLIO, kecilkanGambar } from '../lib/gambar'
+import Dropdown from '../components/Dropdown'
 
 /** Langkah 3 onboarding vendor: lengkapi profil bisnis.
  *
@@ -184,7 +185,7 @@ export default function VendorOnboardingPage() {
                 <label htmlFor="rentang" className="block text-[13px] font-semibold text-navy-900">
                   Rentang Harga Layanan (IDR)
                 </label>
-                <select id="rentang" name="rentang" required defaultValue="" className={`mt-2 ${inputClass}`}>
+                <Dropdown id="rentang" name="rentang" required defaultValue="" className={`mt-2 ${inputClass}`}>
                   <option value="" disabled>
                     Pilih rentang harga
                   </option>
@@ -193,14 +194,14 @@ export default function VendorOnboardingPage() {
                       {r.label}
                     </option>
                   ))}
-                </select>
+                </Dropdown>
               </div>
 
               <div>
                 <label htmlFor="city" className="block text-[13px] font-semibold text-navy-900">
                   Lokasi Operasional Utama
                 </label>
-                <select id="city" name="city" required defaultValue="" className={`mt-2 ${inputClass}`}>
+                <Dropdown id="city" name="city" required defaultValue="" className={`mt-2 ${inputClass}`}>
                   <option value="" disabled>
                     Pilih wilayah
                   </option>
@@ -209,7 +210,7 @@ export default function VendorOnboardingPage() {
                       {labelKota(k)}
                     </option>
                   ))}
-                </select>
+                </Dropdown>
                 <p className="mt-2 text-[12px] text-muted">
                   Festa saat ini beroperasi eksklusif di area Jabodetabek.
                 </p>

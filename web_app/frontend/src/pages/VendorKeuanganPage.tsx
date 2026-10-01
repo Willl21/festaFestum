@@ -11,6 +11,7 @@ import {
   getVendorBalance, listVendorBookings, get, post,
   type ApiBooking, type VendorBalance,
 } from '../lib/api'
+import { samarkanRekening, type Rekening } from '../data/banks'
 
 /** Arus kas vendor: saldo yang bisa ditarik, dana yang masih ditahan escrow,
  *  dan riwayat transaksinya.
@@ -70,6 +71,7 @@ export default function VendorKeuanganPage() {
   const [saldo, setSaldo] = useState<VendorBalance | null>(null)
   const [pesanan, setPesanan] = useState<ApiBooking[]>([])
   const [payouts, setPayouts] = useState<Payout[]>([])
+  const [rekening, setRekening] = useState<Rekening | null>(null)
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
 
@@ -80,14 +82,16 @@ export default function VendorKeuanganPage() {
 
   const muat = useCallback(async () => {
     try {
-      const [a, b, c] = await Promise.all([
+      const [a, b, c, me] = await Promise.all([
         getVendorBalance(),
         listVendorBookings(),
         get<{ data: Payout[] }>('/payouts'),
+        get<{ user: Rekening }>('/auth/me'),
       ])
       setSaldo(a.balance)
       setPesanan(b.data)
       setPayouts(c.data)
+      setRekening(me.user)
     } catch (e) {
       setGalat((e as Error).message)
     } finally {
@@ -191,14 +195,36 @@ export default function VendorKeuanganPage() {
                 <p className="mt-4 font-display text-[28px] md:text-[38px] leading-tight font-semibold">
                   {rupiahBulat(balance.available)}
                 </p>
-                <p className="mt-1 text-[13px] text-ink/70">Siap untuk ditarik ke rekening terdaftar.</p>
+                {/* Rekening tujuan ditampilkan di sini supaya vendor tahu ke mana
+                    uangnya dikirim SEBELUM mengajukan. Tanpa rekening, backend
+                    menolak pengajuannya (400), jadi tombolnya dimatikan dulu. */}
+                {rekening?.bank_name ? (
+                  <p className="mt-1 text-[13px] text-ink/70">
+                    Ditransfer ke <span className="font-semibold uppercase">{rekening.bank_name}</span>{' '}
+                    <span className="font-mono tracking-wider">{samarkanRekening(rekening.bank_account_number ?? '')}</span>
+                    {' '}a.n {rekening.bank_account_holder}.{' '}
+                    <Link to="/vendor/profil#rekening" className="font-semibold underline underline-offset-4">Ganti</Link>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[13px] text-maroon">
+                    Belum ada rekening pencairan.{' '}
+                    <Link to="/vendor/profil#rekening" className="font-semibold underline underline-offset-4">
+                      Isi di Profil Vendor
+                    </Link>{' '}
+                    sebelum menarik dana.
+                  </p>
+                )}
 
                 <div className="mt-6 border-t border-line pt-5">
                   {!formTarik ? (
                     <button
                       type="button"
-                      disabled={!saldo.penarikan_aktif || balance.available <= 0}
-                      title={balance.available <= 0 ? 'Belum ada saldo yang bisa ditarik' : undefined}
+                      disabled={!saldo.penarikan_aktif || balance.available <= 0 || !rekening?.bank_name}
+                      title={
+                        !rekening?.bank_name
+                          ? 'Isi rekening pencairan di Profil Vendor dulu'
+                          : balance.available <= 0 ? 'Belum ada saldo yang bisa ditarik' : undefined
+                      }
                       onClick={() => { setFormTarik(true); setPesan('') }}
                       className="rounded-md bg-navy-900 px-5 py-2.5 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-45"
                     >

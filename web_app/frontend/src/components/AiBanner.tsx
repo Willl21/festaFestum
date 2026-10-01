@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { ArrowRight } from './icons'
 
 type Props = {
@@ -18,13 +19,15 @@ export default function AiBanner({ subtitle, body, cta }: Props) {
             <p className="mt-3 text-[15px] font-semibold text-white">{subtitle}</p>
           )}
           <p className="mt-3 max-w-[380px] text-[13px] leading-relaxed text-white/60">{body}</p>
-          <button
-            type="button"
+          {/* Dulu <button> tanpa aksi apa pun — mati di landing DAN kelima
+              halaman kategori yang memakai banner ini. */}
+          <Link
+            to="/festa-ai"
             className="mt-7 inline-flex items-center gap-6 rounded-sm bg-amber px-4 py-2 text-[12px] font-semibold text-navy-900 transition-opacity hover:opacity-90"
           >
             {cta}
             <ArrowRight className="h-4 w-4" />
-          </button>
+          </Link>
         </div>
 
         {/* Ilustrasi abstrak "kartu jadwal" seperti di mockup */}

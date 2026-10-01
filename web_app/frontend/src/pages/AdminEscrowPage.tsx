@@ -5,6 +5,7 @@ import { LockIcon, WalletIcon, InfoIcon } from '../components/icons'
 import { namaKota } from '../data/categories'
 import { rupiahBulat } from '../lib/format'
 import { get, kirim } from '../lib/api'
+import { BANKS } from '../data/banks'
 
 /** Pusat Escrow — antrean pencairan dana lintas vendor.
  *
@@ -31,6 +32,13 @@ type Payout = {
   owner_name: string
   owner_email: string
   decided_by_name: string | null
+  /** Salinan saat pengajuan (migrasi 021). Untuk pengajuan lama yang belum
+   *  punya salinan, backend mengisinya dengan rekening vendor saat ini dan
+   *  menyalakan rekening_terkini. Null semua = vendor tidak punya rekening. */
+  bank_name: string | null
+  bank_account_number: string | null
+  bank_account_holder: string | null
+  rekening_terkini: boolean
 }
 
 /** Pengajuan refund/laporan dari Pesanan Saya (migrasi 020). */
@@ -79,6 +87,7 @@ export default function AdminEscrowPage() {
   const [memuat, setMemuat] = useState(true)
   const [galat, setGalat] = useState('')
   const [sibuk, setSibuk] = useState('')
+  const [tersalin, setTersalin] = useState('')
   const [laporan, setLaporan] = useState<Laporan[]>([])
 
   const muat = useCallback(async () => {
@@ -275,6 +284,42 @@ export default function AdminEscrowPage() {
                       </div>
                     </div>
 
+                    {/* Rekening tujuan: ini yang admin butuhkan untuk transfer
+                        manual, jadi nomornya ditampilkan PENUH + tombol salin. */}
+                    {po.bank_name ? (
+                      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded border border-line bg-cream px-4 py-3 text-[13px]">
+                        <span className="font-semibold text-navy-900">
+                          {BANKS[po.bank_name] ?? po.bank_name.toUpperCase()}
+                        </span>
+                        <span className="font-mono tracking-wider tabular-nums">{po.bank_account_number}</span>
+                        <span className="text-ink/75">a.n {po.bank_account_holder}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigator.clipboard.writeText(po.bank_account_number ?? '')
+                              .then(() => setTersalin(po.payout_id))
+                              .catch(() => {})
+                          }
+                          className="rounded border border-line bg-white px-2.5 py-1 text-[11px] font-semibold text-navy-900 transition-colors hover:border-navy-900"
+                        >
+                          {tersalin === po.payout_id ? 'Tersalin' : 'Salin nomor'}
+                        </button>
+                        {po.rekening_terkini && (
+                          <span className="w-full text-[11px] text-muted">
+                            Pengajuan lama: ini rekening vendor saat ini, bukan yang tercatat saat diajukan.
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      po.status === 'pending' ? (
+                        <p className="mt-4 rounded border border-maroon/30 bg-maroon/5 px-4 py-3 text-[13px] text-maroon">
+                          Vendor belum mencantumkan rekening. Tolak dengan catatan agar vendor mengisinya di Profil Vendor.
+                        </p>
+                      ) : (
+                        <p className="mt-4 text-[12px] text-muted">Tidak ada rekening tercatat untuk pengajuan ini.</p>
+                      )
+                    )}
+
                     {po.status === 'pending' && (
                       <div className="mt-4 flex flex-wrap items-center gap-3">
                         <input
@@ -287,7 +332,9 @@ export default function AdminEscrowPage() {
                         />
                         <button
                           type="button"
-                          disabled={sibuk === po.payout_id}
+                          // Tanpa rekening tujuan tidak ada yang bisa ditransfer.
+                          disabled={sibuk === po.payout_id || !po.bank_name}
+                          title={!po.bank_name ? 'Vendor belum mencantumkan rekening' : undefined}
                           onClick={() => putuskan(po, 'approve')}
                           className="h-10 rounded bg-navy-900 px-5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                         >

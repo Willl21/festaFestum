@@ -3,12 +3,13 @@ import FestaAiSkeleton from '../components/FestaAiSkeleton'
 import TukarHalus from '../components/TukarHalus'
 import { Link } from 'react-router-dom'
 import Img from '../components/Img'
-import { ChevronDown, SearchIcon } from '../components/icons'
+import { SearchIcon } from '../components/icons'
 import { rupiah } from '../lib/format'
 import { categories, KOTA, namaKota, type CategoryKey } from '../data/categories'
 import { rekomendasiAi, urlFotoLayanan, type RekomendasiAi } from '../lib/api'
 import Bagian from '../components/Bagian'
 import { KATEGORI_AI, KUNCI_HASIL, bacaSimpanan, type Simpanan } from '../lib/festaAi'
+import Dropdown from '../components/Dropdown'
 
 /** Umur minimum rangka hasil pencarian, diteruskan ke <TukarHalus>. Lebih
  *  pendek dari bawaannya (1 detik) karena ini bukan animasi masuk halaman —
@@ -170,11 +171,11 @@ export default function FestaAiPage() {
                       {f.label}
                     </label>
                     <div className="relative mt-2">
-                      <select
+                      <Dropdown
                         id={f.id}
                         value={nilai[f.id]}
-                        onChange={(e) =>
-                          f.id === 'tipe' ? gantiTipe(e.target.value) : setNilai((n) => ({ ...n, [f.id]: e.target.value }))
+                        onChange={(v) =>
+                          f.id === 'tipe' ? gantiTipe(v) : setNilai((n) => ({ ...n, [f.id]: v }))
                         }
                         className="h-12 w-full appearance-none rounded-sm border border-line bg-white px-4 pr-10 text-[15px] outline-none focus:border-navy-900"
                       >
@@ -183,8 +184,7 @@ export default function FestaAiPage() {
                             {f.id === 'lokasi' ? namaKota(o) : o}
                           </option>
                         ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute top-1/2 right-4 h-5 w-5 -translate-y-1/2 text-ink/50" />
+                      </Dropdown>
                     </div>
                   </div>
                 ))}

@@ -11,6 +11,7 @@ import {
   getVendor, getVendorServices, buatBooking,
   type ApiService, type ApiVendor,
 } from '../lib/api'
+import Dropdown from '../components/Dropdown'
 
 /** Halaman "Lengkapi Detail Pesanan" untuk tiga kategori yang bentuk formnya
  *  identik: MUA, Event Organizer, dan Fotografer. Ketiganya sama-sama minta
@@ -192,16 +193,16 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
                   <label htmlFor="paket" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
                     PAKET YANG DIPESAN
                   </label>
-                  <select
+                  <Dropdown
                     id="paket"
                     value={serviceId}
-                    onChange={(e) => { setServiceId(e.target.value); setJumlah(1); setTambahan(0) }}
+                    onChange={(v) => { setServiceId(v); setJumlah(1); setTambahan(0) }}
                     className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
                   >
                     {layanan.map((s) => (
                       <option key={s.service_id} value={s.service_id}>{s.service_name}</option>
                     ))}
-                  </select>
+                  </Dropdown>
                 </div>
               )}
 
@@ -236,16 +237,16 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
                   <label htmlFor="jenis" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
                     JENIS ACARA
                   </label>
-                  <select
+                  <Dropdown
                     id="jenis"
                     value={jenisAcara}
-                    onChange={(e) => setJenisAcara(e.target.value)}
+                    onChange={(v) => setJenisAcara(v)}
                     className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
                   >
                     {JENIS_ACARA.map((t) => (
                       <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
-                  </select>
+                  </Dropdown>
                 </div>
                 {v.estimate && <OrderField {...v.estimate} value={estimasi} onChange={setEstimasi} />}
               </div>

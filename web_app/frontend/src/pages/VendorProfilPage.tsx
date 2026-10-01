@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import FormSkeleton from '../components/FormSkeleton'
 import Img from '../components/Img'
@@ -10,6 +10,10 @@ import {
   bukaBerkas, get, getMyVendor, kirim, simpanUser, usePengguna, type ApiVendor,
 } from '../lib/api'
 import { AVATAR, bacaDokumen, kecilkanGambar } from '../lib/gambar'
+import Dropdown from '../components/Dropdown'
+import RekeningBank from '../components/RekeningBank'
+import DuaLangkah from '../components/DuaLangkah'
+import type { Rekening } from '../data/banks'
 
 /** Kelola profil vendor sesudah onboarding (revisi PM 26 Sep 2026).
  *
@@ -19,6 +23,8 @@ import { AVATAR, bacaDokumen, kecilkanGambar } from '../lib/gambar'
  *  - Foto profil  → PATCH /auth/me { avatar_url } (sama dengan profil klien)
  *  - Info bisnis  → PATCH /vendors/:id
  *  - Dokumen      → PUT /vendors/me/documents/:jenis
+ *  - Rekening     → PATCH /auth/rekening (wajib sandi; tujuan transfer payout)
+ *  - 2FA          → POST /auth/dua-langkah(/konfirmasi|/matikan)
  *  Portofolio tetap di /vendor/layanan, tidak diduplikasi di sini. */
 
 const kota = [
@@ -61,15 +67,24 @@ export default function VendorProfilPage() {
   // Foto & dokumen disimpan seketika saat dipilih, terpisah dari tombol
   // Simpan info bisnis — sama seperti kotak foto di onboarding.
   const [unggah, setUnggah] = useState<string | null>(null)
+  const [rekening, setRekening] = useState<Rekening | null>(null)
+  const [duaLangkah, setDuaLangkah] = useState(false)
+  // Keuangan menautkan ke sini lewat #rekening. Router tidak menggulung ke
+  // hash, dan isinya baru terpasang sesudah rangka TukarHalus lepas — jadi
+  // digulung dari ref bagiannya, sekali saja.
+  const sudahGulir = useRef(false)
 
   useEffect(() => {
     Promise.all([
       getMyVendor(),
       get<{ documents: Dokumen[] }>('/vendors/me/documents').catch(() => ({ documents: [] })),
+      get<{ user: Rekening & { dua_langkah: boolean } }>('/auth/me'),
     ])
-      .then(([v, d]) => {
+      .then(([v, d, me]) => {
         setVendor(v.vendor)
         setDokumen(d.documents)
+        setRekening(me.user)
+        setDuaLangkah(me.user.dua_langkah)
       })
       .catch((e) => setGalat((e as Error).message))
       .finally(() => setMemuat(false))
@@ -217,13 +232,13 @@ export default function VendorProfilPage() {
                       <label htmlFor="city" className="block text-[13px] font-semibold text-navy-900">
                         Lokasi Operasional Utama
                       </label>
-                      <select
+                      <Dropdown
                         id="city" name="city" required defaultValue={vendor.city ?? ''}
                         className={`mt-2 ${inputClass}`}
                       >
                         <option value="" disabled>Pilih wilayah</option>
                         {kota.map((k) => <option key={k} value={k}>{labelKota(k)}</option>)}
-                      </select>
+                      </Dropdown>
                     </div>
                     <div>
                       <label htmlFor="address" className="block text-[13px] font-semibold text-navy-900">
@@ -248,6 +263,31 @@ export default function VendorProfilPage() {
                     </button>
                   </div>
                 </form>
+
+                {rekening && (
+                  <section
+                    id="rekening"
+                    ref={(el) => {
+                      if (el && !sudahGulir.current && window.location.hash === '#rekening') {
+                        sudahGulir.current = true
+                        el.scrollIntoView({ block: 'start' })
+                      }
+                    }}
+                    className="scroll-mt-6 rounded-lg border border-line bg-white p-6"
+                  >
+                    <h2 className="font-display text-[22px] font-semibold text-navy-900">Rekening Pencairan</h2>
+                    <p className="mt-1 text-[13px] text-muted">
+                      Saat Anda menarik dana, admin mentransfer ke rekening ini. Rekening dicatat
+                      pada tiap pengajuan, jadi menggantinya tidak mengubah pengajuan yang sudah antre.
+                    </p>
+                    <RekeningBank rekening={rekening} onTersimpan={setRekening} />
+                  </section>
+                )}
+
+                <section className="rounded-lg border border-line bg-white p-6">
+                  <h2 className="font-display text-[22px] font-semibold text-navy-900">Keamanan Akun</h2>
+                  <DuaLangkah aktif={duaLangkah} onBerubah={setDuaLangkah} />
+                </section>
 
                 <section className="rounded-lg border border-line bg-white p-6">
                   <h2 className="font-display text-[22px] font-semibold text-navy-900">Dokumen Verifikasi</h2>

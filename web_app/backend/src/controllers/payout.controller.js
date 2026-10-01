@@ -29,6 +29,21 @@ async function requestPayout(req, res, next) {
       return res.status(404).json({ message: 'Anda belum memiliki profil vendor' });
     }
 
+    // Rekening tujuan DISALIN ke baris payout (migrasi 021): admin
+    // mentransfer ke rekening yang berlaku saat pengajuan, dan mengganti
+    // rekening sesudahnya tidak membelokkan pengajuan yang sudah antre.
+    const { rows: [rek] } = await client.query(
+      `SELECT bank_name, bank_account_number, bank_account_holder
+         FROM users WHERE user_id = $1`,
+      [req.user.user_id]
+    );
+    if (!rek?.bank_name) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        message: 'Isi rekening pencairan di Profil Vendor dulu sebelum menarik dana',
+      });
+    }
+
     // Baris vendor dikunci selama pemeriksaan saldo. Tanpa ini, dua pengajuan
     // yang dikirim bersamaan sama-sama lolos pemeriksaan dan totalnya bisa
     // melebihi saldo — pola yang sama dengan penguncian slot di booking.
@@ -45,10 +60,11 @@ async function requestPayout(req, res, next) {
     }
 
     const { rows } = await client.query(
-      `INSERT INTO payouts (vendor_id, amount)
-       VALUES ($1, $2)
-       RETURNING payout_id, amount, status, requested_at`,
-      [vendorId, amount]
+      `INSERT INTO payouts (vendor_id, amount, bank_name, bank_account_number, bank_account_holder)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING payout_id, amount, status, requested_at,
+                 bank_name, bank_account_number, bank_account_holder`,
+      [vendorId, amount, rek.bank_name, rek.bank_account_number, rek.bank_account_holder]
     );
 
     await client.query('COMMIT');
@@ -70,7 +86,8 @@ async function listMyPayouts(req, res, next) {
     }
 
     const { rows } = await pool.query(
-      `SELECT payout_id, amount, status, note, requested_at, decided_at
+      `SELECT payout_id, amount, status, note, requested_at, decided_at,
+              bank_name, bank_account_number, bank_account_holder
          FROM payouts WHERE vendor_id = $1
         ORDER BY requested_at DESC
         LIMIT 100`,

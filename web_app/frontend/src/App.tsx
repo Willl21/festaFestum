@@ -1,52 +1,60 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import { getToken } from './lib/api'
 import LandingPage from './pages/LandingPage'
-import FloristPage from './pages/FloristPage'
-import MuaPage from './pages/MuaPage'
-import AttirePage from './pages/AttirePage'
-import FotograferPage from './pages/FotograferPage'
-import EoPage from './pages/EoPage'
-import FloristDetailPage from './pages/FloristDetailPage'
-import MuaDetailPage from './pages/MuaDetailPage'
-import AttireDetailPage from './pages/AttireDetailPage'
-import FotograferDetailPage from './pages/FotograferDetailPage'
-import EoDetailPage from './pages/EoDetailPage'
-import FloristOrderPage from './pages/FloristOrderPage'
-import AttireOrderPage from './pages/AttireOrderPage'
-import VenueOrderPage from './pages/VenueOrderPage'
-import CheckoutPage from './pages/CheckoutPage'
-import VirtualAccountPage from './pages/VirtualAccountPage'
-import KonfirmasiPage from './pages/KonfirmasiPage'
-import InvoicePage from './pages/InvoicePage'
-import PesananSayaPage from './pages/PesananSayaPage'
-import ChatPage from './pages/ChatPage'
-import FestaAiPage from './pages/FestaAiPage'
-import PesanSemuaPage from './pages/PesanSemuaPage'
-import LoginPage from './pages/LoginPage'
-import RegisterPage from './pages/RegisterPage'
-import VendorLayout from './components/VendorLayout'
-import VendorProfilPage from './pages/VendorProfilPage'
-import VendorDashboardPage from './pages/VendorDashboardPage'
-import VendorPemesananPage from './pages/VendorPemesananPage'
-import VendorJadwalPage from './pages/VendorJadwalPage'
-import VendorLayananPage from './pages/VendorLayananPage'
-import VendorKeuanganPage from './pages/VendorKeuanganPage'
-import VendorPesanPage from './pages/VendorPesanPage'
-import VendorLoginPage from './pages/VendorLoginPage'
-import VendorRegisterPage from './pages/VendorRegisterPage'
-import VendorDokumenPage from './pages/VendorDokumenPage'
-import VendorOnboardingPage from './pages/VendorOnboardingPage'
-import ProfilPage from './pages/ProfilPage'
-import AdminLoginPage from './pages/AdminLoginPage'
-import AdminLayout from './components/AdminLayout'
-import AdminVendorPage from './pages/AdminVendorPage'
-import AdminRingkasanPage from './pages/AdminRingkasanPage'
-import AdminEscrowPage from './pages/AdminEscrowPage'
-import AdminAkunPage from './pages/AdminAkunPage'
-import AdminPesanPage from './pages/AdminPesanPage'
+// Semua halaman selain landing dimuat saat DIBUKA, bukan ikut di bundel awal
+// (PageSpeed 1 Okt: 147 KB dari 206 KB JS awal tidak dipakai landing —
+// dasbor vendor & admin ikut terunduh tiap pengunjung pertama). Landing tetap
+// impor biasa karena dialah layar pertama. Suspense-nya dipasang DI DALAM
+// layout (SiteLayout, VendorLayout, AdminLayout) supaya navbar/sidebar tidak
+// ikut hilang selagi potongan halaman berikutnya diunduh.
+const FloristPage = lazy(() => import('./pages/FloristPage'))
+const MuaPage = lazy(() => import('./pages/MuaPage'))
+const AttirePage = lazy(() => import('./pages/AttirePage'))
+const FotograferPage = lazy(() => import('./pages/FotograferPage'))
+const EoPage = lazy(() => import('./pages/EoPage'))
+const FloristDetailPage = lazy(() => import('./pages/FloristDetailPage'))
+const MuaDetailPage = lazy(() => import('./pages/MuaDetailPage'))
+const AttireDetailPage = lazy(() => import('./pages/AttireDetailPage'))
+const FotograferDetailPage = lazy(() => import('./pages/FotograferDetailPage'))
+const EoDetailPage = lazy(() => import('./pages/EoDetailPage'))
+const FloristOrderPage = lazy(() => import('./pages/FloristOrderPage'))
+const AttireOrderPage = lazy(() => import('./pages/AttireOrderPage'))
+const VenueOrderPage = lazy(() => import('./pages/VenueOrderPage'))
+const CheckoutPage = lazy(() => import('./pages/CheckoutPage'))
+const VirtualAccountPage = lazy(() => import('./pages/VirtualAccountPage'))
+const KonfirmasiPage = lazy(() => import('./pages/KonfirmasiPage'))
+const InvoicePage = lazy(() => import('./pages/InvoicePage'))
+const PesananSayaPage = lazy(() => import('./pages/PesananSayaPage'))
+const ChatPage = lazy(() => import('./pages/ChatPage'))
+const FestaAiPage = lazy(() => import('./pages/FestaAiPage'))
+const PesanSemuaPage = lazy(() => import('./pages/PesanSemuaPage'))
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const LupaSandiPage = lazy(() => import('./pages/LupaSandiPage'))
+const RegisterPage = lazy(() => import('./pages/RegisterPage'))
+const VendorLayout = lazy(() => import('./components/VendorLayout'))
+const VendorProfilPage = lazy(() => import('./pages/VendorProfilPage'))
+const VendorDashboardPage = lazy(() => import('./pages/VendorDashboardPage'))
+const VendorPemesananPage = lazy(() => import('./pages/VendorPemesananPage'))
+const VendorJadwalPage = lazy(() => import('./pages/VendorJadwalPage'))
+const VendorLayananPage = lazy(() => import('./pages/VendorLayananPage'))
+const VendorKeuanganPage = lazy(() => import('./pages/VendorKeuanganPage'))
+const VendorPesanPage = lazy(() => import('./pages/VendorPesanPage'))
+const VendorLoginPage = lazy(() => import('./pages/VendorLoginPage'))
+const VendorRegisterPage = lazy(() => import('./pages/VendorRegisterPage'))
+const VendorDokumenPage = lazy(() => import('./pages/VendorDokumenPage'))
+const VendorOnboardingPage = lazy(() => import('./pages/VendorOnboardingPage'))
+const ProfilPage = lazy(() => import('./pages/ProfilPage'))
+const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'))
+const AdminLayout = lazy(() => import('./components/AdminLayout'))
+const AdminVendorPage = lazy(() => import('./pages/AdminVendorPage'))
+const AdminRingkasanPage = lazy(() => import('./pages/AdminRingkasanPage'))
+const AdminEscrowPage = lazy(() => import('./pages/AdminEscrowPage'))
+const AdminAkunPage = lazy(() => import('./pages/AdminAkunPage'))
+const AdminPesanPage = lazy(() => import('./pages/AdminPesanPage'))
 
 /** Navbar + Footer hanya untuk halaman situs. Halaman auth full-screen,
  *  jadi dia duduk di luar layout ini.
@@ -92,7 +100,9 @@ function SiteLayout() {
           animate={{ opacity: 1, y: 0, transition: { duration: 0.52, ease: [0.22, 0.61, 0.36, 1] } }}
           exit={{ opacity: 0, transition: { duration: 0.22, ease: 'easeIn' } }}
         >
-          <Outlet />
+          <Suspense fallback={null}>
+            <Outlet />
+          </Suspense>
         </motion.main>
       </AnimatePresence>
       <Footer />
@@ -116,6 +126,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <MotionConfig reducedMotion="user">
+      {/* Untuk rute di luar layout (masuk, daftar) dan layout vendor/admin itu sendiri. */}
+      <Suspense fallback={null}>
       <Routes>
         <Route element={<SiteLayout />}>
           <Route path="/" element={<LandingPage />} />
@@ -180,8 +192,10 @@ export default function App() {
         </Route>
 
         <Route path="/masuk" element={<LoginPage />} />
+        <Route path="/lupa-sandi" element={<LupaSandiPage />} />
         <Route path="/daftar" element={<RegisterPage />} />
       </Routes>
+      </Suspense>
       </MotionConfig>
     </BrowserRouter>
   )

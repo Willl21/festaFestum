@@ -3,6 +3,7 @@
 require('dotenv').config();
 const assert = require('assert');
 const pool = require('./src/config/db');
+const { masukDenganKode } = require('./test-masuk');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 
@@ -84,10 +85,8 @@ const emails = [];
 
   // Peran admin memang dibuat langsung di DB — POST /auth/register menolaknya.
   await pool.query(`UPDATE users SET role = 'admin' WHERE email = $1`, [admin.email]);
-  const masuk = await api('/auth/login', {
-    method: 'POST', body: { email: admin.email, password: 'password123' },
-  });
-  const adminToken = masuk.body.token;
+  // Admin wajib lewat langkah kode sejak migrasi 022 — lihat test-masuk.js.
+  const adminToken = await masukDenganKode(admin.email);
 
   r = await api(`/admin/users/${user.user_id}/verification`, {
     method: 'PATCH', token: adminToken, body: { action: 'bikin_admin' },

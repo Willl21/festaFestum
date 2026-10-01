@@ -240,7 +240,7 @@ export default function FloristDetailPage() {
           </div>
 
           <div className="mt-16">
-            <VendorLocation />
+            <VendorLocation alamat={vendor.address} kota={vendor.city ? namaKota(vendor.city) : null} />
           </div>
 
           <div className="mt-16">

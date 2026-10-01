@@ -10,6 +10,7 @@ import {
   getVendor, getVendorServices, buatBooking,
   type ApiService, type ApiVendor,
 } from '../lib/api'
+import Dropdown from '../components/Dropdown'
 
 const kat = categories.florist
 
@@ -150,16 +151,16 @@ export default function FloristOrderPage() {
                   <label htmlFor="paket" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
                     PAKET YANG DIPESAN
                   </label>
-                  <select
+                  <Dropdown
                     id="paket"
                     value={serviceId}
-                    onChange={(e) => setServiceId(e.target.value)}
+                    onChange={(v) => setServiceId(v)}
                     className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
                   >
                     {layanan.map((s) => (
                       <option key={s.service_id} value={s.service_id}>{s.service_name}</option>
                     ))}
-                  </select>
+                  </Dropdown>
                 </div>
               )}
 
@@ -188,16 +189,16 @@ export default function FloristOrderPage() {
                   <label htmlFor="jenis" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
                     JENIS ACARA
                   </label>
-                  <select
+                  <Dropdown
                     id="jenis"
                     value={jenisAcara}
-                    onChange={(e) => setJenisAcara(e.target.value)}
+                    onChange={(v) => setJenisAcara(v)}
                     className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
                   >
                     {JENIS_ACARA.map((t) => (
                       <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
-                  </select>
+                  </Dropdown>
                 </div>
                 <OrderField
                   id="durasi" label="ESTIMASI DURASI ACARA" placeholder="Contoh: 4 jam"

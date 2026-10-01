@@ -479,7 +479,7 @@ export default function AttireDetailPage() {
           </div>
 
           <div className="mt-16">
-            <VendorLocation />
+            <VendorLocation alamat={vendor.address} kota={vendor.city ? namaKota(vendor.city) : null} />
           </div>
 
           <div className="mt-16">

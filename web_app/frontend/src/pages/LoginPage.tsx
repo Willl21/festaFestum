@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import AuthLayout, { inputClass } from '../components/AuthLayout'
 import { EyeIcon, EyeOffIcon } from '../components/icons'
 import TombolGoogle from '../components/TombolGoogle'
-import { post, saveAuth, pesanSesiHabis, tujuanLanjut, type AuthResponse } from '../lib/api'
+import LangkahKode from '../components/LangkahKode'
+import { post, saveAuth, pesanSesiHabis, tujuanLanjut, type AuthResponse, type TantanganKode } from '../lib/api'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -12,12 +13,18 @@ export default function LoginPage() {
   // karena sesinya kedaluwarsa (?sesi=habis).
   const [error, setError] = useState(pesanSesiHabis())
   const [loading, setLoading] = useState(false)
+  const [tantangan, setTantangan] = useState<TantanganKode | null>(null)
   const lanjut = tujuanLanjut()
   // Penjelasan kenapa orang ini ada di sini: baru daftar (RegisterPage), atau
   // dilempar WajibMasuk dari halaman pesan. Bukan galat, jadi warnanya beda.
   const info = new URLSearchParams(window.location.search).get('terdaftar')
     ? 'Akun berhasil dibuat. Silakan masuk untuk melanjutkan.'
     : lanjut ? 'Masuk dulu untuk melanjutkan.' : ''
+
+  function selesai(auth: AuthResponse) {
+    saveAuth(auth)
+    navigate(lanjut ?? '/', { replace: true })
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -26,12 +33,13 @@ export default function LoginPage() {
 
     const form = new FormData(e.currentTarget)
     try {
-      const auth = await post<AuthResponse>('/auth/login', {
+      const r = await post<AuthResponse | TantanganKode>('/auth/login', {
         email: form.get('email'),
         password: form.get('password'),
       })
-      saveAuth(auth)
-      navigate(lanjut ?? '/', { replace: true })
+      // Akun ber-2FA: sandi benar belum memberi token, lanjut ke langkah kode.
+      if ('butuh_kode' in r) return setTantangan(r)
+      selesai(r)
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -56,61 +64,66 @@ export default function LoginPage() {
         </p>
       )}
 
-      <form onSubmit={handleSubmit} className="mt-7">
-        <label htmlFor="email" className="block text-[12px] font-semibold tracking-[0.08em] text-navy-900">
-          ALAMAT EMAIL
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          placeholder="name@example.com"
-          className={`mt-2.5 ${inputClass}`}
-        />
-
-        <div className="mt-5 flex items-baseline justify-between">
-          <label htmlFor="password" className="text-[12px] font-semibold tracking-[0.08em] text-navy-900">
-            KATA SANDI
+      {tantangan ? (
+        <LangkahKode tantangan={tantangan} onMasuk={selesai} onBatal={() => setTantangan(null)} />
+      ) : (
+        <form onSubmit={handleSubmit} className="mt-7">
+          <label htmlFor="email" className="block text-[12px] font-semibold tracking-[0.08em] text-navy-900">
+            ALAMAT EMAIL
           </label>
-          {/* Belum ada endpoint reset password di backend. */}
-          <span className="text-[13px] font-semibold text-navy-900/70">Lupa kata sandi?</span>
-        </div>
-        <div className="relative mt-2.5">
           <input
-            id="password"
-            name="password"
-            type={showPassword ? 'text' : 'password'}
+            id="email"
+            name="email"
+            type="email"
             required
-            autoComplete="current-password"
-            placeholder="••••••••"
-            className={`${inputClass} pr-12`}
+            autoComplete="email"
+            placeholder="name@example.com"
+            className={`mt-2.5 ${inputClass}`}
           />
+  
+          <div className="mt-5 flex items-baseline justify-between">
+            <label htmlFor="password" className="text-[12px] font-semibold tracking-[0.08em] text-navy-900">
+              KATA SANDI
+            </label>
+            <Link to="/lupa-sandi" className="text-[13px] font-semibold text-navy-900/70 hover:text-navy-900 hover:underline">
+              Lupa kata sandi?
+            </Link>
+          </div>
+          <div className="relative mt-2.5">
+            <input
+              id="password"
+              name="password"
+              type={showPassword ? 'text' : 'password'}
+              required
+              autoComplete="current-password"
+              placeholder="••••••••"
+              className={`${inputClass} pr-12`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-ink/45 hover:text-ink"
+            >
+              {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+            </button>
+          </div>
+  
+          {error && (
+            <p role="alert" className="mt-4 text-[14px] text-maroon">
+              {error}
+            </p>
+          )}
+  
           <button
-            type="button"
-            onClick={() => setShowPassword((v) => !v)}
-            aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-ink/45 hover:text-ink"
+            type="submit"
+            disabled={loading}
+            className="mt-7 h-11 w-full rounded bg-navy-900 text-[15px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
           >
-            {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+            {loading ? 'Memproses…' : 'Masuk'}
           </button>
-        </div>
-
-        {error && (
-          <p role="alert" className="mt-4 text-[14px] text-maroon">
-            {error}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-7 h-11 w-full rounded bg-navy-900 text-[15px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
-        >
-          {loading ? 'Memproses…' : 'Masuk'}
-        </button>
-      </form>
+        </form>
+      )}
 
       <div className="mt-7 flex items-center gap-4">
         <span className="h-px flex-1 bg-line" />

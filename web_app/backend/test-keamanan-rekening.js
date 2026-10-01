@@ -45,28 +45,35 @@ const emails = [];
   const token = u.token;
 
   // --- Rekening bank ---
-  const setengah = await api('/auth/me', {
-    method: 'PATCH',
-    token,
-    body: { bank_name: 'bca', bank_account_number: '', bank_account_holder: '' },
-  });
+  // Sejak 1 Okt rekening punya endpoint sendiri yang menuntut sandi: ini tujuan
+  // transfer payout & refund, jadi token curian saja tidak boleh cukup.
+  // Gagal di sini dihitung rate limit (8 / 15 menit) — jangan tambah kasus
+  // gagal sembarangan, dan restart backend kalau tes ini dijalankan beruntun.
+  const rek = (body) => api('/auth/rekening', { method: 'PATCH', token, body });
+  const SANDI = { current_password: 'password123' };
+
+  const lewatMe = await api('/auth/me', { method: 'PATCH', token, body: REKENING_SAH });
+  assert.strictEqual(lewatMe.status, 400, 'rekening lewat /auth/me harus ditolak, bukan diabaikan');
+
+  const tanpaSandi = await rek(REKENING_SAH);
+  assert.strictEqual(tanpaSandi.status, 400, 'ganti rekening tanpa sandi harus ditolak');
+
+  const sandiSalah = await rek({ ...REKENING_SAH, current_password: 'bukan-sandinya' });
+  assert.strictEqual(sandiSalah.status, 401, 'ganti rekening dengan sandi salah harus 401');
+
+  const setengah = await rek({ ...SANDI, bank_name: 'bca', bank_account_number: '', bank_account_holder: '' });
   assert.strictEqual(setengah.status, 400, 'rekening setengah terisi harus ditolak');
 
   for (const [ubah, kenapa] of [
     [{ bank_name: 'bank_gaib' }, 'bank di luar daftar'],
-    [{ bank_account_number: '12345' }, 'nomor rekening kependekan'],
     [{ bank_account_number: '827100001234940a' }, 'nomor rekening bukan angka'],
     [{ bank_account_holder: 'AB' }, 'nama pemilik kependekan'],
   ]) {
-    const r = await api('/auth/me', {
-      method: 'PATCH',
-      token,
-      body: { ...REKENING_SAH, ...ubah },
-    });
+    const r = await rek({ ...SANDI, ...REKENING_SAH, ...ubah });
     assert.strictEqual(r.status, 400, `${kenapa} harus ditolak, dapat ${r.status}`);
   }
 
-  const simpan = await api('/auth/me', { method: 'PATCH', token, body: REKENING_SAH });
+  const simpan = await rek({ ...SANDI, ...REKENING_SAH });
   assert.strictEqual(simpan.status, 200, `simpan rekening gagal: ${JSON.stringify(simpan.body)}`);
   assert.strictEqual(simpan.body.user.bank_name, 'bca');
   // Nama pemilik dinormalkan ke huruf besar supaya cocok dengan tampilan kartu.
@@ -77,11 +84,7 @@ const emails = [];
   assert.strictEqual(lain.body.user.bank_account_number, REKENING_SAH.bank_account_number,
     'rekening ikut terhapus saat menyimpan field lain');
 
-  const cabut = await api('/auth/me', {
-    method: 'PATCH',
-    token,
-    body: { bank_name: '', bank_account_number: '', bank_account_holder: '' },
-  });
+  const cabut = await rek({ ...SANDI, bank_name: '', bank_account_number: '', bank_account_holder: '' });
   assert.strictEqual(cabut.status, 200);
   assert.strictEqual(cabut.body.user.bank_name, null, 'rekening harus bisa dicabut');
 

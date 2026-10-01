@@ -171,6 +171,31 @@ body {
   scale: 0.97;
 }
 
+/* Rasa native di HP (audit mobile-native, 1 Okt). Semuanya di luar @layer
+   supaya menang dari utilitas text-[14px] di tiap input.
+   - Kilatan abu-abu bawaan browser saat tap bertabrakan dengan scale 0.97 di
+     atas; umpan balik tekan sudah ditangani sendiri.
+   - Tombol: tanpa jeda tunggu double-tap, dan label tidak terseleksi saat
+     ditekan lama. Teks isi (alamat, nomor pesanan) tetap bisa disalin.
+   - Input di bawah 16px membuat iPhone zoom saat diketuk dan tidak kembali.
+     Hanya di perangkat sentuh; desktop tetap 13-15px sesuai desain. */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+:where(button, [role='button'], a.flex, a.inline-flex) {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+@media (pointer: coarse) {
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='file']),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 /* Dialog bawaan browser (form Tambah/Ubah Layanan vendor). Dulu dialog dan
    latarnya muncul seketika. Cuma MASUK yang dianimasikan: dialognya dipasang
    ulang lewat `key` begitu ditutup, jadi animasi keluar pasti terpotong — dan

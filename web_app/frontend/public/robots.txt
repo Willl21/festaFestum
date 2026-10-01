@@ -1,0 +1,6 @@
+# Tanpa berkas ini, /robots.txt dijawab index.html oleh aturan SPA di
+# _redirects, dan Lighthouse menilainya "robots.txt tidak valid".
+User-agent: *
+Allow: /
+Disallow: /vendor/
+Disallow: /admin/

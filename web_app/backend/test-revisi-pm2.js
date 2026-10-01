@@ -8,6 +8,7 @@
 require('dotenv').config();
 const assert = require('assert');
 const pool = require('./src/config/db');
+const { masukDenganKode } = require('./test-masuk');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 
@@ -158,10 +159,8 @@ const notif = async (token) => (await api('/notifikasi', { token })).body;
   // membawa perannya.
   const admin = await daftar();
   await pool.query(`UPDATE users SET role = 'admin' WHERE email = $1`, [admin.email]);
-  const masuk = await api('/auth/login', {
-    method: 'POST', body: { email: admin.email, password: 'password123' },
-  });
-  const adminToken = masuk.body.token;
+  // Admin wajib lewat langkah kode sejak migrasi 022 — lihat test-masuk.js.
+  const adminToken = await masukDenganKode(admin.email);
 
   assert.strictEqual((await api('/admin/laporan', { token: customer.token })).status, 403);
   const antre = await api('/admin/laporan', { token: adminToken });

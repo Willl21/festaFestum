@@ -80,9 +80,12 @@ export default function Navbar() {
       onKeyDown={(e) => e.key === 'Escape' && setMenuBuka(false)}
     >
       <div className="mx-auto flex h-[70px] max-w-[1440px] items-center justify-between gap-3 px-4 sm:px-6 md:px-12">
-        <Link to="/" className="flex items-center gap-2 font-display text-2xl font-semibold tracking-tight md:text-[28px]">
-          <img src="/img/logo.png" alt="" className="h-10 w-auto" />
-          Festa Festum
+        {/* Di HP bilah ini memuat logo + lonceng + obrolan + avatar + menu
+            sekaligus; dengan ukuran desktop namanya patah dua baris dan
+            menabrak lonceng. Di bawah 375px (HP kecil) cukup logonya. */}
+        <Link to="/" className="flex shrink-0 items-center gap-2 font-display text-[20px] font-semibold tracking-tight whitespace-nowrap sm:text-2xl md:text-[28px]">
+          <img src="/img/logo-navbar.webp" alt="" width={167} height={80} className="h-8 w-auto sm:h-10" />
+          <span className="max-[374px]:sr-only">Festa Festum</span>
         </Link>
 
         <nav className="hidden items-center gap-10 md:flex">
@@ -151,7 +154,7 @@ export default function Navbar() {
 
               {/* Pemisah: lencananya menjorok ke kanan (-right-2), jadi tanpa
                   garis ini ikon obrolan terbaca menempel ke avatar. */}
-              <span aria-hidden className="h-6 w-px bg-line" />
+              <span aria-hidden className="hidden h-6 w-px bg-line sm:block" />
 
               <Link
                 to={user.role === 'vendor_owner' ? '/vendor' : '/profil'}
@@ -176,7 +179,8 @@ export default function Navbar() {
               <button
                 type="button"
                 onClick={keluar}
-                className="text-[13px] font-semibold tracking-[0.06em] text-muted transition-colors hover:text-maroon"
+                // Di HP pindah ke menu (lihat bawah) — bilahnya tidak muat.
+                className="hidden text-[13px] font-semibold tracking-[0.06em] text-muted transition-colors hover:text-maroon sm:block"
               >
                 KELUAR
               </button>
@@ -227,6 +231,15 @@ export default function Navbar() {
               {lencana(l.lencana)}
             </NavLink>
           ))}
+          {user && (
+            <button
+              type="button"
+              onClick={keluar}
+              className="block w-full rounded border-t border-line px-2 py-3 text-left text-[15px] text-maroon sm:hidden"
+            >
+              Keluar
+            </button>
+          )}
         </nav>
       )}
     </header>

@@ -64,7 +64,10 @@ export default function Lonceng() {
       </button>
 
       {buka && (
-        <div className="muncul-halus absolute right-0 z-50 mt-3 w-[min(340px,calc(100vw-32px))] overflow-hidden rounded-lg border border-line bg-white text-left shadow-lg [--ff-geser:-8px]">
+        // Di HP lonceng ada di tengah header, jadi panel 340px yang ditempel ke
+        // kanannya keluar layar di kiri (x = -154). Di bawah sm panelnya
+        // dipaku ke layar dengan jarak 16px kiri-kanan, tepat di bawah header.
+        <div className="muncul-halus absolute right-0 z-50 mt-3 w-[min(340px,calc(100vw-32px))] max-sm:fixed max-sm:inset-x-4 max-sm:top-[4.5rem] max-sm:mt-0 max-sm:w-auto overflow-hidden rounded-lg border border-line bg-white text-left shadow-lg [--ff-geser:-8px]">
           <p className="border-b border-line px-4 py-3 text-[13px] font-semibold text-navy-900">Notifikasi</p>
           {data.length === 0 ? (
             <p className="px-4 py-8 text-center text-[13px] text-muted">Belum ada notifikasi.</p>

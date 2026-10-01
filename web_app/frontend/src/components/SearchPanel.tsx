@@ -1,4 +1,5 @@
-import { SearchIcon, ChevronDown } from './icons'
+import { SearchIcon } from './icons'
+import Dropdown from './Dropdown'
 
 type Pilihan = { value: string; label: string }
 
@@ -72,10 +73,10 @@ export default function SearchPanel({
               />
             ) : (
               <div className="relative">
-                <select
+                <Dropdown
                   id={f.key}
                   value={nilai[f.key] ?? ''}
-                  onChange={(e) => onUbah(f.key, e.target.value)}
+                  onChange={(v) => onUbah(f.key, v)}
                   className="h-11 w-full appearance-none rounded border border-line bg-white px-3 pr-9 text-[14px] text-ink/80 outline-none focus:border-navy-900"
                 >
                   {f.options.map((o) => (
@@ -83,8 +84,7 @@ export default function SearchPanel({
                       {o.label}
                     </option>
                   ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/50" />
+                </Dropdown>
               </div>
             )}
           </div>

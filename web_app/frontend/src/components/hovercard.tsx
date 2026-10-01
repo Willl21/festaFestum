@@ -32,7 +32,7 @@ export interface HoverRevealCardsProps {
 }
 
 const KARTU = [
-  'relative h-80 overflow-hidden rounded-xl bg-cover bg-center shadow-lg transition-all duration-500 ease-in-out',
+  'relative h-80 overflow-hidden rounded-xl bg-stone-200 shadow-lg transition-all duration-500 ease-in-out',
   // Saat induknya disentuh, SEMUA kartu meredup...
   'group-hover:scale-[0.97] group-hover:opacity-60 group-hover:blur-[2px]',
   // ...lalu yang benar-benar ditunjuk menimpanya kembali.
@@ -56,6 +56,18 @@ export default function HoverRevealCards({
       {items.map((item) => {
         const isi = (
           <>
+            {/* <img loading="lazy">, bukan background-image CSS: latar CSS
+                selalu diunduh begitu halaman dibuka, padahal kartu ini ada di
+                bawah layar pertama — di HP lima fotonya (~300 KB) berebut
+                bandwidth dengan foto hero (PageSpeed, 1 Okt). object-cover
+                + object-center = tampilan sama persis dengan bg-cover bg-center. */}
+            <img
+              src={item.imageUrl}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 h-full w-full object-cover object-center"
+            />
             {/* Gradien supaya teks tetap terbaca di atas foto apa pun. */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
             <div className="absolute bottom-0 left-0 p-5 text-white">
@@ -67,16 +79,15 @@ export default function HoverRevealCards({
           </>
         )
         const kelas = `${KARTU} ${cardClassName}`
-        const gaya = { backgroundImage: `url(${item.imageUrl})` }
 
         return (
           <li key={item.id}>
             {item.to ? (
-              <Link to={item.to} className={`block ${kelas}`} style={gaya}>
+              <Link to={item.to} className={`block ${kelas}`}>
                 {isi}
               </Link>
             ) : (
-              <div className={kelas} style={gaya} aria-label={`${item.title}, ${item.subtitle}`}>
+              <div className={kelas} aria-label={`${item.title}, ${item.subtitle}`}>
                 {isi}
               </div>
             )}

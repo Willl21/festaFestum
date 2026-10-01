@@ -60,12 +60,17 @@ export default function VendorCard({
         <h3 className="font-display text-[22px] font-semibold">{vendor.name}</h3>
         <div className="mt-1.5 flex items-center justify-between">
           <span className="text-[12px] text-muted">{vendor.city}</span>
-          {/* rating_count masih 0 untuk vendor hasil seed — dataset cuma punya
-              rata-ratanya, belum ada tabel reviews yang terisi. */}
+          {/* Tanpa ulasan dulu tampil "★ 0" — terbaca rating terburuk, padahal
+              artinya belum pernah dinilai. */}
           <span className="flex items-center gap-1 text-[12px] text-ink/80">
-            <StarIcon className="h-3.5 w-3.5 text-star" />
-            {vendor.rating}
-            {vendor.ratingCount > 0 && ` (${vendor.ratingCount} ulasan)`}
+            {vendor.ratingCount > 0 ? (
+              <>
+                <StarIcon className="h-3.5 w-3.5 text-star" />
+                {vendor.rating.toFixed(1)} ({vendor.ratingCount} ulasan)
+              </>
+            ) : (
+              'Belum ada ulasan'
+            )}
           </span>
         </div>
       </div>

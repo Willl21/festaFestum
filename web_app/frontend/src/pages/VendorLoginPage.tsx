@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { inputClass } from '../components/AuthLayout'
 import { EyeIcon, EyeOffIcon, LockIcon, MailIcon, HelpIcon, NoteIcon } from '../components/icons'
-import { post, saveAuth, clearAuth, pesanSesiHabis, type AuthResponse } from '../lib/api'
+import LangkahKode from '../components/LangkahKode'
+import { post, saveAuth, clearAuth, pesanSesiHabis, type AuthResponse, type TantanganKode } from '../lib/api'
 
 /** Masuk ke workspace vendor. Endpointnya sama persis dengan /masuk
  *  (POST /auth/login) — yang beda cuma pintunya: akun customer ditolak di
@@ -14,6 +15,20 @@ export default function VendorLoginPage() {
   // karena sesinya kedaluwarsa (?sesi=habis).
   const [error, setError] = useState(pesanSesiHabis())
   const [loading, setLoading] = useState(false)
+  const [tantangan, setTantangan] = useState<TantanganKode | null>(null)
+
+  function selesai(auth: AuthResponse) {
+    // Pengecekan role di browser cuma soal pengalaman, bukan keamanan:
+    // backend tetap menolak endpoint vendor lewat requireRole.
+    if (auth.user.role !== 'vendor_owner') {
+      clearAuth()
+      setTantangan(null)
+      setError('Akun ini bukan akun vendor. Masuk lewat halaman pelanggan.')
+      return
+    }
+    saveAuth(auth)
+    navigate('/vendor')
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -22,21 +37,13 @@ export default function VendorLoginPage() {
 
     const form = new FormData(e.currentTarget)
     try {
-      const auth = await post<AuthResponse>('/auth/login', {
+      const r = await post<AuthResponse | TantanganKode>('/auth/login', {
         email: form.get('email'),
         password: form.get('password'),
       })
-
-      // Pengecekan role di browser cuma soal pengalaman, bukan keamanan:
-      // backend tetap menolak endpoint vendor lewat requireRole.
-      if (auth.user.role !== 'vendor_owner') {
-        clearAuth()
-        setError('Akun ini bukan akun vendor. Masuk lewat halaman pelanggan.')
-        return
-      }
-
-      saveAuth(auth)
-      navigate('/vendor')
+      // Akun ber-2FA: sandi benar belum memberi token, lanjut ke langkah kode.
+      if ('butuh_kode' in r) return setTantangan(r)
+      selesai(r)
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -62,73 +69,70 @@ export default function VendorLoginPage() {
           Masuk untuk mengelola layanan, pemesanan, dan portofolio Anda di Festa Festum.
         </p>
 
-        <form onSubmit={handleSubmit} className="mt-8">
-          <label htmlFor="email" className="block text-[12px] font-semibold tracking-wide text-navy-900 uppercase">
-            Email Bisnis
-          </label>
-          <div className="relative mt-2">
-            <MailIcon className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink/40" />
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              autoComplete="email"
-              placeholder="nama@perusahaan.com"
-              className={`${inputClass} pl-10`}
-            />
-          </div>
-
-          <div className="mt-5 flex items-baseline justify-between">
-            <label htmlFor="password" className="text-[12px] font-semibold tracking-wide text-navy-900 uppercase">
-              Kata Sandi
+        {tantangan ? (
+          <LangkahKode tantangan={tantangan} onMasuk={selesai} onBatal={() => setTantangan(null)} />
+        ) : (
+          <form onSubmit={handleSubmit} className="mt-8">
+            <label htmlFor="email" className="block text-[12px] font-semibold tracking-wide text-navy-900 uppercase">
+              Email Bisnis
             </label>
-            {/* Reset password belum ada endpointnya — tombolnya dimatikan,
-                bukan ditaruh sebagai link bohong. */}
+            <div className="relative mt-2">
+              <MailIcon className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink/40" />
+              <input
+                id="email"
+                name="email"
+                type="email"
+                required
+                autoComplete="email"
+                placeholder="nama@perusahaan.com"
+                className={`${inputClass} pl-10`}
+              />
+            </div>
+  
+            <div className="mt-5 flex items-baseline justify-between">
+              <label htmlFor="password" className="text-[12px] font-semibold tracking-wide text-navy-900 uppercase">
+                Kata Sandi
+              </label>
+              <Link to="/lupa-sandi?dari=vendor" className="text-[13px] font-semibold text-amber hover:underline">
+                Lupa Kata Sandi?
+              </Link>
+            </div>
+            <div className="relative mt-2">
+              <LockIcon className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink/40" />
+              <input
+                id="password"
+                name="password"
+                type={lihatSandi ? 'text' : 'password'}
+                required
+                autoComplete="current-password"
+                placeholder="••••••••"
+                className={`${inputClass} pr-11 pl-10`}
+              />
+              <button
+                type="button"
+                onClick={() => setLihatSandi((v) => !v)}
+                aria-label={lihatSandi ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+                className="absolute top-1/2 right-3 -translate-y-1/2 text-ink/45"
+              >
+                {lihatSandi ? <EyeOffIcon /> : <EyeIcon />}
+              </button>
+            </div>
+  
+            {error && (
+              <p role="alert" className="mt-5 text-[14px] text-maroon">
+                {error}
+              </p>
+            )}
+  
             <button
-              type="button"
-              disabled
-              title="Reset kata sandi belum tersedia"
-              className="text-[13px] font-semibold text-amber disabled:opacity-60"
+              type="submit"
+              disabled={loading}
+              className="mt-7 h-12 w-full rounded bg-navy-900 text-[13px] font-semibold tracking-wide text-white uppercase transition-opacity hover:opacity-90 disabled:opacity-60"
             >
-              Lupa Kata Sandi?
+              {loading ? 'Memproses…' : 'Masuk ke Workspace'}
             </button>
-          </div>
-          <div className="relative mt-2">
-            <LockIcon className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink/40" />
-            <input
-              id="password"
-              name="password"
-              type={lihatSandi ? 'text' : 'password'}
-              required
-              autoComplete="current-password"
-              placeholder="••••••••"
-              className={`${inputClass} pr-11 pl-10`}
-            />
-            <button
-              type="button"
-              onClick={() => setLihatSandi((v) => !v)}
-              aria-label={lihatSandi ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
-              className="absolute top-1/2 right-3 -translate-y-1/2 text-ink/45"
-            >
-              {lihatSandi ? <EyeOffIcon /> : <EyeIcon />}
-            </button>
-          </div>
-
-          {error && (
-            <p role="alert" className="mt-5 text-[14px] text-maroon">
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-7 h-12 w-full rounded bg-navy-900 text-[13px] font-semibold tracking-wide text-white uppercase transition-opacity hover:opacity-90 disabled:opacity-60"
-          >
-            {loading ? 'Memproses…' : 'Masuk ke Workspace'}
-          </button>
-        </form>
+          </form>
+        )}
 
         <p className="mt-8 border-t border-line pt-6 text-center text-[14px] text-ink">
           Belum menjadi mitra Festa?{' '}

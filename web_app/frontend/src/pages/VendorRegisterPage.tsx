@@ -4,6 +4,7 @@ import AuthLayout, { inputClass } from '../components/AuthLayout'
 import { ShieldIcon } from '../components/icons'
 import { categories } from '../data/categories'
 import { post, saveAuth, type AuthResponse, type ApiVendor } from '../lib/api'
+import Dropdown from '../components/Dropdown'
 
 /** Langkah 1 onboarding vendor: bikin akun (role vendor_owner) lalu profil
  *  vendornya. Dua request berurutan karena backend memang memisahkan users
@@ -118,7 +119,7 @@ export default function VendorRegisterPage() {
             <label htmlFor="category" className="block text-[13px] font-semibold text-navy-900">
               Kategori Layanan
             </label>
-            <select
+            <Dropdown
               id="category"
               name="category"
               required
@@ -133,7 +134,7 @@ export default function VendorRegisterPage() {
                   {c.label}
                 </option>
               ))}
-            </select>
+            </Dropdown>
           </div>
 
           {isian.map((f) => (

@@ -15,6 +15,20 @@ import Img from './Img'
 /** Jeda antar foto. 6 detik: cukup lama untuk dilihat, cukup cepat supaya
  *  orang yang mengisi panel cari di bawahnya sempat melihat lebih dari satu. */
 const JEDA_MS = 6000
+/** Kapan foto KEDUA mulai diunduh. */
+const PRELOAD_MS = 2500
+
+/** Varian WebP tiap foto hero (dibuat sekali dari aslinya, 1 Okt 2026):
+ *  `-hp.webp`   potongan potret 3:4 dari TENGAH foto, resolusi penuh — persis
+ *               bagian yang memang kelihatan di HP lewat object-cover, jadi
+ *               tetap tajam tapi ~3x lebih ringan dari JPG 1600px utuh.
+ *  `-800/-1600` untuk layar lebar, dipilih browser lewat srcset.
+ *  JPG aslinya tetap jadi `src` cadangan. Foto hero baru WAJIB dibuatkan
+ *  ketiga varian ini juga, kalau tidak <source>-nya menunjuk berkas kosong. */
+const varian = (f: string) => {
+  const dasar = f.replace(/\.jpg$/, '')
+  return { hp: `${dasar}-hp.webp`, lebar: `${dasar}-800.webp 800w, ${dasar}-1600.webp 1600w` }
+}
 
 export default function HeroSlideshow({
   foto,
@@ -37,12 +51,21 @@ export default function HeroSlideshow({
    *  sejak awal, jadi `loading="lazy"` TIDAK menahan unduhannya — browser
    *  tetap mengambil semuanya sekaligus. Yang benar-benar menahan cuma tidak
    *  memasang elemennya; di HP itu selisih ~1 MB pada layar pertama. */
-  const [sampai, setSampai] = useState(1)
+  // Mulai 0, bukan 1: foto kedua yang ikut diunduh sejak awal berebut
+  // bandwidth dengan foto PERTAMA — yang menentukan LCP — di HP berjaringan
+  // lambat (PageSpeed, 1 Okt). Dia dipasang PRELOAD_MS kemudian, masih jauh
+  // sebelum gilirannya tampil di JEDA_MS.
+  const [sampai, setSampai] = useState(0)
 
   // Indeksnya dipegang ref, bukan dibaca dari updater setAktif: memanggil
   // setState lain DI DALAM updater bikin updater-nya tidak murni, dan React
   // memang menjalankannya dua kali di StrictMode.
   const urut = useRef(0)
+
+  useEffect(() => {
+    const t = setTimeout(() => setSampai((s) => Math.max(s, 1)), PRELOAD_MS)
+    return () => clearTimeout(t)
+  }, [])
 
   useEffect(() => {
     if (foto.length < 2) return
@@ -91,6 +114,7 @@ export default function HeroSlideshow({
             alt={i === aktif ? alt : ''}
             tint={tint}
             prioritas={i === 0}
+            sumber={i <= sampai ? varian(f) : undefined}
             className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-[1200ms] ease-in-out motion-reduce:transition-none ${
               dipakai ? 'opacity-100' : 'opacity-0'
             } ${i === aktif ? 'z-20' : i === sebelum ? 'z-10' : 'z-0'}`}

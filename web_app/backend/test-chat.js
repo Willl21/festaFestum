@@ -2,6 +2,7 @@
 // hitungan belum-dibaca. Jalankan dengan server hidup: node test-chat.js
 const assert = require('assert');
 const pool = require('./src/config/db');
+const { masukDenganKode } = require('./test-masuk');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 const DIBUAT = [];
@@ -37,11 +38,8 @@ async function register(role) {
 async function registerAdmin() {
   const { token, email } = await register('customer');
   await pool.query("UPDATE users SET role = 'admin' WHERE email = $1", [email]);
-  const masuk = await api('/auth/login', {
-    method: 'POST', body: { email, password: 'password123' },
-  });
-  assert.strictEqual(masuk.status, 200, `login admin gagal: ${JSON.stringify(masuk.body)}`);
-  return masuk.body.token;
+  // Admin wajib lewat langkah kode sejak migrasi 022 — lihat test-masuk.js.
+  return masukDenganKode(email);
 }
 
 const futureDate = (n) => {

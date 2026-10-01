@@ -7,7 +7,7 @@ import BackButton from '../components/BackButton'
 import KalenderSlot from '../components/KalenderSlot'
 import DetailSkeleton from '../components/DetailSkeleton'
 import TukarHalus from '../components/TukarHalus'
-import { ArrowRight, CheckCircleIcon, ChevronDown } from '../components/icons'
+import { ArrowRight, CheckCircleIcon } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
 import { rupiah } from '../lib/format'
 import { hargaPesanan } from '../lib/durasi'
@@ -15,6 +15,7 @@ import {
   getVendor, getVendorServices, cekKetersediaan, urlFotoVendor,
   type ApiService, type ApiVendor,
 } from '../lib/api'
+import Dropdown from '../components/Dropdown'
 
 const kategori = categories.fotografer
 
@@ -236,17 +237,16 @@ export default function FotograferDetailPage() {
                 Jenis Paket
               </label>
               <div className="relative mt-2 max-w-[300px]">
-                <select
+                <Dropdown
                   id="paket"
                   value={paketId}
-                  onChange={(e) => { setPaketId(e.target.value); setCek(null); setJumlah(1); setTambahan(0) }}
+                  onChange={(v) => { setPaketId(v); setCek(null); setJumlah(1); setTambahan(0) }}
                   className="h-12 w-full appearance-none rounded-sm border border-line bg-white px-3 pr-9 text-[15px] outline-none focus:border-navy-900"
                 >
                   {layanan.map((p) => (
                     <option key={p.service_id} value={p.service_id}>{p.service_name}</option>
                   ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/50" />
+                </Dropdown>
               </div>
 
               <p className="mt-6 text-[15px] font-semibold">Tanggal Acara</p>

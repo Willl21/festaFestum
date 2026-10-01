@@ -167,7 +167,14 @@ async function listPayouts(req, res, next) {
               po.requested_at, po.decided_at,
               v.vendor_id, v.business_name, v.city, v.is_verified,
               u.name AS owner_name, u.email AS owner_email,
-              d.name AS decided_by_name
+              d.name AS decided_by_name,
+              -- Salinan saat pengajuan (021). Baris lama belum punya salinan,
+              -- jadi jatuh ke rekening vendor saat ini — ditandai rekening_terkini
+              -- supaya admin tahu itu BUKAN rekening yang tercatat saat diajukan.
+              COALESCE(po.bank_name, u.bank_name)                     AS bank_name,
+              COALESCE(po.bank_account_number, u.bank_account_number) AS bank_account_number,
+              COALESCE(po.bank_account_holder, u.bank_account_holder) AS bank_account_holder,
+              (po.bank_name IS NULL)                                  AS rekening_terkini
          FROM payouts po
          JOIN vendors v ON v.vendor_id = po.vendor_id
          JOIN users   u ON u.user_id   = v.owner_user_id

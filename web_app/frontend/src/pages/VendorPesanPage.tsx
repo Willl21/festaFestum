@@ -10,6 +10,7 @@ import {
   type ApiPercakapan, type ApiPesan, type ApiService, type JenisChat,
 } from '../lib/api'
 import KartuRekomendasi from '../components/KartuRekomendasi'
+import Dropdown from '../components/Dropdown'
 
 /** Pusat Obrolan vendor (mockup "Portal Vendor — Chat Klien & Admin").
  *
@@ -143,7 +144,9 @@ export default function VendorPesanPage() {
   useEffect(() => {
     const el = kotakPesan.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [pesan.length, aktif])
+    // ruangDiHp ikut: di HP pesannya bisa sudah termuat selagi ruangannya
+    // masih display:none (tinggi 0), jadi gulungannya diulang saat dibuka.
+  }, [pesan.length, aktif, ruangDiHp])
 
   const terlihat = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -290,7 +293,7 @@ export default function VendorPesanPage() {
             <div className="mt-7 grid gap-6 lg:grid-cols-[340px_1fr]">
               {/* --- daftar --- */}
               <section
-                className={`h-fit rounded-lg border border-line bg-white p-4 ${
+                className={`h-fit min-w-0 rounded-lg border border-line bg-white p-4 ${
                   ruangDiHp ? 'hidden lg:block' : ''
                 }`}
               >
@@ -391,15 +394,18 @@ export default function VendorPesanPage() {
               </section>
 
               {/* --- ruang obrolan --- */}
+              {/* Di HP ruangannya mengambil SELURUH layar (fixed inset-0), seperti
+                  aplikasi pesan — sama dengan ChatPage pelanggan. Keluar lewat
+                  tombol "Semua obrolan". */}
               <section
-                className={`min-h-[560px] flex-col rounded-lg border border-line bg-white ${
+                className={`flex-col bg-white max-lg:fixed max-lg:inset-0 max-lg:z-[60] lg:min-h-[560px] lg:rounded-lg lg:border lg:border-line ${
                   ruangDiHp ? 'flex' : 'hidden lg:flex'
                 }`}
               >
                 {/* Header selalu dirender, bahkan selagi isi ruangan dimuat:
                     tombol kembali ada di dalamnya, dan di HP menyembunyikannya
                     selama menunggu berarti tidak ada jalan keluar sama sekali. */}
-                <header className="border-b border-line p-5">
+                <header className="border-b border-line p-5 max-lg:pt-[calc(1.25rem+env(safe-area-inset-top,0px))]">
                     <button
                       type="button"
                       onClick={() => setRuangDiHp(false)}
@@ -449,7 +455,7 @@ export default function VendorPesanPage() {
                     )}
                   </header>
 
-                <div ref={kotakPesan} className="flex-1 space-y-4 overflow-y-auto p-5">
+                <div ref={kotakPesan} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-5">
                   {!ruangSiap && (
                     <div className="space-y-4" role="status" aria-live="polite">
                       <span className="sr-only">Memuat pesan…</span>
@@ -521,17 +527,21 @@ export default function VendorPesanPage() {
                     <label htmlFor="paket-rekomendasi" className="text-[12px] font-semibold text-ink/70">
                       Rekomendasikan paket
                     </label>
-                    <select
-                      id="paket-rekomendasi"
-                      value={paketDipilih}
-                      onChange={(e) => setPaketDipilih(e.target.value)}
-                      className="h-9 min-w-0 flex-1 rounded-md border border-line bg-white px-2 text-[13px] outline-none focus:border-navy-900"
-                    >
-                      <option value="">Pilih paket…</option>
-                      {paketSaya.map((x) => (
-                        <option key={x.service_id} value={x.service_id}>{x.service_name}</option>
-                      ))}
-                    </select>
+                    {/* Pembungkus yang memikul flex-1: Dropdown punya div sendiri di luar tombolnya. */}
+                    <div className="min-w-0 flex-1">
+                      <Dropdown
+                        id="paket-rekomendasi"
+                        value={paketDipilih}
+                        onChange={(v) => setPaketDipilih(v)}
+                        keAtas
+                        className="h-9 w-full rounded-md border border-line bg-white px-2 text-[13px] outline-none focus:border-navy-900"
+                      >
+                        <option value="">Pilih paket…</option>
+                        {paketSaya.map((x) => (
+                          <option key={x.service_id} value={x.service_id}>{x.service_name}</option>
+                        ))}
+                      </Dropdown>
+                    </div>
                     <button
                       type="button"
                       onClick={kirimRekomendasi}
@@ -544,7 +554,7 @@ export default function VendorPesanPage() {
                   </div>
                 )}
 
-                <form onSubmit={kirimkan} className="flex items-end gap-3 border-t border-line p-4">
+                <form onSubmit={kirimkan} className="flex items-end gap-3 border-t border-line p-4 max-lg:pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
                   <label className="flex-1">
                     <span className="sr-only">Tulis pesan</span>
                     <textarea

@@ -10,6 +10,10 @@ type Props = {
    *  (hero). `loading="lazy"` pada gambar di atas lipatan justru menundanya,
    *  dan bertentangan dengan <link rel="preload"> di index.html. */
   prioritas?: boolean
+  /** Versi WebP berukuran pas (lihat HeroSlideshow). `hp` = potongan potret
+   *  untuk layar < 768px, `lebar` = srcset untuk layar lebar. `src` tetap jadi
+   *  cadangan browser yang tidak mengenal <picture>/WebP. */
+  sumber?: { hp: string; lebar: string }
 }
 
 /** Gambar dari /public/img. Kalau filenya belum ada (atau src kosong),
@@ -21,7 +25,7 @@ type Props = {
  *  masuk, yang tersisa cuma slot yang memang belum diisi vendornya — dan
  *  emoji besar di situ terbaca seperti gambar sungguhan, bukan seperti
  *  kekosongan. */
-export default function Img({ src, alt, className = '', tint, prioritas }: Props) {
+export default function Img({ src, alt, className = '', tint, prioritas, sumber }: Props) {
   const [failed, setFailed] = useState(false)
 
   if (!src || failed) {
@@ -34,7 +38,7 @@ export default function Img({ src, alt, className = '', tint, prioritas }: Props
     )
   }
 
-  return (
+  const img = (
     <img
       src={src}
       alt={alt}
@@ -43,5 +47,16 @@ export default function Img({ src, alt, className = '', tint, prioritas }: Props
       onError={() => setFailed(true)}
       className={className}
     />
+  )
+  if (!sumber) return img
+
+  // <picture> tidak punya kotak sendiri (display: contents), jadi kelas
+  // posisi/ukuran di <img> tetap mengacu ke induk yang sama seperti tanpa dia.
+  return (
+    <picture className="contents">
+      <source media="(max-width: 767px)" type="image/webp" srcSet={sumber.hp} />
+      <source type="image/webp" srcSet={sumber.lebar} sizes="100vw" />
+      {img}
+    </picture>
   )
 }

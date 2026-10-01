@@ -101,14 +101,16 @@ export default function VendorPemesananPage() {
             title="Manajemen Pemesanan"
             description="Kelola daftar pesanan klien Anda dan pantau status acara terkini."
             action={
-              <div className="flex flex-wrap rounded-md border border-line bg-white p-1">
+              // Di HP satu baris yang bisa digeser, bukan patah dua baris dengan
+              // "Dibatalkan" tersisa sendirian.
+              <div className="flex rounded-md border border-line bg-white p-1 max-md:overflow-x-auto md:flex-wrap">
                 {tabs.map((t) => (
                   <button
                     key={t}
                     type="button"
                     onClick={() => setTab(t)}
                     aria-pressed={tab === t}
-                    className={`rounded px-4 py-2 text-[13px] transition-colors ${
+                    className={`shrink-0 rounded px-3 py-2 text-[13px] whitespace-nowrap transition-colors md:px-4 ${
                       tab === t ? 'bg-navy-900 font-semibold text-white' : 'text-ink/75 hover:text-ink'
                     }`}
                   >
@@ -119,10 +121,14 @@ export default function VendorPemesananPage() {
             }
           />
 
+          {/* Di bawah md tabel yang SAMA tampil sebagai kartu lewat CSS (tr jadi
+              grid 2 kolom, judul kolom pindah ke data-label), bukan markup
+              kedua. Dulu min-w 760px membuat tanggal, status, dan aksi
+              tersembunyi di luar layar tanpa tanda bisa digeser. */}
           <section className="mt-8 overflow-hidden rounded-lg border border-line bg-white">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-[14px]">
-                <thead className="bg-lavender/30 text-[12px] tracking-[0.04em] text-ink/70">
+            <div className="md:overflow-x-auto">
+              <table className="w-full text-left text-[14px] max-md:block md:min-w-[760px]">
+                <thead className="max-md:hidden bg-lavender/30 text-[12px] tracking-[0.04em] text-ink/70">
                   <tr>
                     <th className="px-6 py-4 font-semibold">ID PESANAN</th>
                     <th className="px-6 py-4 font-semibold">KLIEN &amp; ACARA</th>
@@ -132,7 +138,7 @@ export default function VendorPemesananPage() {
                     <th className="px-6 py-4 font-semibold">AKSI</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="max-md:block">
                   {rows.map((b) => {
                     const st = statusPesanan(b)
                     const dibayar = b.payments
@@ -140,18 +146,18 @@ export default function VendorPemesananPage() {
                       .reduce((t, p) => t + Number(p.amount), 0)
 
                     return (
-                      <tr key={b.booking_id} className="border-t border-line align-top">
-                        <td className="px-6 py-5 text-ink/80">
+                      <tr key={b.booking_id} className="border-t border-line align-top max-md:grid max-md:grid-cols-2 max-md:gap-x-4 max-md:gap-y-3 max-md:px-5 max-md:py-5">
+                        <td data-label="ID PESANAN" className="px-6 py-5 text-ink/80 max-md:order-4 max-md:p-0 max-md:before:mb-0.5 max-md:before:block max-md:before:text-[11px] max-md:before:font-semibold max-md:before:tracking-[0.04em] max-md:before:text-muted max-md:before:content-[attr(data-label)]">
                           #{b.booking_id.slice(0, 8).toUpperCase()}
                         </td>
-                        <td className="px-6 py-5">
+                        <td className="px-6 py-5 max-md:order-1 max-md:col-span-2 max-md:p-0">
                           <p className="font-display text-[17px] font-semibold">{b.customer_name}</p>
                           <p className="mt-0.5 text-[13px] text-ink/70">
                             {JENIS[b.event_type] ?? b.event_type} - {b.service_name}
                           </p>
                           <p className="mt-0.5 text-[12px] text-muted">{b.customer_phone}</p>
                         </td>
-                        <td className="px-6 py-5">
+                        <td data-label="TANGGAL & WAKTU" className="px-6 py-5 max-md:order-2 max-md:p-0 max-md:before:mb-0.5 max-md:before:block max-md:before:text-[11px] max-md:before:font-semibold max-md:before:tracking-[0.04em] max-md:before:text-muted max-md:before:content-[attr(data-label)]">
                           <p className="font-semibold">
                             {new Date(b.event_date).toLocaleDateString('id-ID', {
                               day: '2-digit', month: 'short', year: 'numeric',
@@ -161,16 +167,16 @@ export default function VendorPemesananPage() {
                             {rentangJam(b)}
                           </p>
                         </td>
-                        <td className="px-6 py-5 text-right">
+                        <td data-label="TOTAL BIAYA" className="px-6 py-5 text-right max-md:order-3 max-md:p-0 max-md:text-left max-md:before:mb-0.5 max-md:before:block max-md:before:text-[11px] max-md:before:font-semibold max-md:before:tracking-[0.04em] max-md:before:text-muted max-md:before:content-[attr(data-label)]">
                           <p className="font-semibold">{rupiahBulat(Number(b.total_price))}</p>
                           <p className="mt-0.5 text-[12px] text-muted">
                             masuk {rupiahBulat(dibayar)}
                           </p>
                         </td>
-                        <td className="px-6 py-5">
+                        <td data-label="STATUS" className="px-6 py-5 max-md:order-5 max-md:p-0 max-md:before:mb-0.5 max-md:before:block max-md:before:text-[11px] max-md:before:font-semibold max-md:before:tracking-[0.04em] max-md:before:text-muted max-md:before:content-[attr(data-label)]">
                           <StatusPill tone={tone[st]}>{st}</StatusPill>
                         </td>
-                        <td className="px-6 py-5">
+                        <td className="px-6 py-5 max-md:order-6 max-md:col-span-2 max-md:p-0">
                           <details className="[&_summary::-webkit-details-marker]:hidden">
                             <summary className="cursor-pointer list-none rounded-md border border-line px-4 py-2 text-[13px] font-medium hover:border-ink">
                               Detail
@@ -229,8 +235,8 @@ export default function VendorPemesananPage() {
                   })}
 
                   {!memuat && rows.length === 0 && (
-                    <tr className="border-t border-line">
-                      <td colSpan={6} className="px-6 py-10 text-center text-[14px] text-muted">
+                    <tr className="border-t border-line max-md:block">
+                      <td colSpan={6} className="max-md:block px-6 py-10 text-center text-[14px] text-muted">
                         {galat || 'Belum ada pesanan pada filter ini.'}
                       </td>
                     </tr>

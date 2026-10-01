@@ -14,8 +14,10 @@ import {
   ShieldIcon,
   UserCircleIcon,
 } from '../components/icons'
-import { get, getToken, kirim, simpanUser } from '../lib/api'
+import { get, getToken, gantiToken, kirim, simpanUser } from '../lib/api'
 import { AVATAR, kecilkanGambar } from '../lib/gambar'
+import RekeningBank from '../components/RekeningBank'
+import DuaLangkah from '../components/DuaLangkah'
 
 /** Pengaturan profil pelanggan. Semua field di sini persis kolom yang
  *  diizinkan backend di PATCH /auth/me — tidak ada yang cuma hidup di state.
@@ -43,6 +45,7 @@ type Profil = {
   bank_name: string | null
   bank_account_number: string | null
   bank_account_holder: string | null
+  dua_langkah: boolean
   role: string
   created_at: string
 }
@@ -54,31 +57,8 @@ const notifikasi = [
   { key: 'promo_ai', judul: 'Promo & Rekomendasi Vendor AI', catatan: 'Penawaran kurasi musiman dari vendor wedding & corporate.' },
 ]
 
-/** Kodenya harus sama persis dengan BANK_CODES di auth.controller.js — backend
- *  yang memutuskan sah atau tidak, daftar di sini cuma untuk label dan dropdown. */
-const BANKS: Record<string, string> = {
-  bca: 'PT Bank Central Asia Tbk',
-  bni: 'PT Bank Negara Indonesia Tbk',
-  bri: 'PT Bank Rakyat Indonesia Tbk',
-  mandiri: 'PT Bank Mandiri Tbk',
-  bsi: 'PT Bank Syariah Indonesia Tbk',
-  cimb: 'PT Bank CIMB Niaga Tbk',
-  permata: 'PT Bank Permata Tbk',
-  danamon: 'PT Bank Danamon Indonesia Tbk',
-  btn: 'PT Bank Tabungan Negara Tbk',
-  panin: 'PT Bank Panin Tbk',
-  ocbc: 'PT Bank OCBC NISP Tbk',
-  maybank: 'PT Bank Maybank Indonesia Tbk',
-  jago: 'PT Bank Jago Tbk',
-}
-
-/** Empat digit depan dan belakang saja — cukup untuk pemilik mengenali
- *  rekeningnya sendiri tanpa memampang nomor penuh di layar. */
-const samarkanRekening = (n: string) =>
-  n.length <= 8 ? n : `${n.slice(0, 4)} •••• •••• ${n.slice(-4)}`
-
 /** Menu sidebar mengikuti mockup. Yang `href`-nya null belum punya halaman
- *  maupun kolom DB (2FA, rekening pribadi, privasi) — ditampilkan mati
+ *  maupun kolom DB (sekarang tinggal privasi) — ditampilkan mati
  *  bertanda "Segera" supaya tidak jadi tautan bohong saat demo. */
 const menu = [
   { label: 'Informasi Pribadi & Biodata', icon: UserCircleIcon, href: '#biodata' },
@@ -104,9 +84,6 @@ export default function ProfilPage() {
   const [loading, setLoading] = useState(false)
   const [aktif, setAktif] = useState('#biodata')
   const [avatar, setAvatar] = useState<string | null>(null)
-  // Rekening yang sudah tersimpan ditampilkan sebagai kartu, bukan form, supaya
-  // nomornya tidak terpampang penuh setiap kali halaman dibuka.
-  const [ubahRekening, setUbahRekening] = useState(false)
 
   // Ganti sandi punya endpoint, tombol, dan pesannya sendiri — tidak nebeng
   // state form profil supaya dua pesan sukses tidak saling menimpa.
@@ -122,7 +99,6 @@ export default function ProfilPage() {
         setProfil(user)
         setPrefs(user.notification_prefs ?? {})
         setAvatar(user.avatar_url)
-        setUbahRekening(!user.bank_name)
       })
       .catch((err) => setError((err as Error).message))
   }, [masuk])
@@ -152,12 +128,15 @@ export default function ProfilPage() {
 
     setSandiLoading(true)
     try {
-      await kirim<{ message: string }>('/auth/password', 'PATCH', {
+      const r = await kirim<{ message: string; token: string }>('/auth/password', 'PATCH', {
         current_password: sandi.lama,
         new_password: sandi.baru,
       })
+      // Server mencabut semua sesi lama (users.sesi_sejak), termasuk token
+      // halaman ini — simpan penggantinya supaya tidak ikut terlempar keluar.
+      gantiToken(r.token)
       setSandi({ lama: '', baru: '', ulang: '' })
-      setSandiPesan('Sandi berhasil diganti. Sesi di perangkat lain belum otomatis keluar.')
+      setSandiPesan('Sandi berhasil diganti. Perangkat lain yang masih masuk sudah dikeluarkan.')
     } catch (err) {
       setSandiError((err as Error).message)
     } finally {
@@ -182,19 +161,10 @@ export default function ProfilPage() {
         shipping_note: form.get('shipping_note'),
         notification_prefs: prefs,
         avatar_url: avatar ?? '',
-        // Kalau kartu rekening sedang tertutup, field-nya tidak ada di DOM dan
-        // form.get() mengembalikan null — backend akan membacanya sebagai
-        // "cabut rekening" dan menghapus data yang tidak diapa-apakan user.
-        ...(ubahRekening
-          ? {
-              bank_name: form.get('bank_name'),
-              bank_account_number: form.get('bank_account_number'),
-              bank_account_holder: form.get('bank_account_holder'),
-            }
-          : {}),
+        // Rekening TIDAK ikut di sini: punya tombol & endpoint sendiri yang
+        // menuntut sandi (komponen RekeningBank, PATCH /auth/rekening).
       })
       setProfil(user)
-      setUbahRekening(!user.bank_name)
       // Navbar membaca identitasnya dari localStorage, bukan dari GET /auth/me.
       simpanUser({
         user_id: user.user_id,
@@ -511,10 +481,7 @@ export default function ProfilPage() {
               <p className="mt-4 text-[14px] font-semibold text-[#2e6b52]">{sandiPesan}</p>
             )}
 
-            <div className="mt-5 flex items-center justify-between gap-4 border-t border-line pt-5">
-              <p className="text-[12px] leading-relaxed text-muted">
-                Verifikasi dua langkah (2FA) belum tersedia.
-              </p>
+            <div className="mt-5 flex justify-end border-t border-line pt-5">
               <button
                 type="button"
                 onClick={gantiSandi}
@@ -524,6 +491,11 @@ export default function ProfilPage() {
                 {sandiLoading ? 'Mengganti…' : 'Ganti Sandi'}
               </button>
             </div>
+
+            <DuaLangkah
+              aktif={profil.dua_langkah}
+              onBerubah={(aktif) => setProfil((p) => (p ? { ...p, dua_langkah: aktif } : p))}
+            />
           </section>
 
           <section id="alamat" className="scroll-mt-6 rounded-lg border border-line bg-white p-7">
@@ -571,88 +543,10 @@ export default function ProfilPage() {
               pengembalian dana pembatalan.
             </p>
 
-            {!ubahRekening && profil.bank_name ? (
-              <div className="mt-5 flex items-center gap-5 rounded bg-navy-900 px-6 py-5 text-white">
-                <span className="flex h-11 w-14 shrink-0 items-center justify-center rounded bg-white text-[13px] font-bold tracking-wide text-navy-900 uppercase">
-                  {profil.bank_name}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="font-display text-[17px] font-semibold">
-                    {BANKS[profil.bank_name] ?? profil.bank_name.toUpperCase()}
-                  </p>
-                  <p className="mt-0.5 font-mono text-[14px] tracking-widest text-white/70">
-                    {samarkanRekening(profil.bank_account_number ?? '')}
-                  </p>
-                  <p className="mt-0.5 text-[12px] tracking-wide text-white/90 uppercase">
-                    a.n {profil.bank_account_holder}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setUbahRekening(true)}
-                  className="h-10 shrink-0 rounded bg-white px-5 text-[14px] font-semibold text-navy-900 transition-opacity hover:opacity-90"
-                >
-                  Ganti Rekening
-                </button>
-              </div>
-            ) : (
-              <div className="mt-5 grid gap-5 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <label htmlFor="bank_name" className="block text-[12px] font-semibold tracking-wide text-navy-900 uppercase">
-                    Nama Bank
-                  </label>
-                  <select
-                    id="bank_name"
-                    name="bank_name"
-                    defaultValue={profil.bank_name ?? ''}
-                    className={`mt-2 ${inputClass}`}
-                  >
-                    <option value="">— Pilih bank —</option>
-                    {Object.entries(BANKS).map(([kode, nama]) => (
-                      <option key={kode} value={kode}>
-                        {nama}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="bank_account_number" className="block text-[12px] font-semibold tracking-wide text-navy-900 uppercase">
-                    Nomor Rekening
-                  </label>
-                  <input
-                    id="bank_account_number"
-                    name="bank_account_number"
-                    inputMode="numeric"
-                    maxLength={20}
-                    defaultValue={profil.bank_account_number ?? ''}
-                    placeholder="8271000012349402"
-                    className={`mt-2 ${inputClass}`}
-                  />
-                  <p className="mt-1 text-[12px] text-muted">8-20 digit, tanpa spasi.</p>
-                </div>
-
-                <div>
-                  <label htmlFor="bank_account_holder" className="block text-[12px] font-semibold tracking-wide text-navy-900 uppercase">
-                    Nama Pemilik Rekening
-                  </label>
-                  <input
-                    id="bank_account_holder"
-                    name="bank_account_holder"
-                    maxLength={60}
-                    defaultValue={profil.bank_account_holder ?? ''}
-                    placeholder="CLARA VALERY SUDIBYO"
-                    className={`mt-2 ${inputClass}`}
-                  />
-                </div>
-
-                {profil.bank_name && (
-                  <p className="text-[12px] text-muted sm:col-span-2">
-                    Kosongkan ketiganya lalu simpan untuk mencabut rekening.
-                  </p>
-                )}
-              </div>
-            )}
+            <RekeningBank
+              rekening={profil}
+              onTersimpan={(r) => setProfil((p) => (p ? { ...p, ...r } : p))}
+            />
 
             <div className="mt-5 flex gap-3 rounded border border-line bg-cream p-4">
               <InfoIcon className="mt-0.5 h-4 w-4 shrink-0 text-ink/50" />
