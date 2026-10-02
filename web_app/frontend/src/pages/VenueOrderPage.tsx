@@ -8,7 +8,7 @@ import { CalendarIcon, MapPinIcon, NoteIcon } from '../components/icons'
 import { berbasisJam, hargaPesanan } from '../lib/durasi'
 import { categories, type CategoryKey } from '../data/categories'
 import {
-  getVendor, getVendorServices, buatBooking,
+  getVendor, getVendorServices, buatBooking, urlFotoLayanan,
   type ApiService, type ApiVendor,
 } from '../lib/api'
 import Dropdown from '../components/Dropdown'
@@ -181,6 +181,7 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
               // dikembalikan POST /bookings dan ditampilkan di halaman checkout.
               dp: Math.round(harga * 0.3),
               tint: kat.tint,
+              foto: paket?.has_photo ? urlFotoLayanan(paket.service_id) : undefined,
               backTo: `/${kat.slug}/${id}`,
             }}
             onSubmit={ajukan}

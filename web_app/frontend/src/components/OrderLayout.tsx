@@ -18,6 +18,8 @@ export type OrderSummary = {
    *  jumlah yang tidak dia lihat. */
   dp: number
   tint: string
+  /** Foto layanan yang dipilih; kosong = jatuh ke warna `tint`. */
+  foto?: string
   backTo: string
 }
 
@@ -52,6 +54,7 @@ export default function OrderLayout({
         {/* RINGKASAN PESANAN */}
         <aside className="h-fit border border-line bg-white lg:sticky lg:top-8">
           <Img
+            src={order.foto}
             alt={order.vendor}
             tint={order.tint}
             className="h-[150px] w-full object-cover"

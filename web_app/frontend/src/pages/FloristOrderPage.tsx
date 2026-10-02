@@ -7,7 +7,7 @@ import OrderLayout, { OrderField, OrderSection, OrderTextarea } from '../compone
 import { CalendarIcon, MapPinIcon, NoteIcon } from '../components/icons'
 import { categories } from '../data/categories'
 import {
-  getVendor, getVendorServices, buatBooking,
+  getVendor, getVendorServices, buatBooking, urlFotoLayanan,
   type ApiService, type ApiVendor,
 } from '../lib/api'
 import Dropdown from '../components/Dropdown'
@@ -139,6 +139,7 @@ export default function FloristOrderPage() {
               price: harga,
               dp: Math.round(harga * 0.3),
               tint: kat.tint,
+              foto: paket?.has_photo ? urlFotoLayanan(paket.service_id) : undefined,
               backTo: `/${kat.slug}/${id}`,
             }}
             onSubmit={ajukan}
