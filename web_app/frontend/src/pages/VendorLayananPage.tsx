@@ -202,7 +202,7 @@ export default function VendorLayananPage() {
         <>
           <VendorPageHeader
             title="Manajemen Layanan"
-            description="Atur penawaran inti Anda, perbarui detail harga, dan kelola portofolio visual untuk menarik klien potensial di ekosistem premium Festa."
+            description="Atur penawaran inti Anda, perbarui detail harga, dan kelola portofolio visual untuk menarik klien di Festa Festum."
             action={
               <button
                 type="button"
@@ -262,7 +262,7 @@ export default function VendorLayananPage() {
                         <div className="mt-4 flex items-end justify-between gap-3 border-t border-line pt-4">
                           <div>
                             <p className="text-[11px] font-semibold tracking-[0.04em] text-ink/60">
-                              Harga Mulai Dari
+                              {s.per_orang ? 'Harga per Orang' : 'Harga Paket'}
                             </p>
                             <p className="mt-0.5 text-[19px] font-semibold">
                               {rupiahBulat(Number(s.price))}
@@ -742,6 +742,7 @@ function ServiceDialog({
                   label="HARGA PER JAM TAMBAHAN (RP)"
                   type="number"
                   min={0}
+                  wajib={false}
                   placeholder="Kosong = tidak bisa tambah jam"
                   defaultValue={awal?.harga_per_jam_tambahan != null
                     ? Number(awal.harga_per_jam_tambahan) : undefined}
@@ -871,6 +872,7 @@ function Field({
   placeholder,
   min,
   defaultValue,
+  wajib = true,
 }: {
   id: string
   label: string
@@ -878,6 +880,8 @@ function Field({
   placeholder?: string
   min?: number
   defaultValue?: string | number
+  /** false untuk kolom yang boleh kosong (harga jam tambahan). */
+  wajib?: boolean
 }) {
   return (
     <div>
@@ -889,7 +893,7 @@ function Field({
         name={id}
         type={type}
         min={min}
-        required
+        required={wajib}
         placeholder={placeholder}
         defaultValue={defaultValue}
         className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none placeholder:text-ink/55 focus:border-navy-900"

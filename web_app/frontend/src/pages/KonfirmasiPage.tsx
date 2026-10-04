@@ -4,7 +4,7 @@ import TukarHalus from '../components/TukarHalus'
 import { Link, useParams } from 'react-router-dom'
 import { motion } from 'motion/react'
 import Img from '../components/Img'
-import { CheckCircleIcon } from '../components/icons'
+import { CheckCircleIcon, ClockIcon } from '../components/icons'
 import { categories, type CategoryKey } from '../data/categories'
 import { rupiah } from '../lib/format'
 import { getBooking, urlFotoLayanan, type ApiBooking } from '../lib/api'
@@ -31,13 +31,24 @@ const KATEGORI: Record<string, CategoryKey> = {
   event_organizer: 'eo',
 }
 
-/** Titik-titik status: hijau = selesai, amber = sedang berjalan, abu = belum. */
-const steps = [
-  { title: 'Pembayaran Diverifikasi', desc: 'Pembayaran telah kami terima dan masuk ke escrow.', state: 'done' },
-  { title: 'Konfirmasi Vendor', desc: 'Vendor sedang meninjau detail acara Anda.', state: 'current' },
-  { title: 'Sesi Konsultasi', desc: 'Jadwalkan pertemuan dengan vendor.', state: 'next' },
-  { title: 'Pelaksanaan Acara', desc: 'Hari besar yang direncanakan tiba.', state: 'next' },
-] as const
+type Tahap = 'done' | 'current' | 'next'
+
+/** Titik-titik status: hijau = selesai, amber = sedang berjalan, abu = belum.
+ *  Dihitung dari pesanannya, bukan daftar tetap: daftar lama selalu menulis
+ *  "Vendor sedang meninjau", padahal pembayaran baru dibuka SESUDAH vendor
+ *  menerima, dan punya langkah "Sesi Konsultasi" yang fiturnya tidak ada. */
+function langkah(b: ApiBooking) {
+  const dp = b.payment_status === 'dp_paid' || b.payment_status === 'fully_paid'
+  const lunas = b.payment_status === 'fully_paid'
+  const lewat = new Date(b.event_date) < new Date(new Date().toDateString())
+  const t = (selesai: boolean, berjalan: boolean): Tahap => (selesai ? 'done' : berjalan ? 'current' : 'next')
+  return [
+    { title: 'Diterima Vendor', desc: 'Vendor sudah menyetujui tanggal dan detail acara Anda.', state: t(b.confirm_status === 'diterima', b.confirm_status === 'menunggu') },
+    { title: 'DP Dibayar', desc: 'Dana masuk ke escrow Festa Festum, belum diteruskan ke vendor.', state: t(dp, b.confirm_status === 'diterima') },
+    { title: 'Pelunasan', desc: 'Sisa tagihan dibayar dari halaman Pesanan Saya sebelum hari acara.', state: t(lunas, dp) },
+    { title: 'Pelaksanaan Acara', desc: 'Dana dilepas ke vendor sesudah tanggal acara lewat.', state: t(lunas && lewat, lunas) },
+  ]
+}
 
 const dotClass = {
   done: 'bg-[#16a34a]',
@@ -73,26 +84,33 @@ export default function KonfirmasiPage() {
         const dibayar = booking.payments
           .filter((p) => p.gateway_status === 'success')
           .reduce((t, p) => t + Number(p.amount), 0)
+        const steps = langkah(booking)
+        // Halaman ini bisa dibuka langsung lewat URL untuk pesanan apa pun;
+        // "Pemesanan Berhasil!" hanya pantas untuk yang uangnya sudah masuk.
+        const berhasil = booking.payment_status === 'dp_paid' || booking.payment_status === 'fully_paid'
 
         return (
           <div className="min-h-screen bg-cream px-6 py-16 md:px-12">
             <div className="mx-auto max-w-[1030px]">
               <div className="text-center">
                 <span className="inline-flex h-[76px] w-[76px] items-center justify-center rounded-xl bg-lavender/60">
-                  <motion.span
+                  {berhasil ? <motion.span
                     initial={{ scale: 0.6, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     transition={{ type: 'spring', duration: 0.5, bounce: 0.25, delay: 0.1 }}
                     className="flex h-11 w-11 items-center justify-center rounded-full bg-[#16a34a] text-white"
                   >
                     <CheckCircleIcon className="h-6 w-6" />
-                  </motion.span>
+                  </motion.span> : <ClockIcon className="h-8 w-8 text-navy-900" />}
                 </span>
 
-                <motion.h1 {...naik(0.16)} className="mt-8 font-display text-[30px] md:text-[42px] font-semibold">Pemesanan Berhasil!</motion.h1>
+                <motion.h1 {...naik(0.16)} className="mt-8 font-display text-[30px] md:text-[42px] font-semibold">
+                  {berhasil ? 'Pembayaran Berhasil!' : 'Status Pesanan'}
+                </motion.h1>
                 <motion.p {...naik(0.22)} className="mx-auto mt-4 max-w-[460px] text-[15px] leading-relaxed text-ink/75">
-                  Terima kasih telah mempercayakan perayaan Anda kepada Festa Festum. Pemesanan Anda telah
-                  diamankan.
+                  {berhasil
+                    ? 'Terima kasih telah mempercayakan perayaan Anda kepada Festa Festum. Tanggal acara Anda sudah terkunci untuk vendor ini.'
+                    : 'Pesanan ini belum dibayar atau sudah tidak aktif. Lihat Pesanan Saya untuk langkah berikutnya.'}
                 </motion.p>
               </div>
 
@@ -107,9 +125,9 @@ export default function KonfirmasiPage() {
                         ("Simpan sebagai PDF"), jadi tidak perlu berkas dari backend. */}
                     <Link
                       to={`/invoice/${bookingId}`}
-                      className="rounded-sm bg-[#efe2fb] px-5 py-2.5 text-[14px] text-[#5b2a86] transition-opacity hover:opacity-90"
+                      className="rounded-sm border border-navy-900 px-5 py-2.5 text-[14px] font-medium text-navy-900 transition-colors hover:bg-lavender/30"
                     >
-                      Unduh Tanda Bukti
+                      Lihat Invoice
                     </Link>
                   </div>
 

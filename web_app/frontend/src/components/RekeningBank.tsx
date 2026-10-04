@@ -90,7 +90,7 @@ export default function RekeningBank({
             Ganti Rekening
           </button>
         </div>
-        {pesan && <p className="mt-3 text-[13px] text-[#16a34a]">{pesan}</p>}
+        {pesan && <p className="mt-3 text-[13px] font-semibold text-[#2e6b52]" role="status">{pesan}</p>}
       </div>
     )
   }
@@ -105,7 +105,7 @@ export default function RekeningBank({
           onChange={(v) => setIsi((x) => ({ ...x, bank_name: v }))}
           className={`mt-2 ${inputClass}`}
         >
-          <option value="">— Pilih bank —</option>
+          <option value="">Pilih bank</option>
           {Object.entries(BANKS).map(([kode, nama]) => (
             <option key={kode} value={kode}>{nama}</option>
           ))}
@@ -160,6 +160,9 @@ export default function RekeningBank({
       </div>
 
       {galat && <p className="text-[13px] text-maroon sm:col-span-2" role="alert">{galat}</p>}
+      {/* Sesudah dicabut, tampilan kembali ke form ini, jadi pesannya harus
+          ikut tampil di sini juga. Dulu "Rekening dicabut." tidak pernah terlihat. */}
+      {pesan && <p className="text-[13px] font-semibold text-[#2e6b52] sm:col-span-2" role="status">{pesan}</p>}
 
       <div className="flex gap-3 sm:col-span-2">
         <button

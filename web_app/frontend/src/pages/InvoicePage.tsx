@@ -72,7 +72,11 @@ export default function InvoicePage() {
   const dibayar = booking.payments
     .filter((p) => p.gateway_status === 'success')
     .reduce((n, p) => n + Number(p.amount), 0)
-  const sisa = Number(booking.total_price) - dibayar
+  // Pesanan batal/kedaluwarsa tidak menagih apa pun lagi. Dulu pesanan yang
+  // dibatalkan lewat refund (pembayarannya jadi 'refunded') tampil
+  // "Dibatalkan" tapi tetap menagih harga penuh di Sisa tagihan.
+  const tidakAktif = booking.payment_status === 'cancelled' || booking.payment_status === 'expired'
+  const sisa = tidakAktif ? 0 : Number(booking.total_price) - dibayar
   const status = labelStatus[booking.payment_status] ?? {
     teks: booking.payment_status,
     kelas: 'border-line bg-cream text-ink',

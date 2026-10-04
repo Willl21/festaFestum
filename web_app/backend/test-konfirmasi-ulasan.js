@@ -141,6 +141,14 @@ function tanggal(n) {
   assert.strictEqual(batal.status, 200, `batal gagal: ${JSON.stringify(batal.body)}`);
   assert.strictEqual(batal.body.booking.payment_status, 'cancelled');
 
+  // Batal sebelum dijawab meninggalkan confirm_status 'menunggu'. Vendor tetap
+  // tidak boleh "menerima" pesanan yang sudah mati (dulu lolos + email ke klien).
+  const terimaMati = await api(`/bookings/${bookingId}/konfirmasi`, {
+    method: 'PATCH', token: vendor.token, body: { action: 'terima' },
+  });
+  assert.strictEqual(terimaMati.status, 409, `pesanan batal harusnya 409, dapat ${terimaMati.status}`);
+  console.log('  OK  pesanan yang dibatalkan klien tidak bisa diterima vendor (409)');
+
   const b3 = await pesan();
   assert.strictEqual(b3.status, 201, 'slot yang dibatalkan harus bebas lagi');
   const hidup = b3.body.booking.booking_id;

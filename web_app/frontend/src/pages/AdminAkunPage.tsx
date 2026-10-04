@@ -55,8 +55,10 @@ export default function AdminAkunPage() {
   const [galat, setGalat] = useState('')
   const [sibuk, setSibuk] = useState('')
 
+  // `memuat` cuma untuk pemuatan pertama (state awalnya true). Dulu dinyalakan
+  // tiap pencarian, jadi seluruh halaman termasuk kotak cari berganti rangka
+  // minimal 1 detik dan fokus ketikan admin hilang tiap jeda mengetik.
   const muat = useCallback(async () => {
-    setMemuat(true)
     setGalat('')
     try {
       const r = await get<{ data: Akun[]; ringkasan: Ringkasan }>(

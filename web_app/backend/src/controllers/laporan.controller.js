@@ -92,8 +92,15 @@ async function listLaporan(req, res, next) {
               l.dibuat_at, l.diputuskan_at,
               b.booking_id, b.event_date, b.total_price, b.payment_status,
               s.service_name, v.business_name, u.name AS customer_name, u.email AS customer_email,
+              -- Tujuan transfer refund (manual oleh admin). Null = klien belum
+              -- mengisi rekening di /profil.
+              u.bank_name, u.bank_account_number, u.bank_account_holder,
+              -- 'refunded' ikut dihitung: refund yang disetujui mengubah
+              -- pembayarannya dari success ke refunded, dan dulu nominalnya
+              -- lalu tampil "Rp 0 sudah dibayar".
               COALESCE((SELECT SUM(p.amount) FROM payments p
-                         WHERE p.booking_id = b.booking_id AND p.gateway_status = 'success'), 0)
+                         WHERE p.booking_id = b.booking_id
+                           AND p.gateway_status IN ('success', 'refunded')), 0)
                 AS dibayar
          FROM laporan l
          JOIN bookings b ON b.booking_id = l.booking_id

@@ -6,27 +6,12 @@ import { KELAS_KALENDER, isoLokal as iso } from '../lib/kalender'
 import {
   listKetersediaan, listJamTerisi, type ApiService, type JamTerisi, type SlotKetersediaan,
 } from '../lib/api'
-import { berbasisJam, durasiPesanan, tambahJam, MAKS_JAM_TAMBAHAN } from '../lib/durasi'
+import { berbasisJam, durasiPesanan, tambahJam, MAKS_JAM_TAMBAHAN, RENTANG_JAM, daftarJam } from '../lib/durasi'
 import { rupiah } from '../lib/format'
 import type { CategoryKey } from '../data/categories'
 
-/** Rentang tombol jam mulai per kategori, tiap 1 jam (disepakati 25 Sep 2026).
- *  MUA mulai subuh karena rias pengantin biasa jam 4-5 pagi; florist & sewa
- *  jas memakai jam kirim/ambil, jadi cukup jam kerja gerai. Jam terakhir itu
- *  LAST ORDER: pesanan boleh selesai melewatinya. */
-const RENTANG_JAM: Record<CategoryKey, [number, number]> = {
-  mua: [4, 20],
-  eo: [6, 22],
-  fotografer: [6, 22],
-  florist: [7, 20],
-  attire: [7, 20],
-}
-
-function daftarJam([mulai, selesai]: [number, number]) {
-  const jam: string[] = []
-  for (let h = mulai; h <= selesai; h++) jam.push(`${String(h).padStart(2, '0')}:00`)
-  return jam
-}
+// Rentang tombol jam per kategori (RENTANG_JAM, disepakati 25 Sep 2026) ada di
+// lib/durasi.ts: Pesan Semua (Festa AI) memakai daftar jam yang sama.
 
 const menitDari = (jam: string) => Number(jam.slice(0, 2)) * 60 + Number(jam.slice(3, 5))
 

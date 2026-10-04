@@ -419,7 +419,8 @@ async function simulate(req, res, next) {
     await client.query('BEGIN');
 
     const pay = await client.query(
-      `SELECT p.payment_id
+      `SELECT p.payment_id, p.gateway_status, b.payment_status,
+              p.expires_at IS NOT NULL AND p.expires_at <= now() AS lewat
          FROM payments p
          JOIN bookings b ON b.booking_id = p.booking_id
         WHERE p.payment_id = $1 AND b.user_id = $2
@@ -430,6 +431,16 @@ async function simulate(req, res, next) {
     if (pay.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Pembayaran tidak ditemukan' });
+    }
+
+    // Tagihan kedaluwarsa atau pesanan yang sudah batal tidak boleh "dibayar":
+    // slotnya mungkin sudah dilepas ke orang lain. Gateway asli juga menolak
+    // VA yang lewat batas, jadi simulasi ikut aturan yang sama.
+    const p = pay.rows[0];
+    if (p.gateway_status !== 'success'
+        && (p.lewat || p.gateway_status !== 'pending' || ['cancelled', 'expired'].includes(p.payment_status))) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Tagihan ini sudah kedaluwarsa. Buat tagihan baru dari halaman pesanan.' });
     }
 
     const result = await applySuccess(client, req.params.paymentId, null);

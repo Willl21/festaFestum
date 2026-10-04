@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { inputClass } from './AuthLayout'
 import { gantiToken, post } from '../lib/api'
+import { UMUR_KODE_MS, formatSisa, sisaKode, useDetik } from '../lib/hitungMundur'
 
 const label = 'block text-[12px] font-semibold tracking-wide text-navy-900 uppercase'
 
@@ -26,6 +27,8 @@ export default function DuaLangkah({
   const [galat, setGalat] = useState('')
   const [pesan, setPesan] = useState('')
   const [sibuk, setSibuk] = useState(false)
+  const [berakhir, setBerakhir] = useState(0)
+  const sisa = sisaKode(berakhir, useDetik(langkah === 'kode'))
 
   function batal() {
     setLangkah('diam')
@@ -47,6 +50,7 @@ export default function DuaLangkah({
       } else if (langkah === 'sandi') {
         const r = await post<{ tiket: string; email: string }>('/auth/dua-langkah', { current_password: sandi })
         setTiket(r)
+        setBerakhir(Date.now() + UMUR_KODE_MS)
         setSandi('')
         setLangkah('kode')
       } else {
@@ -123,6 +127,13 @@ export default function DuaLangkah({
                 Kode 6 digit sudah dikirim ke <span className="font-semibold">{tiket.email}</span>. Masukkan
                 untuk menyalakan.
               </p>
+              <p className={`mt-1 text-[12px] ${sisa ? 'text-muted' : 'font-semibold text-maroon'}`}>
+                {sisa ? (
+                  <>Berlaku <span className="font-mono font-semibold tabular-nums text-navy-900">{formatSisa(sisa)}</span> lagi</>
+                ) : (
+                  'Kode sudah kedaluwarsa. Tekan Batal lalu nyalakan lagi untuk kode baru.'
+                )}
+              </p>
               <label htmlFor="kode_2fa" className={`mt-3 ${label}`}>Kode verifikasi</label>
               <input
                 id="kode_2fa"
@@ -145,7 +156,7 @@ export default function DuaLangkah({
             <button
               type="button"
               onClick={lanjut}
-              disabled={sibuk || (langkah === 'sandi' ? !sandi : kode.length !== 6)}
+              disabled={sibuk || (langkah === 'sandi' ? !sandi : !sisa || kode.length !== 6)}
               className="h-10 rounded bg-navy-900 px-5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               {sibuk

@@ -14,9 +14,17 @@ const { beriTahuVendor } = require('../lib/notifikasi');
 // vendor_id/user_id dari token yang dipakai memfilter di sini.
 // ------------------------------------------------------------
 
-const VALID_STATUS = ['pending', 'verified', 'all'];
+const VALID_STATUS = ['pending', 'verified', 'rejected', 'all'];
 
-// GET /api/v1/admin/vendors?status=pending|verified|all
+// Ditolak = sudah diputuskan (verified_at terisi) tapi tidak lolos, DAN belum
+// ada dokumen baru yang menunggu. Dulu penolakan tersimpan persis seperti vendor
+// yang belum pernah direview, jadi ia tetap di antrean berlabel "Menunggu".
+// Vendor yang mengunggah ulang dokumen otomatis kembali ke antrean.
+const SQL_MENUNGGU = `v.is_verified = FALSE AND (v.verified_at IS NULL OR EXISTS (
+  SELECT 1 FROM vendor_documents d WHERE d.vendor_id = v.vendor_id AND d.status = 'pending'))`;
+const SQL_DITOLAK = `v.is_verified = FALSE AND NOT (${SQL_MENUNGGU})`;
+
+// GET /api/v1/admin/vendors?status=pending|verified|rejected|all
 // Antrean kurasi: vendor + pemiliknya + dokumen legal + kategori layanannya.
 async function listVendorsForReview(req, res, next) {
   try {
@@ -26,8 +34,9 @@ async function listVendorsForReview(req, res, next) {
     }
 
     const kondisi =
-      status === 'pending' ? 'WHERE v.is_verified = FALSE'
+      status === 'pending' ? `WHERE ${SQL_MENUNGGU}`
       : status === 'verified' ? 'WHERE v.is_verified = TRUE'
+      : status === 'rejected' ? `WHERE ${SQL_DITOLAK}`
       : '';
 
     const result = await pool.query(
@@ -68,7 +77,7 @@ async function vendorReviewStats(req, res, next) {
   try {
     const result = await pool.query(
       `SELECT
-         (SELECT count(*) FROM vendors WHERE is_verified = FALSE)         AS menunggu,
+         (SELECT count(*) FROM vendors v WHERE ${SQL_MENUNGGU})           AS menunggu,
          (SELECT count(*) FROM vendors WHERE is_verified = TRUE)          AS terverifikasi,
          (SELECT count(*) FROM vendor_documents WHERE status = 'pending') AS dokumen_menunggu,
          (SELECT COALESCE(sum(total_price), 0) FROM bookings
@@ -198,7 +207,7 @@ async function escrowSummary(req, res, next) {
   try {
     const { rows } = await pool.query(
       `WITH lunas AS (
-         SELECT p.amount, bk.event_date
+         SELECT p.amount, bk.event_date, bk.booking_id
            FROM payments p
            JOIN bookings bk ON bk.booking_id = p.booking_id
           WHERE p.gateway_status = 'success'
@@ -206,7 +215,9 @@ async function escrowSummary(req, res, next) {
        SELECT
          COALESCE((SELECT SUM(amount) FROM lunas WHERE event_date >= CURRENT_DATE), 0) AS tertahan,
          COALESCE((SELECT SUM(amount) FROM lunas WHERE event_date <  CURRENT_DATE), 0) AS dirilis_kotor,
-         (SELECT count(*) FROM lunas WHERE event_date >= CURRENT_DATE)::int            AS pesanan_tertahan,
+         -- DISTINCT: pesanan yang DP + pelunasannya sudah masuk punya dua baris
+         -- payments, tapi tetap SATU pesanan.
+         (SELECT count(DISTINCT booking_id) FROM lunas WHERE event_date >= CURRENT_DATE)::int AS pesanan_tertahan,
          COALESCE((SELECT SUM(amount) FROM payouts WHERE status = 'pending'), 0)       AS antrean_pencairan,
          (SELECT count(*) FROM payouts WHERE status = 'pending')::int                  AS jumlah_antrean,
          COALESCE((SELECT SUM(amount) FROM payouts WHERE status = 'paid'), 0)          AS sudah_dicairkan`
@@ -347,7 +358,13 @@ async function listUsers(req, res, next) {
                    AND (bk.user_id = u.user_id
                         OR bk.service_id IN (SELECT service_id FROM services WHERE vendor_id = v.vendor_id))
               ), 0) AS nilai_transaksi,
-              (SELECT count(*) FROM bookings WHERE user_id = u.user_id)::int AS jumlah_pesanan
+              -- Vendor dihitung dari pesanan yang MASUK ke layanannya; dulu selalu
+              -- 0 karena yang dihitung pesanan yang dibuat akunnya sendiri.
+              (SELECT count(*) FROM bookings bk
+                WHERE bk.payment_status NOT IN ('cancelled', 'expired')
+                  AND (bk.user_id = u.user_id
+                       OR bk.service_id IN (SELECT service_id FROM services WHERE vendor_id = v.vendor_id))
+              )::int AS jumlah_pesanan
          FROM users u
          LEFT JOIN vendors v ON v.owner_user_id = u.user_id
         WHERE ($1 = 'all' OR u.role::text = $1)

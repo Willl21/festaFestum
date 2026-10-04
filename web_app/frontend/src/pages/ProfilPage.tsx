@@ -50,11 +50,13 @@ type Profil = {
   created_at: string
 }
 
+/** Hanya preferensi yang BENAR-BENAR dibaca backend. Tiga pilihan lama
+ *  (pengingat H-7, chat WhatsApp, promo AI) tidak punya fitur di belakangnya,
+ *  jadi centangnya tidak berpengaruh apa pun dan sudah dibuang.
+ *  `status_pembayaran` dibaca konfirmasiBooking (booking.controller.js);
+ *  kuncinya dipertahankan supaya pilihan yang sudah tersimpan tetap berlaku. */
 const notifikasi = [
-  { key: 'pengingat_jadwal', judul: 'Pengingat Jadwal Acara (H-7 & H-1)', catatan: 'Briefing final vendor, jadwal gladi resik, dan checklist katering.' },
-  { key: 'status_pembayaran', judul: 'Status Pembayaran & Tagihan Vendor', catatan: 'Pemberitahuan saat pembayaran diverifikasi atau tagihan termin diterbitkan.' },
-  { key: 'chat_vendor', judul: 'Chat Langsung dari Vendor Resmi', catatan: 'Pesan instan via WhatsApp dari fotografer & wedding organizer.' },
-  { key: 'promo_ai', judul: 'Promo & Rekomendasi Vendor AI', catatan: 'Penawaran kurasi musiman dari vendor wedding & corporate.' },
+  { key: 'status_pembayaran', judul: 'Email Status Pesanan', catatan: 'Email saat vendor menerima atau menolak pesanan Anda. Notifikasi lonceng di situs tetap selalu aktif.' },
 ]
 
 /** Menu sidebar mengikuti mockup. Yang `href`-nya null belum punya halaman
@@ -63,7 +65,7 @@ const notifikasi = [
 const menu = [
   { label: 'Informasi Pribadi & Biodata', icon: UserCircleIcon, href: '#biodata' },
   { label: 'Keamanan Akun & Kata Sandi', icon: LockIcon, href: '#keamanan' },
-  { label: 'Rekening Bank & Kartu', icon: BankIcon, href: '#rekening' },
+  { label: 'Rekening Bank', icon: BankIcon, href: '#rekening' },
   { label: 'Pengaturan Notifikasi', icon: BellIcon, href: '#notifikasi' },
   { label: 'Alamat Pengiriman Tersimpan', icon: MapPinIcon, href: '#alamat' },
   { label: 'Privasi & Kebijakan Data', icon: ShieldIcon, href: null },
@@ -314,9 +316,10 @@ export default function ProfilPage() {
           <div className="flex gap-3 rounded-lg border border-lavender bg-lavender/40 p-4 text-left">
             <ShieldIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
             <div>
-              <p className="text-[13px] font-semibold text-navy-900">Jaminan Layanan Resmi</p>
+              <p className="text-[13px] font-semibold text-navy-900">Dana Ditahan Escrow</p>
               <p className="mt-1 text-[12px] leading-relaxed text-ink/75">
-                Setiap transaksi Anda dilindungi perjanjian kemitraan dengan vendor terverifikasi.
+                Pembayaran Anda ditahan Festa Festum dan baru diteruskan ke vendor sesudah tanggal
+                acara lewat.
               </p>
             </div>
           </div>
@@ -328,8 +331,7 @@ export default function ProfilPage() {
               Informasi Pribadi &amp; Biodata
             </h1>
             <p className="mt-2 text-[14px] text-muted">
-              Kelola identitas resmi Anda untuk kontrak vendor, konfirmasi acara, dan transaksi
-              pemesanan.
+              Kelola identitas yang dipakai untuk konfirmasi acara dan transaksi pemesanan.
             </p>
 
             <h2 className="mt-7 flex items-center gap-2 text-[17px] font-semibold text-navy-900">
@@ -348,7 +350,7 @@ export default function ProfilPage() {
                   defaultValue={profil.full_name ?? ''}
                   className={`mt-2 ${inputClass}`}
                 />
-                <p className="mt-1 text-[12px] text-muted">Dipakai di kontrak resmi vendor.</p>
+                <p className="mt-1 text-[12px] text-muted">Nama resmi di data akun Anda.</p>
               </div>
 
               <div>
@@ -393,10 +395,11 @@ export default function ProfilPage() {
 
             <div className="mt-6 rounded border border-lavender bg-lavender/40 p-5">
               <p className="text-[12px] font-semibold tracking-wide text-navy-900 uppercase">
-                Nomor WhatsApp Resmi
+                Nomor HP / WhatsApp
               </p>
               <p className="mt-1 text-[13px] text-ink/80">
-                Digunakan untuk konfirmasi darurat hari H dan verifikasi keamanan pemesanan.
+                Ditampilkan ke vendor pesanan Anda untuk koordinasi di hari acara. Wajib diisi
+                sebelum memesan.
               </p>
               <input
                 name="phone"
@@ -504,8 +507,8 @@ export default function ProfilPage() {
               Alamat Pengiriman &amp; Fitting
             </h2>
             <p className="mt-2 text-[14px] text-muted">
-              Lokasi kurir untuk pengiriman mockup dekor, buket bunga, suvenir, serta jadwal fitting
-              desainer.
+              Alamat tersimpan untuk pengiriman buket bunga dan pengambilan atau fitting jas
+              &amp; kebaya.
             </p>
 
             <label htmlFor="shipping_address" className="mt-5 block text-[12px] font-semibold tracking-wide text-navy-900 uppercase">
@@ -561,10 +564,10 @@ export default function ProfilPage() {
 
           <section id="notifikasi" className="scroll-mt-6 rounded-lg border border-line bg-white p-7">
             <h2 className="text-[17px] font-semibold text-navy-900">
-              Preferensi Notifikasi &amp; Peringatan Acara
+              Preferensi Notifikasi
             </h2>
             <p className="mt-2 text-[14px] text-muted">
-              Kendalikan bagaimana kami dan para mitra vendor menghubungi Anda.
+              Atur email yang kami kirim ke alamat akun Anda.
             </p>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -577,7 +580,7 @@ export default function ProfilPage() {
                   <input
                     id={n.key}
                     type="checkbox"
-                    checked={prefs[n.key] ?? false}
+                    checked={prefs[n.key] ?? true}
                     onChange={(e) => setPrefs((p) => ({ ...p, [n.key]: e.target.checked }))}
                     className="mt-0.5 h-4 w-4 shrink-0 accent-navy-900"
                   />

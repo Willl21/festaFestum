@@ -61,6 +61,13 @@ body {
   color: var(--color-ink);
 }
 
+/* Cormorant memakai angka gaya lama (oldstyle) secara bawaan: digitnya naik
+   turun, jadi "Rp 4.387.500" dan nomor VA terbaca seperti teks miring.
+   Angka sejajar untuk SEMUA teks display sekaligus, bukan per komponen. */
+.font-display {
+  font-variant-numeric: lining-nums;
+}
+
 /* Transisi antar rute ditangani library `motion` (lihat App.tsx). Keyframes
    buatan tangan di sini
    adalah shimmer skeleton — `motion` tidak dipakai untuk itu karena ini

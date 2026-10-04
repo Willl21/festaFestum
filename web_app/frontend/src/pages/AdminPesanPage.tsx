@@ -59,6 +59,11 @@ export default function AdminPesanPage() {
   const [jumlahLain, setJumlahLain] = useState<Record<string, number>>({})
   const [belumDibalas, setBelumDibalas] = useState(0)
   const kotakPesan = useRef<HTMLDivElement>(null)
+  // Ruangan yang sedang terbuka, dibaca SESUDAH await di kirimkan(): kalau
+  // admin sudah pindah tiket selagi balasan terkirim, balasan itu jangan
+  // ditempel ke tiket yang baru dibuka.
+  const aktifRef = useRef('')
+  useEffect(() => { aktifRef.current = aktif }, [aktif])
 
   useEffect(() => {
     let hidup = true
@@ -67,6 +72,9 @@ export default function AdminPesanPage() {
       listPercakapan()
         .then((r) => {
           if (!hidup) return
+          // Banner dari tarikan yang gagal sebelumnya tidak boleh menempel
+          // selamanya sesudah koneksinya pulih.
+          setGalat('')
           const punyaTab = r.data.filter((c) => c.jenis === tab)
           setDaftar(punyaTab)
           setJumlahLain({
@@ -141,12 +149,18 @@ export default function AdminPesanPage() {
   async function kirimkan(e: React.FormEvent) {
     e.preventDefault()
     const isi = teks.trim()
-    if (!isi || !aktif) return
+    // requestSubmit() dari Enter tetap jalan walau tombol disabled.
+    if (!isi || !aktif || kirim) return
+    const ruang = aktif
     setKirim(true)
     setGalat('')
     try {
-      const r = await kirimPesan(aktif, isi)
-      setPesan((lama) => [...lama, r.message])
+      const r = await kirimPesan(ruang, isi)
+      if (aktifRef.current === ruang) {
+        setPesan((lama) =>
+          lama.some((m) => m.message_id === r.message.message_id) ? lama : [...lama, r.message]
+        )
+      }
       setTeks('')
     } catch (err) {
       setGalat((err as Error).message)
@@ -223,7 +237,7 @@ export default function AdminPesanPage() {
             <div className="mt-7 grid gap-6 lg:grid-cols-[340px_1fr]">
               {/* --- antrean --- */}
               <section
-                className={`h-fit rounded-lg border border-line bg-white p-4 ${
+                className={`h-fit rounded-lg border border-line bg-white p-4 lg:max-h-[max(440px,calc(100dvh-300px))] lg:overflow-y-auto ${
                   ruangDiHp ? 'hidden lg:block' : ''
                 }`}
               >
@@ -310,7 +324,9 @@ export default function AdminPesanPage() {
 
               {/* --- ruang obrolan --- */}
               <section
-                className={`min-h-[560px] flex-col rounded-lg border border-line bg-white ${
+                // Tinggi dibatasi layar (lihat ChatPage), supaya kotak balas
+                // tidak terdorong ke bawah lipatan layar.
+                className={`h-[max(440px,calc(100dvh-300px))] flex-col rounded-lg border border-line bg-white ${
                   ruangDiHp ? 'flex' : 'hidden lg:flex'
                 }`}
               >

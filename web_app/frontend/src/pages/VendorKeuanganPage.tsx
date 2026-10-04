@@ -40,21 +40,18 @@ type Payout = {
   decided_at: string | null
 }
 
-const labelPayout = { pending: 'Menunggu Admin', paid: 'Withdrawn', rejected: 'Ditolak' } as const
-
-
+const labelPayout = { pending: 'Menunggu Admin', paid: 'Dicairkan', rejected: 'Ditolak' } as const
 
 type Row = {
   id: string
   client: string
   date: string
   amount: number
-  status: 'Released' | 'In Escrow' | 'Withdrawn' | 'Menunggu Admin' | 'Ditolak'
+  status: 'Dilepas' | 'Di Escrow' | 'Dicairkan' | 'Menunggu Admin' | 'Ditolak'
 }
 
-
 const tone = {
-  Released: 'info', 'In Escrow': 'warn', Withdrawn: 'muted',
+  Dilepas: 'info', 'Di Escrow': 'warn', Dicairkan: 'muted',
   'Menunggu Admin': 'warn', Ditolak: 'danger',
 } as const
 
@@ -64,7 +61,7 @@ const tone = {
 function feeLabel(row: Row) {
   if (row.amount < 0 || row.status === 'Ditolak') return '-'
   const fee = `- ${rupiahBulat(Math.round(row.amount * 0.025))}`
-  return row.status === 'In Escrow' ? `(Estimasi) ${fee}` : fee
+  return row.status === 'Di Escrow' ? `(Estimasi) ${fee}` : fee
 }
 
 export default function VendorKeuanganPage() {
@@ -73,6 +70,11 @@ export default function VendorKeuanganPage() {
   const [payouts, setPayouts] = useState<Payout[]>([])
   const [rekening, setRekening] = useState<Rekening | null>(null)
   const [memuat, setMemuat] = useState(true)
+  // Dua galat terpisah: yang MUAT mengganti seluruh halaman (memang tidak ada
+  // yang bisa ditampilkan), yang dari AKSI cuma tampil di bawah formnya. Dulu
+  // satu state, jadi penarikan yang ditolak (mis. melebihi saldo) menghapus
+  // seluruh halaman Keuangan sampai di-reload.
+  const [galatMuat, setGalatMuat] = useState('')
   const [galat, setGalat] = useState('')
 
   const [formTarik, setFormTarik] = useState(false)
@@ -92,8 +94,9 @@ export default function VendorKeuanganPage() {
       setPesanan(b.data)
       setPayouts(c.data)
       setRekening(me.user)
+      setGalatMuat('')
     } catch (e) {
-      setGalat((e as Error).message)
+      setGalatMuat((e as Error).message)
     } finally {
       setMemuat(false)
     }
@@ -127,10 +130,10 @@ export default function VendorKeuanganPage() {
   return (
     <TukarHalus memuat={memuat} rangka={<PanelSkeleton kartu={3} blok={2} label="Memuat keuangan…" />}>
       {() => {
-        if (galat || !saldo) {
+        if (!saldo) {
           return (
             <p className="mt-8 border border-maroon/30 bg-maroon/5 px-5 py-4 text-[14px] text-maroon">
-              {galat || 'Data keuangan tidak tersedia.'}
+              {galatMuat || 'Data keuangan tidak tersedia.'}
             </p>
           )
         }
@@ -154,14 +157,14 @@ export default function VendorKeuanganPage() {
                 day: '2-digit', month: 'short', year: 'numeric',
               }),
               amount: Number(p.amount),
-              status: new Date(b.event_date) < today ? 'Released' : 'In Escrow',
+              status: new Date(b.event_date) < today ? 'Dilepas' : 'Di Escrow',
             }))
         )
 
         history.push(
           ...payouts.map((po) => ({
             id: po.payout_id.slice(0, 8).toUpperCase(),
-            client: po.note ? `Penarikan dana — ${po.note}` : 'Penarikan dana',
+            client: po.note ? `Penarikan dana. ${po.note}` : 'Penarikan dana',
             date: new Date(po.requested_at).toLocaleDateString('id-ID', {
               day: '2-digit', month: 'short', year: 'numeric',
             }),
@@ -180,9 +183,9 @@ export default function VendorKeuanganPage() {
               action={
                 <div className="max-w-[250px] rounded-lg border border-amber/70 bg-navy-900 p-4 text-white">
                   <p className="flex items-center gap-2 text-[13px] font-semibold text-amber">
-                    <LockIcon /> Festa Escrow Protected
+                    <LockIcon /> Dilindungi Festa Escrow
                   </p>
-                  <p className="mt-1 text-[12px] text-white/75">Dana aman hingga layanan selesai</p>
+                  <p className="mt-1 text-[12px] text-white/75">Dana ditahan sampai tanggal acara lewat</p>
                 </div>
               }
             />
@@ -349,11 +352,11 @@ export default function VendorKeuanganPage() {
                             <p className="font-semibold">{r.id}</p>
                             <p className="mt-0.5 text-[13px] text-ink/70">{r.client}</p>
                           </td>
-                          <td className="px-6 py-5">{r.date}</td>
-                          <td className={`px-6 py-5 ${r.amount < 0 ? 'text-maroon' : ''}`}>
+                          <td className="px-6 py-5 whitespace-nowrap">{r.date}</td>
+                          <td className={`px-6 py-5 whitespace-nowrap ${r.amount < 0 ? 'text-maroon' : ''}`}>
                             {r.amount < 0 ? `- ${rupiahBulat(-r.amount)}` : rupiahBulat(r.amount)}
                           </td>
-                          <td className="px-6 py-5 text-ink/75">{feeLabel(r)}</td>
+                          <td className="px-6 py-5 whitespace-nowrap text-ink/75">{feeLabel(r)}</td>
                           <td className="px-6 py-5 text-right">
                             <StatusPill tone={tone[r.status]}>{r.status}</StatusPill>
                           </td>

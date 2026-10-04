@@ -36,10 +36,10 @@ const KATEGORI: Record<string, string> = {
 
 const BADGE: Record<string, { label: string; tone: string }> = {
   pending: { label: 'Menunggu pembayaran', tone: 'bg-lavender text-navy-900' },
-  dp_paid: { label: 'DP masuk escrow', tone: 'bg-amber/15 text-amber' },
-  fully_paid: { label: 'Lunas', tone: 'bg-[#16a34a]/15 text-[#16a34a]' },
-  cancelled: { label: 'Dibatalkan', tone: 'bg-muted/15 text-muted' },
-  expired: { label: 'Kedaluwarsa', tone: 'bg-muted/15 text-muted' },
+  dp_paid: { label: 'DP masuk escrow', tone: 'bg-amber/15 text-[#8a5a00]' },
+  fully_paid: { label: 'Lunas', tone: 'bg-[#2e6b52]/10 text-[#2e6b52]' },
+  cancelled: { label: 'Dibatalkan', tone: 'bg-muted/15 text-ink/70' },
+  expired: { label: 'Kedaluwarsa', tone: 'bg-muted/15 text-ink/70' },
 }
 
 const jam = (s: string) =>
@@ -54,13 +54,20 @@ const inisial = (nama: string) =>
 // ponytail: polling, sama seperti halaman obrolan pelanggan.
 const JEDA_TARIK_MS = 10_000
 
+/** Polling bisa lebih dulu membawa pesan yang baru dikirim; jangan dobel. */
+const tambahSekali = (lama: ApiPesan[], m: ApiPesan) =>
+  lama.some((x) => x.message_id === m.message_id) ? lama : [...lama, m]
+
 export default function VendorPesanPage() {
   const user = usePengguna()
   // Dibuka dari /vendor/pemesanan lewat ?c=<id>, jadi tombol di sana tidak
   // perlu tahu apa-apa selain id ruangan yang baru dibukanya.
   const [cari, setCari] = useSearchParams()
   const dariUrl = cari.get('c') || ''
-  const [tab, setTab] = useState<Extract<JenisChat, 'klien_vendor' | 'admin_vendor'>>('klien_vendor')
+  // ?tab=admin dari tautan "Bantuan" di sidebar.
+  const [tab, setTab] = useState<Extract<JenisChat, 'klien_vendor' | 'admin_vendor'>>(
+    () => (cari.get('tab') === 'admin' ? 'admin_vendor' : 'klien_vendor')
+  )
   const [daftar, setDaftar] = useState<ApiPercakapan[]>([])
   const [aktif, setAktif] = useState('')
   const [pesan, setPesan] = useState<ApiPesan[]>([])
@@ -99,8 +106,10 @@ export default function VendorPesanPage() {
             // Pilihan lama dipertahankan hanya kalau masih ada di tab ini —
             // kalau tidak, ruangannya milik tab sebelah dan kepalanya akan
             // menampilkan konteks yang salah.
-            const masihAda = data.some((c) => c.conversation_id === lama)
-            return masihAda ? lama : dariUrl || data[0]?.conversation_id || ''
+            const ada = (id: string) => data.some((c) => c.conversation_id === id)
+            // dariUrl juga harus milik tab ini. Dulu ruang klien dari ?c= ikut
+            // terbuka di bawah tab "Chat Tim Admin".
+            return ada(lama) ? lama : ada(dariUrl) ? dariUrl : data[0]?.conversation_id || ''
           })
         })
         .catch((e) => hidup && setGalat(e.message))
@@ -168,12 +177,13 @@ export default function VendorPesanPage() {
   async function kirimkan(e: React.FormEvent) {
     e.preventDefault()
     const isi = teks.trim()
-    if (!isi || !aktif) return
+    // requestSubmit() dari Enter tetap jalan walau tombol disabled.
+    if (!isi || !aktif || kirim) return
     setKirim(true)
     setGalat('')
     try {
       const r = await kirimPesan(aktif, isi)
-      setPesan((lama) => [...lama, r.message])
+      setPesan((lama) => tambahSekali(lama, r.message))
       setTeks('')
     } catch (err) {
       setGalat((err as Error).message)
@@ -183,12 +193,12 @@ export default function VendorPesanPage() {
   }
 
   async function kirimRekomendasi() {
-    if (!paketDipilih || !aktif) return
+    if (!paketDipilih || !aktif || kirim) return
     setKirim(true)
     setGalat('')
     try {
       const r = await kirimPesan(aktif, teks.trim(), paketDipilih)
-      setPesan((lama) => [...lama, r.message])
+      setPesan((lama) => tambahSekali(lama, r.message))
       setTeks('')
       setPaketDipilih('')
     } catch (err) {
@@ -293,7 +303,7 @@ export default function VendorPesanPage() {
             <div className="mt-7 grid gap-6 lg:grid-cols-[340px_1fr]">
               {/* --- daftar --- */}
               <section
-                className={`h-fit min-w-0 rounded-lg border border-line bg-white p-4 ${
+                className={`h-fit min-w-0 rounded-lg border border-line bg-white p-4 lg:max-h-[max(440px,calc(100dvh-340px))] lg:overflow-y-auto ${
                   ruangDiHp ? 'hidden lg:block' : ''
                 }`}
               >
@@ -398,7 +408,9 @@ export default function VendorPesanPage() {
                   aplikasi pesan — sama dengan ChatPage pelanggan. Keluar lewat
                   tombol "Semua obrolan". */}
               <section
-                className={`flex-col bg-white max-lg:fixed max-lg:inset-0 max-lg:z-[60] lg:min-h-[560px] lg:rounded-lg lg:border lg:border-line ${
+                // Tinggi dibatasi layar (lihat ChatPage): dulu cuma min-h, jadi
+                // kotak ketik terdorong makin jauh seiring panjang obrolan.
+                className={`flex-col bg-white max-lg:fixed max-lg:inset-0 max-lg:z-[60] lg:h-[max(440px,calc(100dvh-340px))] lg:rounded-lg lg:border lg:border-line ${
                   ruangDiHp ? 'flex' : 'hidden lg:flex'
                 }`}
               >
@@ -431,7 +443,7 @@ export default function VendorPesanPage() {
                         {kepala.booking_id
                           ? `#${kepala.booking_id.slice(0, 8).toUpperCase()}`
                           : kepala.jenis === 'konsultasi'
-                            ? 'Konsultasi sebelum pemesanan — rekomendasikan paket di bawah'
+                            ? 'Konsultasi sebelum pemesanan, rekomendasikan paket di bawah'
                             : 'Koordinasi operasional'}
                         {kepala.event_date && ` • ${tanggal(kepala.event_date)}`}
                         {kepala.category && ` • ${KATEGORI[kepala.category] || kepala.category}`}

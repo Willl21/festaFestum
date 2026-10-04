@@ -102,7 +102,7 @@ export default function VendorRegisterPage() {
       isiClass="max-w-[420px]"
     >
       <p className="font-display text-[22px] font-semibold text-navy-900">
-        Festa <span className="text-amber italic">Vendor</span>
+        Festa Festum <span className="text-[#8a5a00] italic">Vendor</span>
       </p>
       <h1 className="mt-4 font-display text-[26px] font-semibold text-navy-900">
         Daftar sebagai Vendor

@@ -73,6 +73,8 @@ async function listConversations(req, res, next) {
     }
     p.push(req.user.user_id);
     const aku = `$${p.length}`;
+    p.push(req.user.role);
+    const peranku = `$${p.length}`;
 
     const { rows } = await pool.query(
       `SELECT ${KOLOM_PERCAKAPAN},
@@ -93,6 +95,10 @@ async function listConversations(req, res, next) {
             WHERE m.conversation_id = c.conversation_id
               AND m.read_at IS NULL
               AND m.sender_user_id <> ${aku}
+              -- Balasan sesama admin bukan pesan masuk untuk admin lain. Untuk
+              -- klien & vendor syarat ini tidak mengubah apa pun.
+              AND (SELECT su.role::text FROM users su WHERE su.user_id = m.sender_user_id)
+                  IS DISTINCT FROM ${peranku}
          ) n ON TRUE
         WHERE ${sql}${filter}
         ORDER BY c.last_message_at DESC`,
@@ -427,8 +433,10 @@ async function unreadCount(req, res, next) {
       `SELECT count(*)::int AS jumlah
          FROM messages m
          JOIN conversations c ON c.conversation_id = m.conversation_id
-        WHERE m.read_at IS NULL AND m.sender_user_id <> $1 AND ${sql}`,
-      [req.user.user_id, ...params]
+        WHERE m.read_at IS NULL AND m.sender_user_id <> $1 AND ${sql}
+          AND (SELECT su.role::text FROM users su WHERE su.user_id = m.sender_user_id)
+              IS DISTINCT FROM $${params.length + 2}`,
+      [req.user.user_id, ...params, req.user.role]
     );
     res.json({ jumlah: rows[0].jumlah });
   } catch (err) {

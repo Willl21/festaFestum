@@ -93,7 +93,7 @@ export default function VendorLoginPage() {
               <label htmlFor="password" className="text-[12px] font-semibold tracking-wide text-navy-900 uppercase">
                 Kata Sandi
               </label>
-              <Link to="/lupa-sandi?dari=vendor" className="text-[13px] font-semibold text-amber hover:underline">
+              <Link to="/lupa-sandi?dari=vendor" className="text-[13px] font-semibold text-navy-900 underline-offset-4 hover:underline">
                 Lupa Kata Sandi?
               </Link>
             </div>

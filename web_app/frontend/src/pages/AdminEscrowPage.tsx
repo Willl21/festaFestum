@@ -54,8 +54,13 @@ type Laporan = {
   business_name: string
   customer_name: string
   customer_email: string
-  /** Total pembayaran 'success' pesanan itu = yang dikembalikan kalau disetujui. */
+  /** Total pembayaran pesanan itu (success + refunded) = yang dikembalikan
+   *  kalau disetujui. Refunded ikut supaya tidak jadi Rp 0 sesudah disetujui. */
   dibayar: string
+  /** Rekening klien di /profil, tujuan transfer refund. Null = belum diisi. */
+  bank_name: string | null
+  bank_account_number: string | null
+  bank_account_holder: string | null
 }
 
 type Escrow = {
@@ -89,9 +94,14 @@ export default function AdminEscrowPage() {
   const [sibuk, setSibuk] = useState('')
   const [tersalin, setTersalin] = useState('')
   const [laporan, setLaporan] = useState<Laporan[]>([])
+  // Galat dari tombol setuju/tolak, ditempel di bawah KARTU yang bersangkutan.
+  // Banner di atas halaman tidak terlihat dari kartu yang jauh di bawah.
+  const [galatDi, setGalatDi] = useState<{ id: string; pesan: string } | null>(null)
 
+  // `memuat` cuma untuk pemuatan pertama (state awalnya sudah true). Dulu
+  // dinyalakan lagi di sini, jadi tiap keputusan memasang rangka sehalaman
+  // dan posisi gulungan admin hilang.
   const muat = useCallback(async () => {
-    setMemuat(true)
     setGalat('')
     try {
       const [p, e, l] = await Promise.all([
@@ -119,18 +129,21 @@ export default function AdminEscrowPage() {
   async function putuskan(po: Payout, action: 'approve' | 'reject') {
     const note = catatan[po.payout_id]?.trim()
     if (action === 'reject' && !note) {
-      setGalat('Alasan penolakan wajib diisi — vendor membacanya di halaman keuangannya.')
+      setGalatDi({ id: po.payout_id, pesan: 'Alasan penolakan wajib diisi. Vendor membacanya di halaman keuangannya.' })
       return
     }
 
     setSibuk(po.payout_id)
-    setGalat('')
+    setGalatDi(null)
     try {
       await kirim(`/admin/payouts/${po.payout_id}`, 'PATCH', { action, note: note || undefined })
       setCatatan((c) => ({ ...c, [po.payout_id]: '' }))
       await muat()
     } catch (err) {
-      setGalat((err as Error).message)
+      setGalatDi({ id: po.payout_id, pesan: (err as Error).message })
+      // 409 = admin lain sudah memutuskannya. Muat ulang supaya tombolnya
+      // hilang, bukan tetap menawarkan keputusan yang sudah tidak berlaku.
+      if ((err as { status?: number }).status === 409) await muat()
     } finally {
       setSibuk('')
     }
@@ -139,7 +152,7 @@ export default function AdminEscrowPage() {
   async function putuskanLaporan(l: Laporan, action: 'setujui' | 'tolak') {
     const note = catatan[l.laporan_id]?.trim()
     if (action === 'tolak' && !note) {
-      setGalat('Alasan penolakan wajib diisi, klien membacanya di Pesanan Saya.')
+      setGalatDi({ id: l.laporan_id, pesan: 'Alasan penolakan wajib diisi, klien membacanya di Pesanan Saya.' })
       return
     }
     if (action === 'setujui' && l.jenis === 'refund'
@@ -148,13 +161,14 @@ export default function AdminEscrowPage() {
     }
 
     setSibuk(l.laporan_id)
-    setGalat('')
+    setGalatDi(null)
     try {
       await kirim(`/admin/laporan/${l.laporan_id}`, 'PATCH', { action, catatan: note || undefined })
       setCatatan((c) => ({ ...c, [l.laporan_id]: '' }))
       await muat()
     } catch (err) {
-      setGalat((err as Error).message)
+      setGalatDi({ id: l.laporan_id, pesan: (err as Error).message })
+      if ((err as { status?: number }).status === 409) await muat()
     } finally {
       setSibuk('')
     }
@@ -170,7 +184,7 @@ export default function AdminEscrowPage() {
           <p className="mt-2 max-w-[720px] text-[14px] leading-relaxed text-muted">
             Dana pemesanan ditahan sampai tanggal acara terlampaui, lalu masuk saldo vendor dikurangi
             biaya platform {escrow ? escrow.platform_fee_rate * 100 : 2.5}%. Pencairan di bawah ini
-            adalah persetujuan pembukuan — transfer ke rekening vendor dilakukan manual.
+            adalah persetujuan pembukuan, transfer ke rekening vendor dilakukan manual.
           </p>
 
           <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -350,15 +364,18 @@ export default function AdminEscrowPage() {
                         </button>
                       </div>
                     )}
+                    {galatDi?.id === po.payout_id && (
+                      <p role="alert" className="mt-3 text-[13px] text-maroon">{galatDi.pesan}</p>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
 
             <p className="flex gap-3 border-t border-line bg-cream px-6 py-4 text-[12px] leading-relaxed text-muted">
-              <LockIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
+              <LockIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#8a5a00]" />
               Menyetujui hanya mencatat pencairan di buku besar Festa Festum. Transfer ke rekening
-              vendor dilakukan di luar sistem — gateway tidak pernah meneruskan dana ke vendor.
+              vendor dilakukan di luar sistem, gateway tidak pernah meneruskan dana ke vendor.
             </p>
           </section>
 
@@ -392,6 +409,36 @@ export default function AdminEscrowPage() {
                         {l.catatan_admin && (
                           <p className="mt-2 text-[12px] text-ink/70">Catatan admin: {l.catatan_admin}</p>
                         )}
+                        {/* Refund ditransfer manual ke rekening yang klien isi di
+                            /profil. Dulu rekeningnya tidak tampil di sini sama
+                            sekali, jadi admin menyetujui tanpa tahu tujuannya. */}
+                        {l.jenis === 'refund' && (
+                          l.bank_name ? (
+                            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded border border-line bg-cream px-4 py-3 text-[13px]">
+                              <span className="text-[11px] font-semibold tracking-wide text-ink/60 uppercase">Rekening klien</span>
+                              <span className="font-semibold text-navy-900">
+                                {BANKS[l.bank_name] ?? l.bank_name.toUpperCase()}
+                              </span>
+                              <span className="font-mono tracking-wider tabular-nums">{l.bank_account_number}</span>
+                              <span className="text-ink/75">a.n {l.bank_account_holder}</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  navigator.clipboard.writeText(l.bank_account_number ?? '')
+                                    .then(() => setTersalin(l.laporan_id))
+                                    .catch(() => {})
+                                }
+                                className="rounded border border-line bg-white px-2.5 py-1 text-[11px] font-semibold text-navy-900 transition-colors hover:border-navy-900"
+                              >
+                                {tersalin === l.laporan_id ? 'Tersalin' : 'Salin nomor'}
+                              </button>
+                            </div>
+                          ) : l.status === 'menunggu' && (
+                            <p className="mt-3 rounded border border-maroon/30 bg-maroon/5 px-4 py-3 text-[13px] text-maroon">
+                              Klien belum mengisi rekening di Profil. Minta lewat chat atau tolak dengan catatan.
+                            </p>
+                          )
+                        )}
                       </div>
                       <div className="text-right">
                         <p className="text-[22px] font-semibold tracking-tight tabular-nums text-navy-900">
@@ -423,7 +470,9 @@ export default function AdminEscrowPage() {
                         />
                         <button
                           type="button"
-                          disabled={sibuk === l.laporan_id}
+                          // Refund tanpa rekening tujuan tidak bisa ditransfer.
+                          disabled={sibuk === l.laporan_id || (l.jenis === 'refund' && !l.bank_name)}
+                          title={l.jenis === 'refund' && !l.bank_name ? 'Klien belum mengisi rekening' : undefined}
                           onClick={() => putuskanLaporan(l, 'setujui')}
                           className="h-10 rounded bg-navy-900 px-5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                         >
@@ -439,13 +488,16 @@ export default function AdminEscrowPage() {
                         </button>
                       </div>
                     )}
+                    {galatDi?.id === l.laporan_id && (
+                      <p role="alert" className="mt-3 text-[13px] text-maroon">{galatDi.pesan}</p>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
 
             <p className="flex gap-3 border-t border-line bg-cream px-6 py-4 text-[12px] leading-relaxed text-muted">
-              <InfoIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
+              <InfoIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#8a5a00]" />
               Refund yang disetujui membatalkan pesanan dan menarik dananya dari escrow/saldo vendor.
               Pengembalian ke rekening klien dilakukan manual, sama seperti pencairan.
             </p>

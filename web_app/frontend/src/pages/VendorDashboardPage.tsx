@@ -81,7 +81,7 @@ export default function VendorDashboardPage() {
             <div className="mt-8 grid gap-5 md:grid-cols-3">
               <StatCard label="Pendapatan Bulanan" icon={<WalletIcon />}>
                 <p className="text-[26px] font-semibold">{rupiahBulat(bulanIni)}</p>
-                <p className="mt-1 flex items-center gap-1.5 text-[13px] text-amber">
+                <p className="mt-1 flex items-center gap-1.5 text-[13px] text-[#8a5a00]">
                   <TrendUpIcon className="h-3.5 w-3.5" />
                   {tumbuh}
                 </p>
@@ -117,8 +117,8 @@ export default function VendorDashboardPage() {
             <section className="mt-8 rounded-lg border border-line bg-white">
               <div className="flex items-center justify-between gap-4 p-6">
                 <h2 className="font-display text-[24px] font-semibold">Pesanan Terbaru</h2>
-                <Link to="/vendor/pemesanan" className="text-[13px] font-medium text-amber">
-                  Lihat Semua ›
+                <Link to="/vendor/pemesanan" className="flex items-center gap-1 text-[13px] font-semibold text-navy-900 hover:underline">
+                  Lihat Semua <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
 

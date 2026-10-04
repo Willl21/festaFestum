@@ -100,5 +100,9 @@ export const metodeBayar: MetodeBayar[] = [
 
 export const cariMetode = (id: string) => metodeBayar.find((m) => m.id === id)
 
+/** Logo merek di public/img/bayar/, dinamai dari awalan id: bca_va -> bca.svg,
+ *  mandiri_bill -> mandiri.svg. SVG dari Wikimedia Commons. */
+export const logoMetode = (id: string) => `/img/bayar/${id.split('_')[0]}.svg`
+
 /** Urutan grup untuk ditampilkan di halaman checkout. */
 export const grupMetode = ['Virtual Account', 'E-Wallet / QRIS', 'Bayar di Gerai'] as const

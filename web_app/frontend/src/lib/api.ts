@@ -125,7 +125,9 @@ async function hasil<T>(res: Response, path: string): Promise<T> {
     throw new Error(PESAN_SESI_HABIS)
   }
 
-  if (!res.ok) throw new Error(data.message || 'Terjadi kesalahan, coba lagi.')
+  // `status` ikut supaya pemanggil bisa membedakan penolakan (mis. 409) dari
+  // gangguan biasa tanpa mencocokkan teks pesan.
+  if (!res.ok) throw Object.assign(new Error(data.message || 'Terjadi kesalahan, coba lagi.'), { status: res.status })
   return data as T
 }
 
@@ -491,7 +493,9 @@ export const getPayment = (id: string) =>
 /** Backend bertanya ke Midtrans. Dipakai untuk polling di halaman VA supaya
  *  status tetap maju walau webhook tidak sampai (backend masih localhost). */
 export const refreshPembayaran = (paymentId: string) =>
-  post<{ payment: ApiPayment }>(`/payments/${paymentId}/refresh`, {})
+  // `payment` TIDAK ada kalau Midtrans belum mengenal tagihannya (backend
+  // membalas { status: 'pending', message }).
+  post<{ payment?: ApiPayment }>(`/payments/${paymentId}/refresh`, {})
 
 /** Hanya hidup saat Midtrans dimatikan — jaring pengaman demo. */
 export const simulasiBayar = (paymentId: string) =>

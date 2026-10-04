@@ -31,7 +31,7 @@ function statusPesanan(b: ApiBooking): Exclude<(typeof tabs)[number], 'Semua'> {
   return new Date(b.event_date) < new Date(new Date().toDateString()) ? 'Selesai' : 'Mendatang'
 }
 
-const tone = { Menunggu: 'warn', Mendatang: 'info', Selesai: 'muted', Dibatalkan: 'warn' } as const
+const tone = { Menunggu: 'warn', Mendatang: 'info', Selesai: 'muted', Dibatalkan: 'muted' } as const
 
 export default function VendorPemesananPage() {
   const [tab, setTab] = useState<(typeof tabs)[number]>('Semua')
@@ -61,10 +61,14 @@ export default function VendorPemesananPage() {
   async function jawab(b: ApiBooking, action: 'terima' | 'tolak') {
     // ponytail: window.prompt untuk alasan menolak. Jelek dilihat tapi nol
     // markup; ganti dengan dialog sendiri kalau tampilannya dipakai demo.
-    const alasan =
-      action === 'tolak'
-        ? window.prompt('Alasan menolak (boleh dikosongkan):') ?? ''
-        : ''
+    let alasan = ''
+    if (action === 'tolak') {
+      const isi = window.prompt('Alasan menolak (boleh dikosongkan):')
+      // null = vendor menekan Batal. Penolakan tidak bisa ditarik lagi dan
+      // langsung mengirim email ke klien, jadi Batal harus benar-benar batal.
+      if (isi === null) return
+      alasan = isi
+    }
     setSibuk(b.booking_id)
     setGalat('')
     try {
@@ -125,6 +129,12 @@ export default function VendorPemesananPage() {
               grid 2 kolom, judul kolom pindah ke data-label), bukan markup
               kedua. Dulu min-w 760px membuat tanggal, status, dan aksi
               tersembunyi di luar layar tanpa tanda bisa digeser. */}
+          {galat && rows.length > 0 && (
+            <p role="alert" className="mt-6 border border-maroon/30 bg-maroon/5 px-5 py-3 text-[13px] text-maroon">
+              {galat}
+            </p>
+          )}
+
           <section className="mt-8 overflow-hidden rounded-lg border border-line bg-white">
             <div className="md:overflow-x-auto">
               <table className="w-full text-left text-[14px] max-md:block md:min-w-[760px]">
@@ -158,7 +168,7 @@ export default function VendorPemesananPage() {
                           <p className="mt-0.5 text-[12px] text-muted">{b.customer_phone}</p>
                         </td>
                         <td data-label="TANGGAL & WAKTU" className="px-6 py-5 max-md:order-2 max-md:p-0 max-md:before:mb-0.5 max-md:before:block max-md:before:text-[11px] max-md:before:font-semibold max-md:before:tracking-[0.04em] max-md:before:text-muted max-md:before:content-[attr(data-label)]">
-                          <p className="font-semibold">
+                          <p className="font-semibold whitespace-nowrap">
                             {new Date(b.event_date).toLocaleDateString('id-ID', {
                               day: '2-digit', month: 'short', year: 'numeric',
                             })}
@@ -168,13 +178,15 @@ export default function VendorPemesananPage() {
                           </p>
                         </td>
                         <td data-label="TOTAL BIAYA" className="px-6 py-5 text-right max-md:order-3 max-md:p-0 max-md:text-left max-md:before:mb-0.5 max-md:before:block max-md:before:text-[11px] max-md:before:font-semibold max-md:before:tracking-[0.04em] max-md:before:text-muted max-md:before:content-[attr(data-label)]">
-                          <p className="font-semibold">{rupiahBulat(Number(b.total_price))}</p>
-                          <p className="mt-0.5 text-[12px] text-muted">
+                          <p className="font-semibold whitespace-nowrap">{rupiahBulat(Number(b.total_price))}</p>
+                          <p className="mt-0.5 text-[12px] whitespace-nowrap text-muted">
                             masuk {rupiahBulat(dibayar)}
                           </p>
                         </td>
                         <td data-label="STATUS" className="px-6 py-5 max-md:order-5 max-md:p-0 max-md:before:mb-0.5 max-md:before:block max-md:before:text-[11px] max-md:before:font-semibold max-md:before:tracking-[0.04em] max-md:before:text-muted max-md:before:content-[attr(data-label)]">
-                          <StatusPill tone={tone[st]}>{st}</StatusPill>
+                          <StatusPill tone={tone[st]}>
+                            {st === 'Dibatalkan' && b.confirm_status === 'ditolak' ? 'Anda tolak' : st}
+                          </StatusPill>
                         </td>
                         <td className="px-6 py-5 max-md:order-6 max-md:col-span-2 max-md:p-0">
                           <details className="[&_summary::-webkit-details-marker]:hidden">
@@ -203,7 +215,9 @@ export default function VendorPemesananPage() {
                             Chat klien
                           </button>
 
-                          {b.confirm_status === 'menunggu' && (
+                          {/* payment_status ikut dicek: klien yang membatalkan
+                              sebelum dijawab meninggalkan confirm_status 'menunggu'. */}
+                          {b.confirm_status === 'menunggu' && b.payment_status === 'pending' && (
                             <div className="mt-3 flex gap-2">
                               <button
                                 type="button"

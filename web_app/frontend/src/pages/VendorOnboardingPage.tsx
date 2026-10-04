@@ -56,19 +56,17 @@ export default function VendorOnboardingPage() {
   const [versi, setVersi] = useState(0)
   const [loading, setLoading] = useState(false)
 
-  // Kalau halaman ini dibuka ulang (refresh / masuk lagi), id vendornya
-  // diambil dari backend, bukan dari state navigasi yang sudah hilang.
+  // Selalu dibaca dari backend sekali saat halaman dibuka. Dulu dilewati kalau
+  // vendorId sudah ada dari state navigasi, padahal state itu BERTAHAN sesudah
+  // refresh, jadi foto yang sudah diunggah tampil sebagai kotak kosong.
   useEffect(() => {
-    if (vendorId) return
     getMyVendor()
       .then(({ vendor }) => {
         setVendorId(vendor.vendor_id)
-        // Slot yang sudah terisi ikut dibaca, supaya vendor yang kembali ke
-        // halaman ini melihat portofolionya, bukan tiga kotak kosong.
         if (vendor.photos) setTerisi(vendor.photos)
       })
       .catch((err) => setError((err as Error).message))
-  }, [vendorId])
+  }, [])
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -141,7 +139,7 @@ export default function VendorOnboardingPage() {
   return (
     <div className="min-h-screen bg-cream px-4 py-12">
       <h1 className="text-center font-display text-[36px] font-semibold text-navy-900">
-        Festa Vendor
+        Festa Festum Vendor
       </h1>
 
       <div className="mx-auto mt-10 w-full max-w-[800px]">
@@ -154,11 +152,11 @@ export default function VendorOnboardingPage() {
         </div>
 
         <h2 className="mt-8 font-display text-[30px] font-semibold text-navy-900">
-          Selamat Datang di Festa, Vendor.
+          Selamat Datang di Festa Festum.
         </h2>
         <p className="mt-2 max-w-[620px] text-[14px] leading-relaxed text-muted">
-          Mari mulai dengan menceritakan sedikit tentang bisnis Anda dan mengunggah portofolio
-          terbaik untuk menarik klien premium kami.
+          Ceritakan sedikit tentang bisnis Anda dan unggah portofolio terbaik. Ketiganya tampil di
+          halaman vendor Anda di marketplace.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-8">
@@ -230,7 +228,7 @@ export default function VendorOnboardingPage() {
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <KotakFoto
               slot={0}
-              judul="Foto Utama (Hero Image)"
+              judul="Foto Utama (Sampul)"
               tinggi="min-h-[240px]"
               Ikon={UploadCloudIcon}
               src={terisi[0] && vendorId ? urlFotoVendor(vendorId, 0, versi) : ''}

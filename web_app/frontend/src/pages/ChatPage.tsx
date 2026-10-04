@@ -40,10 +40,10 @@ const KATEGORI: Record<string, string> = {
 
 const BADGE: Record<string, { label: string; tone: string }> = {
   pending: { label: 'Menunggu pembayaran', tone: 'bg-lavender text-navy-900' },
-  dp_paid: { label: 'DP masuk escrow', tone: 'bg-amber/15 text-amber' },
-  fully_paid: { label: 'Lunas', tone: 'bg-[#16a34a]/15 text-[#16a34a]' },
-  cancelled: { label: 'Dibatalkan', tone: 'bg-muted/15 text-muted' },
-  expired: { label: 'Kedaluwarsa', tone: 'bg-muted/15 text-muted' },
+  dp_paid: { label: 'DP masuk escrow', tone: 'bg-amber/15 text-[#8a5a00]' },
+  fully_paid: { label: 'Lunas', tone: 'bg-[#2e6b52]/10 text-[#2e6b52]' },
+  cancelled: { label: 'Dibatalkan', tone: 'bg-muted/15 text-ink/70' },
+  expired: { label: 'Kedaluwarsa', tone: 'bg-muted/15 text-ink/70' },
 }
 
 const jam = (s: string) =>
@@ -190,12 +190,17 @@ export default function ChatPage() {
   async function kirimkan(e: React.FormEvent) {
     e.preventDefault()
     const isi = teks.trim()
-    if (!isi || !aktif) return
+    // `kirim` ikut dicek: Enter memanggil requestSubmit(), yang tetap jalan
+    // walau tombolnya disabled, jadi dua Enter cepat dulu mengirim dua kali.
+    if (!isi || !aktif || kirim) return
     setKirim(true)
     setGalat('')
     try {
       const r = await kirimPesan(aktif, isi)
-      setPesan((lama) => [...lama, r.message])
+      // Polling bisa lebih dulu membawa pesan ini; jangan tempel dua kali.
+      setPesan((lama) =>
+        lama.some((m) => m.message_id === r.message.message_id) ? lama : [...lama, r.message]
+      )
       setTeks('')
     } catch (err) {
       setGalat((err as Error).message)
@@ -303,7 +308,7 @@ export default function ChatPage() {
             <div className="mt-8 grid gap-6 lg:grid-cols-[360px_1fr]">
               {/* --- daftar percakapan --- */}
               <section
-                className={`min-w-0 rounded-lg border border-line bg-white p-4 ${
+                className={`min-w-0 rounded-lg border border-line bg-white p-4 lg:max-h-[max(440px,calc(100dvh-300px))] lg:overflow-y-auto ${
                   ruangDiHp ? 'hidden lg:block' : ''
                 }`}
               >
@@ -392,7 +397,11 @@ export default function ChatPage() {
                   ponytail: halaman di belakangnya tidak dikunci; tak terlihat, jadi
                   dibiarkan sampai ada keluhan di HP sungguhan. */}
               <section
-                className={`flex-col bg-white max-lg:fixed max-lg:inset-0 max-lg:z-[60] lg:min-h-[560px] lg:rounded-lg lg:border lg:border-line ${
+                // Tinggi DIBATASI layar di lg: dulu cuma min-h, jadi kotaknya
+                // memanjang mengikuti jumlah pesan dan kotak ketik terdorong ke
+                // bawah lipatan layar (laptop 768px: harus gulung dulu baru bisa
+                // mengetik). 300px = navbar + judul halaman di atasnya.
+                className={`flex-col bg-white max-lg:fixed max-lg:inset-0 max-lg:z-[60] lg:h-[max(440px,calc(100dvh-300px))] lg:rounded-lg lg:border lg:border-line ${
                   ruangDiHp ? 'flex' : 'hidden lg:flex'
                 }`}
               >
@@ -430,7 +439,7 @@ export default function ChatPage() {
                           {kepala.jenis === 'admin_klien'
                             ? 'Bantuan & kendala pesanan'
                             : kepala.jenis === 'konsultasi'
-                              ? 'Konsultasi — vendor bisa merekomendasikan paket di sini'
+                              ? 'Konsultasi, vendor bisa merekomendasikan paket di sini'
                               : KATEGORI[kepala.category || ''] || 'Vendor'}
                           {kepala.event_date && ` • ${tanggal(kepala.event_date)}`}
                         </p>

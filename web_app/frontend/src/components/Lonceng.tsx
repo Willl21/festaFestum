@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BellIcon } from './icons'
 import { bacaSemuaNotifikasi, listNotifikasi, type Notifikasi } from '../lib/api'
@@ -12,17 +12,26 @@ export default function Lonceng() {
   const [data, setData] = useState<Notifikasi[]>([])
   const [belum, setBelum] = useState(0)
   const [buka, setBuka] = useState(false)
+  // id yang belum dibaca SAAT panel dibuka. Sorotannya dibaca dari sini, bukan
+  // dari `dibaca` server: polling berikutnya membawa dibaca=true dan dulu
+  // sorotannya hilang selagi panel masih terbuka.
+  const [sorot, setSorot] = useState<Set<string>>(new Set())
+  // Naik tiap panel dibuka. Tarikan yang berangkat SEBELUM itu membawa angka
+  // belum-dibaca lama; dulu angka itu memunculkan lencananya lagi.
+  const versi = useRef(0)
 
   useEffect(() => {
     let hidup = true
-    const tarik = () =>
-      listNotifikasi()
+    const tarik = () => {
+      const v = versi.current
+      return listNotifikasi()
         .then((r) => {
           if (!hidup) return
           setData(r.data)
-          setBelum(r.belum_dibaca)
+          if (v === versi.current) setBelum(r.belum_dibaca)
         })
         .catch(() => {}) // lonceng bukan alasan merusak halaman
+    }
     tarik()
     const t = setInterval(tarik, 30_000)
     return () => {
@@ -33,7 +42,9 @@ export default function Lonceng() {
 
   function alihkan() {
     setBuka((b) => !b)
+    if (!buka) setSorot(new Set(data.filter((n) => !n.dibaca).map((n) => n.notifikasi_id)))
     if (!buka && belum > 0) {
+      versi.current++
       setBelum(0)
       bacaSemuaNotifikasi().catch(() => {})
     }
@@ -74,10 +85,11 @@ export default function Lonceng() {
           ) : (
             <ul className="max-h-[360px] overflow-y-auto">
               {data.map((n) => {
+                const baru = sorot.has(n.notifikasi_id) || !n.dibaca
                 const isi = (
                   <>
                     <span className="flex items-start gap-2">
-                      {!n.dibaca && <span aria-hidden className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber" />}
+                      {baru && <span aria-hidden className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber" />}
                       <span className="text-[13px] font-semibold text-navy-900">{n.judul}</span>
                     </span>
                     <span className="mt-0.5 block text-[12px] leading-relaxed text-ink/75">{n.isi}</span>
@@ -88,7 +100,7 @@ export default function Lonceng() {
                     </span>
                   </>
                 )
-                const kelas = `block border-b border-line px-4 py-3 last:border-b-0 ${n.dibaca ? '' : 'bg-lavender/25'}`
+                const kelas = `block border-b border-line px-4 py-3 last:border-b-0 ${baru ? 'bg-lavender/25' : ''}`
                 return (
                   <li key={n.notifikasi_id}>
                     {n.tautan ? (

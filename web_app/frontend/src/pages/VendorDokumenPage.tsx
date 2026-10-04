@@ -102,7 +102,7 @@ export default function VendorDokumenPage() {
   return (
     <div className="min-h-screen bg-cream px-4 py-12">
       <h1 className="text-center font-display text-[28px] md:text-[36px] font-semibold text-navy-900">
-        Festa Vendor
+        Festa Festum Vendor
       </h1>
 
       <div className="mx-auto mt-10 w-full max-w-[800px]">
@@ -153,7 +153,15 @@ export default function VendorDokumenPage() {
                   </span>
                   <span className="mt-1 text-[12px] tracking-wide text-muted uppercase">{batas}</span>
                   {doc && !namaBaru && (
-                    <span className="mt-2 text-[12px] font-semibold text-amber">
+                    // Tiga status dulu satu warna amber pudar, jadi "Ditolak"
+                    // tidak terlihat beda dari "Terverifikasi".
+                    <span
+                      className={`mt-2 text-[12px] font-semibold ${
+                        doc.status === 'approved' ? 'text-[#2e6b52]'
+                        : doc.status === 'rejected' ? 'text-maroon'
+                        : 'text-[#8a5a00]'
+                      }`}
+                    >
                       {labelStatus[doc.status]}
                     </span>
                   )}

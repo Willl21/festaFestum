@@ -276,7 +276,11 @@ async function updateService(req, res, next) {
       `UPDATE services SET
          service_name        = COALESCE($1, service_name),
          category            = COALESCE($2, category),
-         description         = COALESCE($3, description),
+         -- Tiga keadaan seperti image_url di bawah: tidak dikirim = biarkan,
+         -- '' = kosongkan. COALESCE saja membuat deskripsi mustahil dihapus.
+         description         = CASE WHEN $3::text IS NULL THEN description
+                                    WHEN $3 = '' THEN NULL
+                                    ELSE $3 END,
          price               = COALESCE($4, price),
          minimum_notice_days = COALESCE($5, minimum_notice_days),
          is_active           = COALESCE($6, is_active),
@@ -295,7 +299,8 @@ async function updateService(req, res, next) {
        WHERE service_id = $8
          AND vendor_id IN (SELECT vendor_id FROM vendors WHERE owner_user_id = $9)
        RETURNING ${KOLOM_LAYANAN}`,
-      [service_name || null, category || null, description || null,
+      [service_name || null, category || null,
+       description === undefined || description === null ? null : String(description).trim(),
        price ?? null, minimum_notice_days ?? null, is_active ?? null,
        foto.nilai, serviceId, req.user.user_id, rinciJson,
        jam !== null, jam?.durasi ?? null, jam?.perOrang ?? false, jam?.harga ?? null]

@@ -28,6 +28,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# Mode contoh lokal: cek halaman satu-satu tanpa login/memesan.
+vite.contoh.config.ts
+
 # Foto stok Pexels hasil seed (727 berkas, ~59 MB).
 #
 # Sengaja TIDAK di-commit: id fotonya tersimpan di nama berkasnya sendiri

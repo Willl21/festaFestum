@@ -69,13 +69,20 @@ export default function OrderLayout({
                 label={`Harga Paket${order.satuan ? ` ${order.satuan}` : ''}`}
                 value={rupiah(order.price)}
               />
-              <Row label="DP yang dibayar sekarang" value={rupiah(order.dp)} />
+              {/* Bukan "dibayar sekarang": pembayaran baru dibuka SESUDAH vendor
+                  menerima pesanan (backend menolak charge sebelum itu). */}
+              <Row label="DP setelah vendor menerima" value={rupiah(order.dp)} />
               <Row label="Sisa saat pelunasan" value={rupiah(order.price - order.dp)} />
             </dl>
 
             <dl className="mt-7">
               <Row label="Total:" value={rupiah(order.price)} bold />
             </dl>
+
+            <p className="mt-3 text-[12px] leading-relaxed text-muted">
+              Belum ada yang ditagih sekarang. Vendor punya 24 jam untuk menerima, lalu DP dibayar
+              dari halaman Pesanan Saya.
+            </p>
 
             {galat && (
               <p className="mt-4 border border-maroon/30 bg-maroon/5 px-3 py-2 text-[13px] text-maroon">

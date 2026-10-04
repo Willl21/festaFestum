@@ -6,7 +6,7 @@ import Img from '../components/Img'
 import FlowLayout from '../components/FlowLayout'
 import { LockIcon, ShieldIcon } from '../components/icons'
 import { categories, namaKota, type CategoryKey } from '../data/categories'
-import { grupMetode, metodeBayar } from '../data/payments'
+import { grupMetode, logoMetode, metodeBayar } from '../data/payments'
 import { rupiah } from '../lib/format'
 import { getBooking, bayarBooking, urlFotoLayanan, type ApiBooking } from '../lib/api'
 import { rentangJam } from '../lib/durasi'
@@ -73,19 +73,27 @@ export default function CheckoutPage() {
         // dibuka langsung — termasuk untuk pesanan yang vendornya belum
         // menjawab. Backend sudah menolak charge-nya; ini supaya orangnya
         // dapat penjelasan, bukan error 409 dari tombol Bayar.
-        if (booking.confirm_status !== 'diterima') {
-          const ditolak = booking.confirm_status === 'ditolak'
+        // Sama untuk pesanan yang sudah tidak punya tagihan: lunas, dibatalkan,
+        // atau kedaluwarsa. Tanpa ini halaman menawarkan DP lalu tombolnya
+        // dibalas 409 mentah berisi nama status DB.
+        const tertutup: Record<string, [string, string]> = {
+          ditolak: ['Pesanan ini ditolak vendor',
+            booking.confirm_note || 'Vendor tidak bisa menerima pesanan ini. Slotnya sudah dilepas kembali.'],
+          menunggu: ['Menunggu konfirmasi vendor',
+            'Pembayaran dibuka setelah vendor menerima pesanan Anda. Slot acara tetap ditahan selama menunggu.'],
+          fully_paid: ['Pesanan ini sudah lunas', 'Tidak ada tagihan tersisa. Sampai jumpa di hari acara.'],
+          cancelled: ['Pesanan ini sudah dibatalkan', 'Pesanan yang dibatalkan tidak bisa dibayar lagi.'],
+          expired: ['Pesanan ini sudah kedaluwarsa',
+            'Batas waktu pembayarannya sudah lewat dan slotnya sudah dilepas. Silakan pesan ulang.'],
+        }
+        const tutup = booking.confirm_status !== 'diterima'
+          ? tertutup[booking.confirm_status]
+          : tertutup[booking.payment_status]
+        if (tutup) {
           return (
             <div className="mx-auto max-w-[560px] px-6 py-20 text-center">
-              <h1 className="font-display text-[28px] font-semibold">
-                {ditolak ? 'Pesanan ini ditolak vendor' : 'Menunggu konfirmasi vendor'}
-              </h1>
-              <p className="mt-3 text-[15px] leading-relaxed text-ink/75">
-                {ditolak
-                  ? booking.confirm_note
-                    || 'Vendor tidak bisa menerima pesanan ini. Slotnya sudah dilepas kembali.'
-                  : 'Pembayaran dibuka setelah vendor menerima pesanan Anda. Slot acara tetap ditahan selama menunggu.'}
-              </p>
+              <h1 className="font-display text-[28px] font-semibold">{tutup[0]}</h1>
+              <p className="mt-3 text-[15px] leading-relaxed text-ink/75">{tutup[1]}</p>
               <Link
                 to="/pesanan"
                 className="mt-7 inline-flex h-11 items-center rounded bg-navy-900 px-8 text-[15px] font-medium text-white transition-opacity hover:opacity-90"
@@ -143,7 +151,7 @@ export default function CheckoutPage() {
                       <div>
                         <dt className="text-[14px] text-muted">Lokasi Acara</dt>
                         {/* Detail lokasi disimpan multi-baris (venue, catatan,
-                            estimasi) — baris pertama yang paling relevan di sini. */}
+                            estimasi), ditampilkan utuh dengan barisnya. */}
                         <dd className="mt-1.5 whitespace-pre-line font-semibold">
                           {booking.event_location_detail}
                         </dd>
@@ -163,7 +171,7 @@ export default function CheckoutPage() {
                     <div className="flex items-baseline justify-between gap-4">
                       <dt className="text-muted">
                         DP ({Math.round((dp / harga) * 100)}%)
-                        {pelunasan && ' — sudah dibayar'}
+                        {pelunasan && ', sudah dibayar'}
                       </dt>
                       <dd className="text-[17px] font-semibold">{rupiah(dp)}</dd>
                     </div>
@@ -186,11 +194,13 @@ export default function CheckoutPage() {
               <aside className="h-fit rounded-sm border border-line bg-white p-6 lg:sticky lg:top-8">
                 <h2 className="font-display text-[21px] font-semibold">Metode Pembayaran</h2>
 
+                {/* fieldset + legend: pembaca layar menyebut nama grupnya
+                    ("Virtual Account") saat masuk ke radio pertama. */}
                 {grupMetode.map((grup) => (
-                  <div key={grup} className="mt-5">
-                    <p className="text-[11px] font-semibold tracking-[0.06em] text-muted">
+                  <fieldset key={grup} className="mt-5">
+                    <legend className="text-[11px] font-semibold tracking-[0.06em] text-muted">
                       {grup.toUpperCase()}
-                    </p>
+                    </legend>
                     <div className="mt-2 space-y-2">
                       {metodeBayar.filter((m) => m.grup === grup).map((m) => (
                         <label
@@ -209,33 +219,47 @@ export default function CheckoutPage() {
                               className="h-4 w-4 accent-ink"
                             />
                             <span className="flex-1 text-[14px] font-semibold">{m.label}</span>
+                            {/* alt kosong: namanya sudah dibacakan dari teks di sebelahnya. */}
+                            <img
+                              src={logoMetode(m.id)}
+                              alt=""
+                              width={64}
+                              height={24}
+                              loading="lazy"
+                              className="h-6 w-16 shrink-0 object-contain"
+                            />
                           </span>
                         </label>
                       ))}
                     </div>
-                  </div>
+                  </fieldset>
                 ))}
 
-                {galat && (
-                  <p className="mt-5 border border-maroon/30 bg-maroon/5 px-3 py-2 text-[13px] text-maroon">
-                    {galat}
+                {/* Di HP blok ini menempel di bawah layar selama daftar metode
+                    di-scroll, supaya tombol Bayar tidak terkubur di bawah 10
+                    pilihan. Di lg aside-nya sudah sticky, jadi kembali biasa. */}
+                <div className="sticky bottom-0 -mx-6 -mb-6 mt-6 border-t border-line bg-white px-6 pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] lg:static lg:m-0 lg:mt-6 lg:border-0 lg:p-0">
+                  {galat && (
+                    <p className="mb-4 border border-maroon/30 bg-maroon/5 px-3 py-2 text-[13px] text-maroon">
+                      {galat}
+                    </p>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={bayar}
+                    disabled={membayar}
+                    className="flex h-12 w-full items-center justify-center gap-2.5 rounded-sm bg-amber text-[16px] font-medium text-navy-900 transition-opacity hover:opacity-90 disabled:opacity-50"
+                  >
+                    <LockIcon className="h-4 w-4" />
+                    {membayar ? 'Menyiapkan tagihan…' : `Bayar ${rupiah(tagihan)}`}
+                  </button>
+
+                  <p className="mt-3 flex items-center justify-center gap-1.5 text-[12px] text-muted">
+                    <ShieldIcon className="h-3.5 w-3.5" />
+                    Pembayaran diproses secara aman.
                   </p>
-                )}
-
-                <button
-                  type="button"
-                  onClick={bayar}
-                  disabled={membayar}
-                  className="mt-6 flex h-12 w-full items-center justify-center gap-2.5 rounded-sm bg-amber text-[16px] font-medium text-navy-900 transition-opacity hover:opacity-90 disabled:opacity-50"
-                >
-                  <LockIcon className="h-4 w-4" />
-                  {membayar ? 'Menyiapkan tagihan…' : `Bayar ${rupiah(tagihan)}`}
-                </button>
-
-                <p className="mt-3 flex items-center justify-center gap-1.5 text-[12px] text-muted">
-                  <ShieldIcon className="h-3.5 w-3.5" />
-                  Pembayaran diproses secara aman.
-                </p>
+                </div>
               </aside>
             </div>
           </FlowLayout>

@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import FlowLayout from '../components/FlowLayout'
-import { OrderField, OrderSection, OrderTextarea } from '../components/OrderLayout'
+import { OrderSection, OrderTextarea } from '../components/OrderLayout'
+import Dropdown from '../components/Dropdown'
+import { RENTANG_JAM, daftarJam } from '../lib/durasi'
 import { CalendarIcon, MapPinIcon } from '../components/icons'
 import { categories } from '../data/categories'
 import { buatBooking } from '../lib/api'
@@ -75,7 +77,7 @@ export default function PesanSemuaPage() {
     for (const r of antre) {
       const detail = [
         r.category === 'attire_rental'
-          ? `Sewa busana untuk ${nilai.tipe} — ukuran & warna dikonfirmasi lewat chat vendor`
+          ? `Sewa busana untuk ${nilai.tipe}, ukuran & warna dikonfirmasi lewat chat vendor`
           : venue.trim(),
         r.category === 'attire_rental' && `Acara di: ${venue.trim()}`,
         catatan.trim() && `Catatan: ${catatan.trim()}`,
@@ -113,30 +115,13 @@ export default function PesanSemuaPage() {
             </p>
           </OrderSection>
 
-          <OrderSection title="Lokasi Acara" icon={<MapPinIcon />}>
-            <div className="space-y-5">
-              <OrderTextarea
-                id="venue"
-                label="VENUE & ALAMAT LENGKAP"
-                rows={3}
-                placeholder="Nama gedung / rumah, jalan, kota"
-                value={venue}
-                onChange={setVenue}
-              />
-              <OrderTextarea
-                id="catatan"
-                label="CATATAN UNTUK SEMUA VENDOR (OPSIONAL)"
-                rows={3}
-                value={catatan}
-                onChange={setCatatan}
-              />
-            </div>
-          </OrderSection>
-
+          {/* Layanan didahulukan dari lokasi: dulu daftar yang sedang dipesan
+              baru terlihat sesudah menggulung melewati form alamat. */}
           <OrderSection title="Layanan yang Dipesan">
             <ul className="divide-y divide-line">
               {rekomendasi.map((r) => {
-                const kat = categories[KATEGORI_AI[r.category as keyof typeof KATEGORI_AI] ?? 'eo']
+                const kunci = KATEGORI_AI[r.category as keyof typeof KATEGORI_AI] ?? 'eo'
+                const kat = categories[kunci]
                 const h = hasil[r.service_id]
                 return (
                   <li key={r.service_id} className="py-5 first:pt-0 last:pb-0">
@@ -161,14 +146,27 @@ export default function PesanSemuaPage() {
                     {pilih.includes(r.service_id) && !h?.ok && (
                       <div className="mt-3 pl-7">
                         {butuhJam(r.category) ? (
+                          // Daftar jam penuh, sama dengan KalenderSlot di halaman pesan
+                          // biasa. Dulu <input type="time"> bebas: MUA/fotografer bisa
+                          // memilih 09:30 lalu ditolak backend ("harus jam penuh").
                           <div className="max-w-[220px]">
-                            <OrderField
+                            <label
+                              htmlFor={`jam-${r.service_id}`}
+                              className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70"
+                            >
+                              {labelJam(r.category)}
+                            </label>
+                            <Dropdown
                               id={`jam-${r.service_id}`}
-                              label={labelJam(r.category)}
-                              type="time"
                               value={jam[r.service_id] ?? ''}
                               onChange={(v) => setJam((j) => ({ ...j, [r.service_id]: v }))}
-                            />
+                              className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
+                            >
+                              <option value="">Pilih jam</option>
+                              {daftarJam(RENTANG_JAM[kunci]).map((j) => (
+                                <option key={j} value={j}>{j}</option>
+                              ))}
+                            </Dropdown>
                           </div>
                         ) : (
                           <p className="text-[12px] text-muted">Dikirim di tanggal acara, tanpa jam.</p>
@@ -182,13 +180,33 @@ export default function PesanSemuaPage() {
                           h.ok ? 'bg-emerald-50 text-emerald-800' : 'border border-maroon/30 bg-maroon/5 text-maroon'
                         }`}
                       >
-                        {h.ok ? 'Terkirim — menunggu vendor menerima pesanan.' : h.galat}
+                        {h.ok ? 'Terkirim. Menunggu vendor menerima pesanan.' : h.galat}
                       </p>
                     )}
                   </li>
                 )
               })}
             </ul>
+          </OrderSection>
+
+          <OrderSection title="Lokasi Acara" icon={<MapPinIcon />}>
+            <div className="space-y-5">
+              <OrderTextarea
+                id="venue"
+                label="VENUE & ALAMAT LENGKAP"
+                rows={3}
+                placeholder="Nama gedung / rumah, jalan, kota"
+                value={venue}
+                onChange={setVenue}
+              />
+              <OrderTextarea
+                id="catatan"
+                label="CATATAN UNTUK SEMUA VENDOR (OPSIONAL)"
+                rows={3}
+                value={catatan}
+                onChange={setCatatan}
+              />
+            </div>
           </OrderSection>
 
           <Link

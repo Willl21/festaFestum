@@ -166,9 +166,11 @@ export default function VendorLayout() {
             Keluar
           </button>
           <div className="mt-5 flex justify-around text-[12px] text-ink/70">
-            <span className="flex items-center gap-1.5">
+            {/* Dulu cuma teks yang terlihat seperti tautan. Bantuan = tiket ke
+                tim admin, ruangan yang sama dengan tab "Chat Tim Admin". */}
+            <Link to="/vendor/pesan?tab=admin" className="flex items-center gap-1.5 hover:text-navy-900">
               <HelpIcon /> Bantuan
-            </span>
+            </Link>
             <Link to="/vendor/profil" className="flex items-center gap-1.5 hover:text-navy-900">
               <SettingsIcon /> Pengaturan
             </Link>
@@ -178,7 +180,7 @@ export default function VendorLayout() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-4 border-b border-line bg-white px-6 py-4 md:px-10">
-          <p className="font-display text-[24px] font-semibold">Festa Marketplace</p>
+          <p className="font-display text-[24px] font-semibold">Festa Festum</p>
           <div className="flex items-center gap-4 text-ink/70">
             {/* Hiasan di sini tidak muat bareng tombol menu di layar 375px —
                 header-nya melar 13px dan SELURUH halaman vendor bisa digeser
@@ -186,9 +188,17 @@ export default function VendorLayout() {
                 sungguhan dia satu-satunya yang bisa diklik, jadi tetap tampil
                 di HP. Lonceng ikut dikecualikan sejak berfungsi (migrasi 019). */}
             <span className="hidden items-center gap-4 sm:flex">
-              <span className="rounded-full bg-lavender/50 px-3 py-1 text-[12px] font-semibold text-navy-900">
-                <span className="mr-1 inline-block h-2 w-2 rounded-full bg-amber align-middle" aria-hidden /> Status: Aktif
-              </span>
+              {/* Dulu "Status: Aktif" tetap di kode. Sekarang status verifikasi
+                  sungguhan, yang memang menentukan lencana di marketplace. */}
+              {vendor && (
+                <span className="rounded-full bg-lavender/50 px-3 py-1 text-[12px] font-semibold text-navy-900">
+                  <span
+                    className={`mr-1 inline-block h-2 w-2 rounded-full align-middle ${vendor.is_verified ? 'bg-[#2e6b52]' : 'bg-amber'}`}
+                    aria-hidden
+                  />
+                  {vendor.is_verified ? 'Terverifikasi' : 'Menunggu verifikasi'}
+                </span>
+              )}
             </span>
             <Lonceng />
             <Link
@@ -235,8 +245,8 @@ export default function VendorLayout() {
         </main>
 
         <footer className="bg-lavender/40 px-6 py-8 text-[13px] text-ink/70 md:px-10">
-          <p className="font-display text-[24px] font-semibold text-ink">Festa</p>
-          <p className="mt-1">© 2026 Festa Marketplace. Secure Escrow Protected.</p>
+          <p className="font-display text-[24px] font-semibold text-ink">Festa Festum</p>
+          <p className="mt-1">© 2026 Festa Festum. Dana pemesanan ditahan escrow sampai acara selesai.</p>
         </footer>
       </div>
     </div>

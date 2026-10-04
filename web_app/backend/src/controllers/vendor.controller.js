@@ -314,14 +314,20 @@ async function updateVendor(req, res, next) {
       `UPDATE vendors SET
          business_name = COALESCE($1, business_name),
          city          = COALESCE($2, city),
-         address       = COALESCE($3, address),
-         description   = COALESCE($4, description),
+         -- Alamat & deskripsi boleh dikosongkan: tidak dikirim = biarkan,
+         -- '' = hapus (pola yang sama dengan image_url di services).
+         address       = CASE WHEN $3::text IS NULL THEN address
+                              WHEN $3 = '' THEN NULL ELSE $3 END,
+         description   = CASE WHEN $4::text IS NULL THEN description
+                              WHEN $4 = '' THEN NULL ELSE $4 END,
          daily_capacity = COALESCE($5, daily_capacity),
          jeda_menit    = COALESCE($8, jeda_menit),
          updated_at    = now()
        WHERE vendor_id = $6 AND owner_user_id = $7
        RETURNING *`,
-      [business_name || null, city || null, address || null, description || null,
+      [business_name || null, city || null,
+       address == null ? null : String(address).trim(),
+       description == null ? null : String(description).trim(),
        daily_capacity === undefined ? null : Number(daily_capacity),
        vendorId, req.user.user_id,
        jeda_menit === undefined ? null : Number(jeda_menit)]

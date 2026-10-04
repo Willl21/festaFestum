@@ -44,7 +44,12 @@ async function buatUlasan(req, res, next) {
 
     const bk = await client.query(
       `SELECT b.booking_id, b.payment_status, s.vendor_id,
-              (b.event_date < CURRENT_DATE) AS acara_lewat
+              -- Tanggal WIB, bukan CURRENT_DATE: sesi DB Supabase berjalan di UTC,
+              -- jadi pukul 00.00-07.00 WIB sehari sesudah acara tombol ulasan
+              -- sudah tampil di browser tapi kirimannya dibalas 409.
+              -- ponytail: CURRENT_DATE lain (notice, escrow) masih UTC; satukan
+              -- lewat helper kalau selisih 7 jam itu mulai terasa.
+              (b.event_date < (now() AT TIME ZONE 'Asia/Jakarta')::date) AS acara_lewat
          FROM bookings b
          JOIN services s ON s.service_id = b.service_id
         WHERE b.booking_id = $1 AND b.user_id = $2`,

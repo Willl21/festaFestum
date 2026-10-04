@@ -1,4 +1,5 @@
 import type { ApiService } from './api'
+import type { CategoryKey } from '../data/categories'
 
 /** Rumus paket berbasis jam (MUA & fotografer, migrasi 016). CERMINAN
  *  durasiPesanan() di backend/src/lib/kategori.js — backend tetap yang
@@ -6,6 +7,25 @@ import type { ApiService } from './api'
  *  dan harga di layar sama dengan yang nanti ditagih. Ubah dua-duanya. */
 
 export const MAKS_JAM_TAMBAHAN = 6
+
+/** Jam yang bisa dipilih per kategori (jam penuh saja; backend mewajibkan
+ *  HH:00 untuk MUA & fotografer). MUA mulai subuh karena rias pengantin biasa
+ *  jam 4-5 pagi; florist & sewa jas memakai jam kirim/ambil, jadi cukup jam
+ *  kerja gerai. Jam terakhir itu LAST ORDER: pesanan boleh selesai melewatinya.
+ *  Dipakai KalenderSlot dan Pesan Semua (Festa AI). */
+export const RENTANG_JAM: Record<CategoryKey, [number, number]> = {
+  mua: [4, 20],
+  eo: [6, 22],
+  fotografer: [6, 22],
+  florist: [7, 20],
+  attire: [7, 20],
+}
+
+export function daftarJam([mulai, selesai]: [number, number]) {
+  const jam: string[] = []
+  for (let h = mulai; h <= selesai; h++) jam.push(`${String(h).padStart(2, '0')}:00`)
+  return jam
+}
 
 export const berbasisJam = (l?: Pick<ApiService, 'durasi_menit'>) => l?.durasi_menit != null
 

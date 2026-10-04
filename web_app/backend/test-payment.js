@@ -232,6 +232,16 @@ function ok(label) {
     return;
   }
 
+  // --- 6b. Tagihan kedaluwarsa tidak bisa "dibayar" lewat simulasi ---------
+  // Slotnya mungkin sudah dilepas ke orang lain. Batas waktunya dimundurkan
+  // langsung di DB, lalu dikembalikan supaya skenario berikutnya tetap jalan.
+  const pid = dp.body.payment.payment_id;
+  await pool.query(`UPDATE payments SET expires_at = now() - interval '1 minute' WHERE payment_id = $1`, [pid]);
+  const bayarBasi = await api(`/payments/${pid}/simulate`, { method: 'POST', token: customerToken });
+  await pool.query(`UPDATE payments SET expires_at = now() + interval '1 day' WHERE payment_id = $1`, [pid]);
+  assert.strictEqual(bayarBasi.status, 409, `tagihan kedaluwarsa harusnya 409, dapat ${bayarBasi.status}`);
+  ok('simulasi menolak tagihan yang sudah kedaluwarsa (409)');
+
   // --- 7. Bayar (simulasi) -> booking jadi dp_paid ------------------------
   const bayarDp = await api(`/payments/${dp.body.payment.payment_id}/simulate`, {
     method: 'POST', token: customerToken,

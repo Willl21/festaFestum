@@ -75,6 +75,10 @@ export default function VendorJadwalPage() {
   // otomatis penuh seharian begitu dapat satu pesanan; itu yang dulu jadi
   // aturan "kunci seharian" yang dipatok per kategori.
   const [kapasitas, setKapasitas] = useState(1)
+  // Nilai terakhir dari server. Dibandingkan dengan INI, bukan dengan
+  // `kapasitas`: onChange sudah mengisi `kapasitas` lebih dulu, jadi
+  // pembandingan lama selalu "sama" dan PATCH tidak pernah terkirim.
+  const [kapServer, setKapServer] = useState(1)
   const [vendorId, setVendorId] = useState('')
   const [simpanKapasitas, setSimpanKapasitas] = useState('')
   // MUA & fotografer (migrasi 016): kapasitas = jumlah TIM yang bisa jalan
@@ -118,6 +122,7 @@ export default function VendorJadwalPage() {
       }
       setAvailability(next)
       setKapasitas(r.daily_capacity)
+      setKapServer(r.daily_capacity)
     } catch (e) {
       setGalat((e as Error).message)
     } finally {
@@ -148,7 +153,7 @@ export default function VendorJadwalPage() {
   }, [])
 
   async function simpanKap(n: number) {
-    if (!vendorId || n === kapasitas) return
+    if (!vendorId || n === kapServer) return
     setSimpanKapasitas('menyimpan')
     setGalat('')
     try {
@@ -209,7 +214,7 @@ export default function VendorJadwalPage() {
     <>
       <VendorPageHeader
         title="Jadwal & Ketersediaan"
-        description="Anda tersedia secara bawaan. Tutup tanggal yang tidak bisa Anda layani — tanggal yang ditutup tidak akan muncul di hasil pencarian."
+        description="Anda tersedia secara bawaan. Tutup tanggal yang tidak bisa Anda layani, tanggal yang ditutup tidak akan muncul di hasil pencarian."
         action={
           <div className="flex gap-3">
             <div className="rounded-md border border-line bg-white px-5 py-3 text-center">
@@ -318,9 +323,14 @@ export default function VendorJadwalPage() {
                   aria-pressed={isSelected}
                   className={`flex h-[64px] flex-col items-start rounded-md border p-1.5 text-left transition-colors sm:h-[74px] sm:p-2 ${
                     isSelected ? 'border-ink bg-lavender/40' : 'border-line hover:border-navy-900/40'
-                  } ${isPast ? 'cursor-not-allowed opacity-35' : ''}`}
+                  } ${isPast ? 'cursor-not-allowed opacity-35' : ''} ${
+                    // Tanggal yang ditutup dulu cuma beda di titik kecil berwarna
+                    // putih, nyaris tak terlihat. Sekarang seluruh petaknya redup.
+                    hari?.status === 'blocked' && !isSelected ? 'bg-ink/[0.06] text-ink/45' : ''
+                  }`}
                 >
                   <span className="text-[13px] font-semibold">{date.getDate()}</span>
+                  {hari?.status === 'blocked' && <span className="text-[10px] font-medium">Ditutup</span>}
                   {hari && (
                     <span className="mt-auto flex w-full items-center justify-between gap-1">
                       <span className={`h-1.5 w-1.5 rounded-full ${WARNA_STATUS[hari.status]}`} />
@@ -344,7 +354,7 @@ export default function VendorJadwalPage() {
           <div className="mt-6 flex flex-wrap gap-5 border-t border-line pt-4 text-[12px] text-ink/70">
             <Legend className="bg-amber">Terbuka</Legend>
             <Legend className="bg-maroon">Penuh</Legend>
-            <Legend className="border border-line bg-white">Anda tutup</Legend>
+            <Legend className="border border-ink/30 bg-ink/10">Anda tutup</Legend>
           </div>
         </section>
 
@@ -396,12 +406,15 @@ export default function VendorJadwalPage() {
                   {sibuk === selected
                     ? 'Menyimpan...'
                     : hariDipilih.status === 'available'
-                      ? 'Terbuka — klik untuk tutup'
-                      : 'Ditutup — klik untuk buka'}
+                      ? 'Terbuka, klik untuk tutup'
+                      : 'Ditutup, klik untuk buka'}
                 </button>
               )}
 
-              {hariDipilih.status !== 'booked' && hariDipilih.terpakai > 0 && (
+              {/* jumlahPesanan ikut dicek: untuk MUA & fotografer backend tidak
+                  menghitung pesanan per jam ke `terpakai`, jadi peringatan ini
+                  dulu tidak pernah muncul dan vendor baru tahu dari 409. */}
+              {hariDipilih.status !== 'booked' && (hariDipilih.terpakai > 0 || hariDipilih.jumlahPesanan > 0) && (
                 <p className="mt-3 text-[12px] text-muted">
                   Sudah ada {hariDipilih.jumlahPesanan} pesanan di tanggal ini, jadi tanggalnya tidak
                   bisa ditutup sampai pesanannya dibatalkan.

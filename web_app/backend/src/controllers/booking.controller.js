@@ -584,7 +584,8 @@ async function konfirmasiBooking(req, res, next) {
               to_char(b.event_date, 'DD/MM/YYYY') || COALESCE(' pukul ' || to_char(b.start_time, 'HH24:MI'), '')
                 || COALESCE('–' || to_char(b.start_time + b.durasi_menit * interval '1 minute', 'HH24:MI'), '')
                 AS tanggal,
-              c.email AS customer_email, c.name AS customer_name
+              c.email AS customer_email, c.name AS customer_name,
+              c.notification_prefs AS prefs_klien
          FROM bookings b
          JOIN services s ON s.service_id = b.service_id
          JOIN vendors  v ON v.vendor_id  = s.vendor_id
@@ -606,6 +607,15 @@ async function konfirmasiBooking(req, res, next) {
       return res.status(409).json({
         message: `Pesanan ini sudah ${booking.confirm_status}`,
       });
+    }
+
+    // Klien yang membatalkan sebelum dijawab tidak mengubah confirm_status
+    // (batalBooking cuma menyentuh payment_status), jadi pesanan batal masih
+    // terbaca 'menunggu'. Tanpa ini vendor bisa "menerima" pesanan yang sudah
+    // mati dan klien dapat email diterima.
+    if (booking.payment_status !== 'pending') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Pesanan ini sudah dibatalkan klien atau kedaluwarsa' });
     }
 
     if (action === 'terima') {
@@ -697,7 +707,9 @@ async function konfirmasiBooking(req, res, next) {
 
     // 2. Email — SESUDAH commit dan tidak ditunggu. Layanan luar yang lambat
     //    atau mati tidak boleh menahan jawaban vendor, apalagi membatalkannya.
-    kirimEmail({
+    //    Dilewati kalau klien mematikan "Email status pesanan" di /profil;
+    //    kunci yang belum pernah diisi dianggap menyala (perilaku lama).
+    if (booking.prefs_klien?.status_pembayaran !== false) kirimEmail({
       ke: booking.customer_email,
       nama: booking.customer_name,
       subjek: diterima

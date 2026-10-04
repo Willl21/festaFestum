@@ -77,7 +77,10 @@ export default function AdminRingkasanPage() {
     Promise.all([
       get<{ stats: Stats }>('/admin/stats'),
       get<{ escrow: Escrow }>('/admin/escrow'),
-      get<{ data: Booking[] }>('/admin/bookings?limit=8'),
+      // 50 = batas endpoint. Sebaran wilayah dihitung dari semuanya; tabel di
+      // bawah cuma 8 teratas. Dulu sebarannya ikut 8 baris tabel, jadi kartu
+      // "Sebaran Jabodetabek" nyaris kosong dan menyesatkan.
+      get<{ data: Booking[] }>('/admin/bookings?limit=50'),
     ])
       .then(([a, b, c]) => {
         setStats(a.stats)
@@ -149,7 +152,7 @@ export default function AdminRingkasanPage() {
               <section className="min-w-0 rounded-lg border border-line bg-white p-6">
                 <p className="text-[11px] tracking-wide text-muted uppercase">Saturasi Geografis</p>
                 <h2 className="mt-1 font-display text-[22px] font-semibold text-navy-900">
-                  Sebaran Pemesanan Jabodetabek
+                  Sebaran {acara.length} Pemesanan Terbaru
                 </h2>
 
                 {perWilayah.length === 0 ? (
@@ -176,7 +179,7 @@ export default function AdminRingkasanPage() {
                 )}
 
                 <p className="mt-6 border-t border-line pt-4 text-[12px] text-muted">
-                  Dihitung dari {acara.length} pemesanan terbaru yang tampil di bawah.
+                  Dihitung dari {acara.length} pemesanan terbaru di seluruh Jabodetabek, per kota vendor.
                 </p>
               </section>
 
@@ -229,7 +232,7 @@ export default function AdminRingkasanPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {acara.map((b) => (
+                      {acara.slice(0, 8).map((b) => (
                         <tr key={b.booking_id} className="border-t border-line">
                           <td className="px-5 py-4">
                             <p className="font-semibold text-navy-900">{b.customer_name}</p>

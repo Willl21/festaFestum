@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { inputClass } from './AuthLayout'
 import { post, type AuthResponse, type TantanganKode } from '../lib/api'
+import { UMUR_KODE_MS, formatSisa, sisaKode, useDetik } from '../lib/hitungMundur'
 
 /** Langkah kedua masuk (migrasi 022): sandi sudah benar, server mengirim kode
  *  6 digit ke email dan baru memberi token sesudah kode dicocokkan. Dipakai
@@ -18,6 +19,11 @@ export default function LangkahKode({
   const [kode, setKode] = useState('')
   const [galat, setGalat] = useState('')
   const [sibuk, setSibuk] = useState(false)
+  // ponytail: dihitung dari saat layar ini muncul, bukan dari server. Masuk ulang
+  // dalam 60 dtk memakai kode lama, jadi kode bisa habis <=1 menit lebih awal.
+  // Kalau perlu presisi, kirim `kedaluwarsa` di balasan login.
+  const [berakhir] = useState(() => Date.now() + UMUR_KODE_MS)
+  const sisa = sisaKode(berakhir, useDetik())
 
   async function kirim(e: React.FormEvent) {
     e.preventDefault()
@@ -36,7 +42,13 @@ export default function LangkahKode({
     <form onSubmit={kirim} className="mt-7">
       <p className="rounded bg-lavender px-4 py-3 text-[14px] text-navy-900" role="status">
         Kode 6 digit sudah dikirim ke <span className="font-semibold">{tantangan.email}</span>.
-        Berlaku 10 menit.
+      </p>
+      <p className={`mt-2 text-[13px] ${sisa ? 'text-muted' : 'font-semibold text-maroon'}`}>
+        {sisa ? (
+          <>Berlaku <span className="font-mono font-semibold tabular-nums text-navy-900">{formatSisa(sisa)}</span> lagi</>
+        ) : (
+          'Kode sudah kedaluwarsa. Masuk ulang untuk meminta kode baru.'
+        )}
       </p>
 
       <label htmlFor="kode" className="mt-5 block text-[12px] font-semibold tracking-[0.08em] text-navy-900">
@@ -60,7 +72,7 @@ export default function LangkahKode({
 
       <button
         type="submit"
-        disabled={sibuk || kode.length !== 6}
+        disabled={sibuk || !sisa || kode.length !== 6}
         className="mt-6 h-11 w-full rounded bg-navy-900 text-[15px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
       >
         {sibuk ? 'Memeriksa…' : 'Verifikasi & Masuk'}

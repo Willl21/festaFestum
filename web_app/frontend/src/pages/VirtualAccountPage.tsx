@@ -6,7 +6,7 @@ import Img from '../components/Img'
 import FlowLayout from '../components/FlowLayout'
 import { CopyIcon, ChevronDown } from '../components/icons'
 import { categories, type CategoryKey } from '../data/categories'
-import { cariMetode } from '../data/payments'
+import { cariMetode, logoMetode } from '../data/payments'
 import { rupiah } from '../lib/format'
 import {
   getPayment, refreshPembayaran, simulasiBayar, urlFotoLayanan,
@@ -64,10 +64,10 @@ function CopyBox({
         type="button"
         onClick={salin}
         aria-label={`Salin ${value}`}
-        className="flex shrink-0 items-center gap-1.5 text-[12px] font-semibold tracking-[0.06em] text-navy-900 transition-colors hover:text-amber"
+        className="flex shrink-0 items-center gap-1.5 text-[12px] font-semibold tracking-[0.06em] text-navy-900 underline-offset-4 hover:underline"
       >
         <CopyIcon />
-        {status === 'ok' ? 'TERSALIN' : status === 'gagal' ? 'GAGAL — SALIN MANUAL' : 'SALIN'}
+        {status === 'ok' ? 'TERSALIN' : status === 'gagal' ? 'GAGAL, SALIN MANUAL' : 'SALIN'}
       </button>
     </div>
   )
@@ -104,23 +104,37 @@ export default function VirtualAccountPage() {
     return () => clearInterval(id)
   }, [])
 
+  /** Jawaban /refresh: lunas -> halaman konfirmasi; gagal/kedaluwarsa di
+   *  Midtrans -> halaman ikut berganti keadaan. `payment` bisa tidak ada kalau
+   *  Midtrans belum mengenal tagihannya; itu dianggap masih menunggu.
+   *  Mengembalikan true kalau statusnya sudah bukan pending lagi. */
+  function terapkan(p: ApiPaymentDetail, baru: { gateway_status: ApiPaymentDetail['gateway_status'] } | undefined) {
+    if (!baru || baru.gateway_status === 'pending') return false
+    if (baru.gateway_status === 'success') navigate(`/pesanan/selesai/${p.booking_id}`)
+    else setPayment({ ...p, gateway_status: baru.gateway_status })
+    return true
+  }
+
   // Polling: backend bertanya ke Midtrans setiap 10 detik. Ini yang bikin
   // halaman tetap maju walau webhook tidak sampai (backend masih localhost).
+  // Berhenti sendiri begitu batas waktunya lewat.
   useEffect(() => {
     if (!payment || payment.gateway_status !== 'pending') return
+    const batas = payment.expires_at ? new Date(payment.expires_at).getTime() : Infinity
 
     const id = setInterval(async () => {
+      if (Date.now() > batas) return clearInterval(id)
       try {
-        const r = await refreshPembayaran(payment.payment_id)
-        if (r.payment.gateway_status === 'success') {
-          navigate(`/pesanan/selesai/${payment.booking_id}`)
-        }
+        terapkan(payment, (await refreshPembayaran(payment.payment_id)).payment)
       } catch {
-        // Mode simulasi membalas 409 di /refresh — diam saja, tombol
-        // "Saya Sudah Bayar" yang jadi jalannya.
+        // Mode simulasi membalas 409 di /refresh, gangguan lain dicoba lagi
+        // 10 detik kemudian. Diam saja, tombol "Saya Sudah Bayar" yang
+        // memberi tahu kalau memang ada masalah.
       }
     }, 10000)
     return () => clearInterval(id)
+    // terapkan() cuma memanggil navigate & setPayment, keduanya stabil.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payment, navigate])
 
   async function sudahBayar() {
@@ -128,15 +142,19 @@ export default function VirtualAccountPage() {
     setMengecek(true)
     setPesan('')
     try {
-      const r = await refreshPembayaran(payment.payment_id)
-      if (r.payment.gateway_status === 'success') {
-        navigate(`/pesanan/selesai/${payment.booking_id}`)
+      if (terapkan(payment, (await refreshPembayaran(payment.payment_id)).payment)) return
+      setPesan('Pembayaran belum masuk. Coba lagi beberapa saat setelah transfer.')
+    } catch (e) {
+      // Hanya 409 yang berarti Midtrans tidak aktif. Gangguan lain (jaringan
+      // putus, gateway 502) ditampilkan apa adanya, jangan dianggap simulasi:
+      // di server dengan Midtrans aktif, /simulate membalas pesan khusus
+      // developer yang tidak boleh sampai ke pelanggan.
+      if ((e as { status?: number }).status !== 409) {
+        setPesan((e as Error).message)
         return
       }
-      setPesan('Pembayaran belum masuk. Coba lagi beberapa saat setelah transfer.')
-    } catch {
-      // Midtrans tidak aktif -> mode simulasi. Tandai lunas lokal supaya alur
-      // demo tetap bisa jalan tanpa gateway sama sekali.
+      // Mode simulasi: tandai lunas lokal supaya alur demo tetap bisa jalan
+      // tanpa gateway sama sekali.
       try {
         await simulasiBayar(payment.payment_id)
         navigate(`/pesanan/selesai/${payment.booking_id}`)
@@ -168,6 +186,15 @@ export default function VirtualAccountPage() {
         // Kalau user refresh atau ganti perangkat, angkanya tetap sama.
         const deadline = payment.expires_at ? new Date(payment.expires_at).getTime() : null
 
+        // Tiga keadaan yang menentukan isi halaman. Kedaluwarsa dihitung dari
+        // jam juga: di mode simulasi tidak ada yang mengubah gateway_status
+        // tagihan yang lewat batas, jadi DB tetap 'pending'.
+        const keadaan =
+          payment.gateway_status === 'success' ? 'lunas'
+          : payment.gateway_status === 'pending' && !(deadline && deadline <= now) ? 'menunggu'
+          : 'habis'
+        const keCheckout = `/checkout/${payment.booking_id}`
+
         return (
           <FlowLayout>
             <div className="grid gap-8 lg:grid-cols-[1fr_430px]">
@@ -176,31 +203,46 @@ export default function VirtualAccountPage() {
                   <div className="flex flex-wrap items-start justify-between gap-5">
                     <div>
                       <h1 className="font-display text-[28px] font-semibold">
-                        {payment.gateway_status === 'success' ? 'Pembayaran Diterima' : 'Menunggu Pembayaran'}
+                        {keadaan === 'lunas' ? 'Pembayaran Diterima'
+                          : keadaan === 'habis' ? 'Tagihan Kedaluwarsa'
+                          : 'Menunggu Pembayaran'}
                       </h1>
                       <p className="mt-2 max-w-[380px] text-[14px] leading-relaxed text-ink/75">
-                        {payment.payment_type === 'settlement'
-                          ? 'Ini tagihan pelunasan. Selesaikan sebelum waktu habis.'
-                          : 'Selesaikan pembayaran DP Anda sebelum waktu habis agar slot tidak dilepas.'}
+                        {keadaan === 'lunas'
+                          ? 'Pembayaran ini sudah kami terima dan ditahan di escrow sampai acara selesai.'
+                          : keadaan === 'habis'
+                            ? 'Batas waktunya sudah lewat, jadi nomor di tagihan ini tidak bisa dipakai lagi. Buat tagihan baru untuk melanjutkan.'
+                            : payment.payment_type === 'settlement'
+                              ? 'Ini tagihan pelunasan. Selesaikan sebelum waktu habis.'
+                              : 'Selesaikan pembayaran DP Anda sebelum waktu habis agar slot tidak dilepas.'}
                       </p>
                     </div>
 
-                    {deadline && payment.gateway_status === 'pending' && (
-                      <div className="rounded-sm border border-amber bg-amber/10 px-6 py-3 text-center">
-                        <p className="text-[11px] font-semibold tracking-[0.08em] text-amber">BATAS WAKTU</p>
-                        <p className="mt-1 font-display text-[26px] font-semibold text-amber">
+                    {/* Angkanya navy, bukan amber: amber di latar terang cuma
+                        ~1,9:1, padahal ini info terpenting di halaman. */}
+                    {deadline && keadaan === 'menunggu' && (
+                      <div className="rounded-sm border border-amber bg-amber/10 px-6 py-3 text-center" role="timer">
+                        <p className="text-[11px] font-semibold tracking-[0.08em] text-ink/70">BATAS WAKTU</p>
+                        <p className="mt-1 font-display text-[26px] font-semibold tabular-nums text-navy-900">
                           {countdown(deadline - now)}
                         </p>
                       </div>
                     )}
                   </div>
 
+                  {keadaan === 'menunggu' && (<>
                   <div className="mt-7 grid gap-6 border-t border-line pt-6 sm:grid-cols-2">
                     <div>
                       <p className="text-[11px] font-semibold tracking-[0.06em]">METODE PEMBAYARAN</p>
                       <div className="mt-3 flex items-center gap-4">
-                        <span className="rounded-sm bg-lavender/40 px-4 py-2.5 text-[14px] font-bold text-navy-900">
-                          {(d.bank ?? d.store ?? payment.method.split('_')[0]).toUpperCase()}
+                        <span className="flex h-11 w-24 shrink-0 items-center justify-center rounded-sm border border-line bg-white px-2.5">
+                          <img
+                            src={logoMetode(payment.method)}
+                            alt=""
+                            width={76}
+                            height={28}
+                            className="max-h-7 max-w-full object-contain"
+                          />
                         </span>
                         <span className="text-[15px]">{metode?.label ?? payment.method}</span>
                       </div>
@@ -245,13 +287,14 @@ export default function VirtualAccountPage() {
                       {d.deeplink && (
                         <a
                           href={d.deeplink}
-                          className="mt-4 text-[13px] font-semibold text-amber hover:underline"
+                          className="mt-4 text-[13px] font-semibold text-navy-900 underline underline-offset-4"
                         >
                           Buka aplikasi pembayaran
                         </a>
                       )}
                     </div>
                   )}
+                  </>)}
 
                   <div className="mt-6 rounded-sm bg-lavender/25 p-6">
                     <p className="text-[11px] font-semibold tracking-[0.06em] text-ink/70">
@@ -267,7 +310,7 @@ export default function VirtualAccountPage() {
                 </section>
 
                 {/* Accordion pakai <details> bawaan browser — tidak perlu state. */}
-                {metode && (
+                {metode && keadaan === 'menunggu' && (
                   <section className="rounded-sm border border-line bg-white p-7">
                     <h2 className="font-display text-[21px] font-semibold">Instruksi Pembayaran</h2>
 
@@ -293,14 +336,23 @@ export default function VirtualAccountPage() {
 
               <aside className="h-fit space-y-7 lg:sticky lg:top-8">
                 <div className="rounded-sm border border-line bg-white p-6">
-                  <button
-                    type="button"
-                    onClick={sudahBayar}
-                    disabled={mengecek}
-                    className="flex h-12 w-full items-center justify-center rounded-sm bg-ink text-[16px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                  >
-                    {mengecek ? 'Mengecek pembayaran…' : 'Saya Sudah Bayar'}
-                  </button>
+                  {keadaan === 'menunggu' ? (
+                    <button
+                      type="button"
+                      onClick={sudahBayar}
+                      disabled={mengecek}
+                      className="flex h-12 w-full items-center justify-center rounded-sm bg-ink text-[16px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                    >
+                      {mengecek ? 'Mengecek pembayaran…' : 'Saya Sudah Bayar'}
+                    </button>
+                  ) : (
+                    <Link
+                      to={keadaan === 'lunas' ? `/pesanan/selesai/${payment.booking_id}` : keCheckout}
+                      className="flex h-12 w-full items-center justify-center rounded-sm bg-ink text-[16px] font-medium text-white transition-opacity hover:opacity-90"
+                    >
+                      {keadaan === 'lunas' ? 'Lihat Konfirmasi' : 'Buat Tagihan Baru'}
+                    </Link>
+                  )}
                   <Link
                     to="/pesanan"
                     className="mt-3 flex h-12 w-full items-center justify-center rounded-sm border border-ink text-[16px] transition-colors hover:bg-lavender/30"
@@ -314,9 +366,11 @@ export default function VirtualAccountPage() {
                     </p>
                   )}
 
-                  <p className="mt-4 text-center text-[13px] leading-relaxed text-muted">
-                    Status dicek otomatis setiap 10 detik.
-                  </p>
+                  {keadaan === 'menunggu' && (
+                    <p className="mt-4 text-center text-[13px] leading-relaxed text-muted">
+                      Status dicek otomatis setiap 10 detik.
+                    </p>
+                  )}
                 </div>
 
                 <div className="rounded-sm border border-line bg-white p-6">
@@ -336,7 +390,7 @@ export default function VirtualAccountPage() {
                       className="h-[90px] w-[90px] shrink-0 object-cover"
                     />
                     <div>
-                      <p className="text-[11px] font-semibold tracking-[0.06em] text-amber">
+                      <p className="text-[11px] font-semibold tracking-[0.06em] text-muted">
                         {kat.label.toUpperCase()}
                       </p>
                       <h3 className="mt-1 font-display text-[21px] font-semibold">
@@ -344,9 +398,10 @@ export default function VirtualAccountPage() {
                       </h3>
                       <p className="mt-1.5 text-[14px] leading-relaxed text-ink/80">
                         {new Date(payment.event_date).toLocaleDateString('id-ID', {
-                          day: 'numeric', month: 'short', year: 'numeric',
-                        })}{' '}
-                        – {payment.service_name}
+                          day: 'numeric', month: 'long', year: 'numeric',
+                        })}
+                        <br />
+                        {payment.service_name}
                       </p>
                     </div>
                   </div>

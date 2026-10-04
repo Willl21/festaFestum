@@ -55,6 +55,9 @@ type Stats = {
 const tabs = [
   { id: 'pending', label: 'Menunggu Kurasi' },
   { id: 'verified', label: 'Terverifikasi' },
+  // Dulu vendor yang ditolak tetap di antrean "Menunggu Kurasi" (lihat
+  // SQL_DITOLAK di admin.controller.js).
+  { id: 'rejected', label: 'Ditolak' },
   { id: 'all', label: 'Semua' },
 ] as const
 
@@ -93,8 +96,10 @@ export default function AdminVendorPage() {
   const [galat, setGalat] = useState('')
   const [sibuk, setSibuk] = useState(false)
 
+  // `memuat` cuma untuk pemuatan PERTAMA (state awalnya sudah true). Dulu
+  // dinyalakan lagi di sini, jadi tiap setuju/tolak dan ganti tab seluruh
+  // halaman berganti rangka dan posisi gulungan hilang.
   const muat = useCallback(async () => {
-    setMemuat(true)
     setGalat('')
     try {
       const [v, s] = await Promise.all([
@@ -152,7 +157,7 @@ export default function AdminVendorPage() {
             <div>
               <h1 className="font-display text-[32px] font-semibold text-navy-900">Persetujuan Vendor</h1>
               <p className="mt-2 text-[14px] text-muted">
-                Vendor hanya tampil di marketplace setelah dikurasi. Menyetujui vendor sekaligus
+                Vendor terverifikasi mendapat lencana di marketplace. Menyetujui vendor sekaligus
                 menandai dokumen legalnya.
               </p>
             </div>
@@ -165,7 +170,7 @@ export default function AdminVendorPage() {
 
           <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Kartu label="Menunggu Kurasi" nilai={stats?.menunggu ?? '—'} catatan="Vendor belum terverifikasi" />
-            <Kartu label="Vendor Terverifikasi" nilai={stats?.terverifikasi ?? '—'} catatan="Tampil di pencarian" />
+            <Kartu label="Vendor Terverifikasi" nilai={stats?.terverifikasi ?? '—'} catatan="Berlencana di marketplace" />
             <Kartu
               label="Dokumen Menunggu"
               nilai={stats?.dokumen_menunggu ?? '—'}
@@ -259,6 +264,10 @@ export default function AdminVendorPage() {
                               <span className="rounded-full bg-[#2e6b52]/10 px-3 py-1 text-[12px] font-semibold text-[#2e6b52]">
                                 Terverifikasi
                               </span>
+                            ) : v.verified_at && !v.documents.some((d) => d.status === 'pending') ? (
+                              <span className="rounded-full bg-maroon/10 px-3 py-1 text-[12px] font-semibold text-maroon">
+                                Ditolak
+                              </span>
                             ) : (
                               <span className="rounded-full bg-amber/20 px-3 py-1 text-[12px] font-semibold text-navy-900">
                                 Menunggu
@@ -274,8 +283,8 @@ export default function AdminVendorPage() {
 
               <p className="flex gap-3 border-t border-line bg-cream px-5 py-4 text-[12px] leading-relaxed text-muted">
                 <ShieldIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
-                Vendor yang belum terverifikasi tetap bisa mengisi layanan dan jadwal, tapi menandai
-                terverifikasi adalah keputusan kurator — dan tercatat atas nama akun admin ini.
+                Vendor yang belum terverifikasi tetap tampil dan bisa dipesan, hanya tanpa lencana.
+                Keputusan kurasi tercatat atas nama akun admin ini.
               </p>
             </section>
 
@@ -374,7 +383,7 @@ export default function AdminVendorPage() {
                     rows={3}
                     value={catatan}
                     onChange={(e) => setCatatan(e.target.value)}
-                    placeholder="Wajib diisi kalau menolak — sebutkan apa yang harus diperbaiki."
+                    placeholder="Wajib diisi kalau menolak. Sebutkan apa yang harus diperbaiki."
                     className="mt-2 w-full rounded border border-line bg-cream px-4 py-3 text-[13px] text-ink outline-none placeholder:text-ink/55 focus:border-navy-900"
                   />
 
@@ -395,6 +404,11 @@ export default function AdminVendorPage() {
                   >
                     Tolak & Kirim Catatan
                   </button>
+                  {/* Galat aksi diulang di dekat tombolnya: banner di atas
+                      halaman tidak terlihat dari panel ini. */}
+                  {galat && (
+                    <p role="alert" className="mt-3 text-[13px] text-maroon">{galat}</p>
+                  )}
                 </>
               )}
             </section>

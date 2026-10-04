@@ -39,30 +39,36 @@ const tabs: { id: Tab; label: string }[] = [
 function statusPesanan(b: ApiBooking): { tab: Exclude<Tab, 'semua'>; badge: string; tone: string } {
   const lewat = new Date(b.event_date) < new Date(new Date().toDateString())
 
-  if (b.payment_status === 'cancelled') {
-    return { tab: 'dibatalkan', badge: 'DIBATALKAN', tone: 'bg-muted/15 text-muted' }
-  }
+  // Warna teks lencana sengaja lebih gelap dari token amber/hijau: amber
+  // #f0a92b di latar terang cuma ~1,9:1, gagal WCAG.
+  const amber = 'bg-amber/15 text-[#8a5a00]'
+  const hijau = 'bg-[#2e6b52]/10 text-[#2e6b52]'
+
   if (b.payment_status === 'expired') {
-    return { tab: 'dibatalkan', badge: 'KEDALUWARSA — SLOT DILEPAS', tone: 'bg-muted/15 text-muted' }
+    return { tab: 'dibatalkan', badge: 'KEDALUWARSA · SLOT DILEPAS', tone: 'bg-muted/15 text-ink/70' }
   }
-  // Ditolak vendor berhenti di sini: pesanannya memang batal, tapi alasannya
-  // beda dari batal sendiri dan customer perlu tahu bedanya.
+  // Ditolak vendor didahulukan dari 'cancelled': konfirmasiBooking menyetel
+  // KEDUANYA (payment_status cancelled + confirm_status ditolak), jadi kalau
+  // 'cancelled' dicek duluan lencana ini tidak pernah muncul.
   if (b.confirm_status === 'ditolak') {
     return { tab: 'dibatalkan', badge: 'DITOLAK VENDOR', tone: 'bg-maroon/15 text-maroon' }
+  }
+  if (b.payment_status === 'cancelled') {
+    return { tab: 'dibatalkan', badge: 'DIBATALKAN', tone: 'bg-muted/15 text-ink/70' }
   }
   if (b.payment_status === 'pending') {
     return b.confirm_status === 'menunggu'
       ? { tab: 'menunggu', badge: 'MENUNGGU KONFIRMASI VENDOR', tone: 'bg-lavender text-navy-900' }
-      : { tab: 'menunggu', badge: 'DITERIMA — MENUNGGU PEMBAYARAN DP', tone: 'bg-amber/15 text-amber' }
+      : { tab: 'menunggu', badge: 'DITERIMA · MENUNGGU PEMBAYARAN DP', tone: amber }
   }
   if (b.payment_status === 'dp_paid') {
     return lewat
-      ? { tab: 'selesai', badge: 'ACARA SELESAI — MENUNGGU PELUNASAN', tone: 'bg-amber/15 text-amber' }
-      : { tab: 'aktif', badge: 'DP LUNAS — MENUNGGU PELUNASAN', tone: 'bg-amber/15 text-amber' }
+      ? { tab: 'selesai', badge: 'ACARA SELESAI · MENUNGGU PELUNASAN', tone: amber }
+      : { tab: 'aktif', badge: 'DP LUNAS · MENUNGGU PELUNASAN', tone: amber }
   }
   return lewat
-    ? { tab: 'selesai', badge: 'PESANAN SELESAI & DANA DILEPAS', tone: 'bg-[#16a34a]/15 text-[#16a34a]' }
-    : { tab: 'aktif', badge: 'LUNAS — MENUNGGU HARI ACARA', tone: 'bg-[#16a34a]/15 text-[#16a34a]' }
+    ? { tab: 'selesai', badge: 'PESANAN SELESAI & DANA DILEPAS', tone: hijau }
+    : { tab: 'aktif', badge: 'LUNAS · MENUNGGU HARI ACARA', tone: hijau }
 }
 
 const tanggalPanjang = (s: string) =>
@@ -317,8 +323,15 @@ export default function PesananSayaPage() {
                 (x) => x.payment_type === 'down_payment' && x.gateway_status === 'success'
               )
               const lunasPenuh = p.payment_status === 'fully_paid'
-              // Tagihan yang masih menggantung, kalau ada.
-              const tertunda = p.payments.find((x) => x.gateway_status === 'pending')
+              const mati = p.payment_status === 'cancelled' || p.payment_status === 'expired'
+              // Tagihan yang masih HIDUP, kalau ada. VA yang lewat batas tetap
+              // 'pending' di DB selama webhook tidak datang (dan selamanya di
+              // mode simulasi); dulu tombolnya menuju VA mati sambil
+              // menyembunyikan "Bayar DP", jadi klien tidak punya jalan bayar.
+              const tertunda = mati ? undefined : p.payments.find(
+                (x) => x.gateway_status === 'pending'
+                  && (!x.expires_at || new Date(x.expires_at).getTime() > Date.now())
+              )
 
               return (
                 <article key={p.booking_id} className="border border-line bg-white">
@@ -376,14 +389,19 @@ export default function PesananSayaPage() {
                       </p>
                     </div>
 
+                    {/* Kotak ini dulu menulis "dana dipegang aman" di SEMUA
+                        pesanan, termasuk yang belum dibayar atau sudah batal.
+                        Sekarang "escrow" hanya disebut kalau memang ada uang masuk. */}
                     <div className="h-fit bg-lavender/25 p-4">
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-[11px] font-semibold tracking-[0.04em] text-ink/70">
-                          RINCIAN ESCROW
+                          {lunasDp ? 'RINCIAN ESCROW' : 'RINCIAN BIAYA'}
                         </span>
-                        <span className="text-[11px] font-semibold tracking-[0.04em] text-muted">
-                          TAHAP {lunasPenuh ? '2/2' : lunasDp ? '2/2' : '1/2'}
-                        </span>
+                        {!mati && (
+                          <span className="text-[11px] font-semibold tracking-[0.04em] text-ink/60">
+                            TAHAP {lunasPenuh ? '2/2' : lunasDp ? '2/2' : '1/2'}
+                          </span>
+                        )}
                       </div>
 
                       <dl className="mt-2.5 space-y-1">
@@ -397,18 +415,20 @@ export default function PesananSayaPage() {
                           <dt className="text-[13px]">Sisa pelunasan:</dt>
                           <dd
                             className={`font-semibold ${
-                              lunasPenuh ? 'text-[17px]' : 'text-[15px] text-[#c0392b]'
+                              lunasPenuh || mati ? 'text-[15px]' : 'text-[15px] text-maroon'
                             }`}
                           >
-                            {rupiah(harga - dp)}
+                            {lunasPenuh ? 'Lunas' : rupiah(harga - dp)}
                           </dd>
                         </div>
                       </dl>
 
                       <p className="mt-2 text-[11px] leading-relaxed text-ink/70">
-                        {lunasPenuh
-                          ? '*Dana ditahan Festa Escrow dan dilepas ke vendor setelah acara selesai.'
-                          : '*Dana dipegang aman oleh Festa Escrow sampai acara Anda selesai.'}
+                        {mati
+                          ? 'Pesanan tidak aktif. Tidak ada dana yang ditagih.'
+                          : lunasDp
+                            ? 'Dana ditahan Festa Escrow dan dilepas ke vendor setelah acara selesai.'
+                            : 'Belum ada pembayaran. Dana baru ditahan escrow setelah DP dibayar.'}
                       </p>
                     </div>
                   </div>
@@ -418,7 +438,7 @@ export default function PesananSayaPage() {
                       {p.payment_status === 'pending' && p.confirm_status === 'menunggu'
                         && 'Slot ditahan sementara. Vendor punya 24 jam untuk menjawab.'}
                       {p.payment_status === 'pending' && p.confirm_status === 'diterima'
-                        && 'Slot ditahan sampai DP masuk — selesaikan pembayaran agar tidak dilepas.'}
+                        && 'Slot ditahan sampai DP masuk. Selesaikan pembayaran agar tidak dilepas.'}
                       {p.confirm_status === 'ditolak' && p.confirm_note
                         && `Alasan vendor: ${p.confirm_note}`}
                     </span>
@@ -666,15 +686,13 @@ export default function PesananSayaPage() {
                 <HelpIcon className="h-5 w-5" />
               </span>
               <div className="max-w-[330px]">
-                <p className="text-[11px] font-semibold tracking-[0.04em] text-amber">
-                  LAYANAN PRIORITAS <span className="text-muted">• Tersedia 24/7</span>
-                </p>
+                <p className="text-[11px] font-semibold tracking-[0.04em] text-ink/70">BANTUAN</p>
                 <h2 className="mt-1.5 font-display text-[19px] font-semibold">
                   Butuh bantuan dengan pesanan Anda?
                 </h2>
                 <p className="mt-2 text-[13px] leading-relaxed text-ink/75">
-                  Tim Concierge Festa Festum siap membantu mediasi vendor, penyesuaian jadwal acara penting,
-                  hingga konfirmasi pengembalian dana perlindungan escrow.
+                  Tim admin Festa Festum membantu mediasi dengan vendor, perubahan jadwal, dan
+                  pengajuan refund. Balasannya masuk ke halaman Pesan Anda.
                 </p>
               </div>
             </div>
@@ -686,7 +704,7 @@ export default function PesananSayaPage() {
                 onClick={hubungiConcierge}
                 className="rounded-sm bg-ink px-4 py-2.5 text-[11px] font-semibold tracking-[0.04em] text-white transition-opacity hover:opacity-90"
               >
-                HUBUNGI CONCIERGE
+                HUBUNGI TIM ADMIN
               </button>
             </div>
           </section>
