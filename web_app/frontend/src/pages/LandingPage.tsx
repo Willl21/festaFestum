@@ -232,48 +232,50 @@ function KartuUnggulan({ v, besar = false }: { v: ApiVendor; besar?: boolean }) 
   const kat = categories[KATEGORI[v.categories[0]] ?? 'eo']
   const harga = Number(v.price_start_from)
   return (
-    <article className="flex flex-col border border-line bg-white transition-transform duration-200 motion-safe:hover:scale-[1.02]">
-      <Img
-        src={v.has_photo ? urlFotoVendor(v.vendor_id) : undefined}
-        alt={v.business_name}
-        tint={kat.tint}
-        // Di desktop kartu besar setinggi dua kartu kecil; fotonya yang
-        // memanjang mengisi sisa tinggi itu, bukan ruang kosong di bawah judul.
-        className={`h-[200px] w-full object-cover ${besar ? 'lg:h-auto lg:min-h-[290px] lg:flex-1' : 'lg:h-[150px]'}`}
-      />
-      <div className={`flex flex-col p-5 ${besar ? 'lg:flex-none lg:p-7' : 'flex-1'}`}>
-        <span className="self-start rounded-sm bg-maroon px-2.5 py-1 text-[12px] font-medium text-white">
-          {kat.label}
-        </span>
-        <h3 className={`mt-3 font-display text-[24px] leading-tight font-semibold ${besar ? 'lg:text-[30px]' : ''}`}>
-          {v.business_name}
-        </h3>
-        <p className="mt-1.5 flex items-center gap-1 text-[13px] text-ink/80">
-          {/* Vendor tanpa ulasan dulu tampil "★ 0" — terbaca rating terburuk,
-              padahal artinya belum pernah dinilai. */}
-          {v.rating_count > 0 ? (
-            <>
-              <StarIcon className="h-3.5 w-3.5 text-star" />
-              {Number(v.rating_avg).toFixed(1)} ({v.rating_count} ulasan)
-            </>
-          ) : (
-            'Belum ada ulasan'
-          )}
-          {v.city && ` · ${namaKota(v.city)}`}
-        </p>
-        <div className="mt-auto flex items-end justify-between gap-4 pt-5">
-          {harga > 0 ? (
-            <div>
-              <p className="text-[12px] text-muted">Mulai dari</p>
-              <p className="font-display text-[21px] font-semibold">{rupiahBulat(harga)}</p>
-            </div>
-          ) : <span />}
-          <Link
-            to={`/${kat.slug}/${v.vendor_id}`}
-            className="shrink-0 rounded-sm bg-navy-900 px-5 py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
-          >
-            Lihat Detail
-          </Link>
+    <article className="bingkai-gradien flex flex-col transition-transform duration-200 motion-safe:hover:scale-[1.02]">
+      <div className="flex flex-1 flex-col border border-line bg-white">
+        <Img
+          src={v.has_photo ? urlFotoVendor(v.vendor_id) : undefined}
+          alt={v.business_name}
+          tint={kat.tint}
+          // Di desktop kartu besar setinggi dua kartu kecil; fotonya yang
+          // memanjang mengisi sisa tinggi itu, bukan ruang kosong di bawah judul.
+          className={`h-[200px] w-full object-cover ${besar ? 'lg:h-auto lg:min-h-[290px] lg:flex-1' : 'lg:h-[150px]'}`}
+        />
+        <div className={`flex flex-col p-5 ${besar ? 'lg:flex-none lg:p-7' : 'flex-1'}`}>
+          <span className="self-start rounded-sm bg-maroon px-2.5 py-1 text-[12px] font-medium text-white">
+            {kat.label}
+          </span>
+          <h3 className={`mt-3 font-display text-[24px] leading-tight font-semibold ${besar ? 'lg:text-[30px]' : ''}`}>
+            {v.business_name}
+          </h3>
+          <p className="mt-1.5 flex items-center gap-1 text-[13px] text-ink/80">
+            {/* Vendor tanpa ulasan dulu tampil "★ 0" — terbaca rating terburuk,
+                padahal artinya belum pernah dinilai. */}
+            {v.rating_count > 0 ? (
+              <>
+                <StarIcon className="h-3.5 w-3.5 text-star" />
+                {Number(v.rating_avg).toFixed(1)} ({v.rating_count} ulasan)
+              </>
+            ) : (
+              'Belum ada ulasan'
+            )}
+            {v.city && ` · ${namaKota(v.city)}`}
+          </p>
+          <div className="mt-auto flex items-end justify-between gap-4 pt-5">
+            {harga > 0 ? (
+              <div>
+                <p className="text-[12px] text-muted">Mulai dari</p>
+                <p className="font-display text-[21px] font-semibold">{rupiahBulat(harga)}</p>
+              </div>
+            ) : <span />}
+            <Link
+              to={`/${kat.slug}/${v.vendor_id}`}
+              className="shrink-0 rounded-sm bg-navy-900 px-5 py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
+            >
+              Lihat Detail
+            </Link>
+          </div>
         </div>
       </div>
     </article>

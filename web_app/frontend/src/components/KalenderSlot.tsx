@@ -6,7 +6,9 @@ import { KELAS_KALENDER, isoLokal as iso } from '../lib/kalender'
 import {
   listKetersediaan, listJamTerisi, type ApiService, type JamTerisi, type SlotKetersediaan,
 } from '../lib/api'
-import { berbasisJam, durasiPesanan, tambahJam, MAKS_JAM_TAMBAHAN, RENTANG_JAM, daftarJam } from '../lib/durasi'
+import {
+  berbasisJam, durasiPesanan, orangDasar, orangEfektif, tambahJam, MAKS_JAM_TAMBAHAN, RENTANG_JAM, daftarJam,
+} from '../lib/durasi'
 import { rupiah } from '../lib/format'
 import type { CategoryKey } from '../data/categories'
 
@@ -34,6 +36,67 @@ function Pengatur({ label, nilai, min, max, onUbah, catatan }: {
         <button type="button" className={tombol} disabled={nilai >= max}
           onClick={() => onUbah(nilai + 1)} aria-label={`Tambah ${label.toLowerCase()}`}>+</button>
       </div>
+    </div>
+  )
+}
+
+/** Paket MUA per orang (migrasi 023): harga paket sudah mencakup `dasar`
+ *  orang. Pelanggan ditanya dulu apakah ada tambahan orang; kalau ya, baru
+ *  pengatur jumlah orang tambahan muncul. `jumlah` = TOTAL orang (yang
+ *  dikirim sebagai quantity), jadi Tidak = kembali ke `dasar`. */
+function TambahOrang({ paket, jumlah, onUbah, maks, batas }: {
+  paket: ApiService; jumlah: number; onUbah: (jumlah: number) => void
+  /** Orang tambahan terbanyak yang masih muat: selesai sebelum `batas` dan
+   *  tidak menabrak pesanan lain vendor. */
+  maks: number
+  batas: string
+}) {
+  const dasar = orangDasar(paket)
+  const ekstra = orangEfektif(paket, jumlah) - dasar
+  const tarif = paket.harga_per_orang_tambahan
+  const pilihan = 'h-8 rounded-sm border px-4 text-[13px] transition-colors'
+  return (
+    <div className="space-y-3">
+      <p className="text-[12px] text-muted">
+        Harga paket sudah termasuk {dasar} orang, {paket.durasi_menit} menit per orang.
+      </p>
+      {tarif == null ? null : (
+        <>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[13px] font-semibold">Ada tambahan orang?</p>
+            <div className="flex gap-2" role="group" aria-label="Ada tambahan orang?">
+              {([['Tidak', false], ['Ya', true]] as const).map(([label, ya]) => (
+                <button
+                  key={label}
+                  type="button"
+                  disabled={ya && maks === 0 && ekstra === 0}
+                  aria-pressed={(ekstra > 0) === ya}
+                  onClick={() => onUbah(ya ? dasar + Math.max(ekstra, 1) : dasar)}
+                  className={`${pilihan} disabled:cursor-not-allowed disabled:opacity-40 ${(ekstra > 0) === ya
+                    ? 'border-navy-900 bg-navy-900 text-white'
+                    : 'border-line bg-white hover:border-navy-900'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {ekstra > 0 && (
+            <Pengatur
+              label="Orang tambahan" nilai={ekstra} min={1} max={Math.max(maks, 1)}
+              catatan={`${rupiah(Number(tarif))} per orang, maksimal ${maks}`}
+              onUbah={(n) => onUbah(dasar + n)}
+            />
+          )}
+          {(ekstra > maks || (maks === 0 && ekstra === 0)) && (
+            <p className={`text-[12px] ${ekstra > maks ? 'text-maroon' : 'text-muted'}`}>
+              {maks === 0
+                ? `Di jam ini tidak ada waktu untuk orang tambahan (harus selesai sebelum ${batas} dan tidak bentrok dengan pesanan lain). Pilih jam lebih awal.`
+                : `Di jam ini maksimal ${maks} orang tambahan. Kurangi orangnya atau pilih jam lebih awal.`}
+            </p>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -71,6 +134,7 @@ export default function KalenderSlot({
   jumlah = 1,
   tambahan = 0,
   onUbahDurasi,
+  tanpaJam: tanpaJamProp = false,
 }: {
   serviceId: string
   /** Menentukan rentang tombol jam — lihat RENTANG_JAM. */
@@ -90,6 +154,9 @@ export default function KalenderSlot({
   jumlah?: number
   tambahan?: number
   onUbahDurasi?: (jumlah: number, tambahan: number) => void
+  /** Sembunyikan kolom jam walau kategorinya punya jam. Sewa jas: jamnya jam
+   *  PENGAMBILAN, jadi dipilih di samping kalender pengambilan, bukan sewa. */
+  tanpaJam?: boolean
 }) {
   const [bulan, setBulan] = useState(() => new Date())
   const [hari, setHari] = useState<SlotKetersediaan[]>([])
@@ -109,7 +176,7 @@ export default function KalenderSlot({
   // Florist tidak menanyakan jam sama sekali (revisi PM 26 Sep 2026): jam
   // tidak mengunci apa pun di kategori ini, dan waktu kirim diatur lewat
   // catatan/chat. bookings.start_time-nya NULL (migrasi 018).
-  const tanpaJam = kategori === 'florist'
+  const tanpaJam = tanpaJamProp || kategori === 'florist'
   const durasi = modeJam ? durasiPesanan(modeJam, jumlah, tambahan) : 0
 
   // Jam yang sudah terpilih (mis. dibawa dari halaman detail ke halaman
@@ -180,10 +247,10 @@ export default function KalenderSlot({
 
   /** Jam mulai `h` muat kalau ada SATU tim yang kosong selama
    *  [h, h + durasi + jeda). Aturan yang sama dengan timKosong() di backend. */
-  const muat = (j: string) => {
+  const muat = (j: string, d = durasi) => {
     if (!dataJam) return true
     const mulai = menitDari(j)
-    const akhir = mulai + durasi + dataJam.jeda_menit
+    const akhir = mulai + d + dataJam.jeda_menit
     for (let n = 0; n < dataJam.kapasitas; n++) {
       const bentrok = dataJam.terisi.some((t) => t.slot_ke === n && t.mulai < akhir && mulai < t.selesai)
       if (!bentrok) return true
@@ -202,6 +269,22 @@ export default function KalenderSlot({
     }
     return m
   }, [hari, paling])
+
+  // Orang tambahan (paket per orang) tidak boleh mendorong selesainya lewat
+  // jam terakhir kategori — sama dengan BATAS_SELESAI_ORANG_TAMBAHAN backend.
+  const batasSelesai = RENTANG_JAM[kategori][1] * 60
+  const labelBatas = `${String(RENTANG_JAM[kategori][1]).padStart(2, '0')}:00`
+  const adaEkstra = Boolean(modeJam?.per_orang && orangEfektif(modeJam, jumlah) > orangDasar(modeJam))
+  const lewatBatas = (j: string, d = durasi) => menitDari(j) + d > batasSelesai
+  let maksEkstra = 0
+  if (modeJam?.per_orang) {
+    for (let n = 1; n <= 30; n++) {
+      const d = durasiPesanan(modeJam, orangDasar(modeJam) + n, tambahan)
+      const ok = jam ? !lewatBatas(jam, d) && muat(jam, d) : pilihanJam.some((j) => !lewatBatas(j, d))
+      if (!ok) break
+      maksEkstra = n
+    }
+  }
 
   const terpilih = tanggal ? new Date(`${tanggal}T00:00:00`) : undefined
   const sisa = bisaDipilih.get(tanggal)
@@ -270,7 +353,8 @@ export default function KalenderSlot({
                 const mulai = m === mulaiDipilih
                 // Blok durasi: jam-jam sesudah jam mulai yang ikut terpakai.
                 const dalamBlok = modeJam && jam && m > mulaiDipilih && m < mulaiDipilih + durasi
-                const mati = !tanggal || (modeJam !== null && !muat(j))
+                const melewati = adaEkstra && lewatBatas(j)
+                const mati = !tanggal || (modeJam !== null && !muat(j)) || melewati
                 return (
                   <button
                     key={j}
@@ -278,7 +362,9 @@ export default function KalenderSlot({
                     disabled={mati}
                     aria-pressed={mulai}
                     data-mulai={mulai}
-                    title={mati && tanggal ? 'Bentrok dengan pesanan lain' : undefined}
+                    title={mati && tanggal
+                      ? melewati ? `Dengan orang tambahan selesai lewat ${labelBatas}` : 'Bentrok dengan pesanan lain'
+                      : undefined}
                     onClick={() => onPilih(tanggal, j)}
                     className={`h-9 shrink-0 rounded-sm border text-[13px] tabular-nums transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                       mulai
@@ -310,9 +396,8 @@ export default function KalenderSlot({
       {modeJam && onUbahDurasi && (modeJam.per_orang || modeJam.harga_per_jam_tambahan != null) && (
         <div className="mt-4 space-y-3 border-t border-line pt-4">
           {modeJam.per_orang && (
-            <Pengatur
-              label="Jumlah orang" nilai={jumlah} min={1} max={30}
-              catatan={`${modeJam.durasi_menit} menit per orang`}
+            <TambahOrang
+              paket={modeJam} jumlah={jumlah} maks={maksEkstra} batas={labelBatas}
               onUbah={(n) => onUbahDurasi(n, tambahan)}
             />
           )}

@@ -302,6 +302,10 @@ export type ApiService = {
   durasi_menit?: number | null
   per_orang?: boolean
   harga_per_jam_tambahan?: string | null
+  /** Paket per orang (migrasi 023): orang yang sudah termasuk harga paket,
+   *  dan tarif tiap orang di atasnya (NULL = tidak menerima tambahan). */
+  min_orang?: number | null
+  harga_per_orang_tambahan?: string | null
 }
 
 /** `portfolio` membawa nomor SLOT, bukan gambarnya — pasang lewat
@@ -329,6 +333,8 @@ export type Availability = {
   service_name: string
   price: string
   minimum_notice_days: number
+  /** Sisa kapasitas vendor di tanggal itu (florist & sewa: stok barang). */
+  sisa_kapasitas?: number
 }
 
 /** start_time/quantity/jam_tambahan cuma berarti untuk MUA & fotografer:
@@ -376,7 +382,8 @@ export const listKetersediaan = (serviceId: string, from: string, to: string) =>
 
 export type ApiBooking = {
   booking_id: string
-  event_type: string
+  /** NULL sejak migrasi 024: form pesan tidak lagi menanyakannya. */
+  event_type: string | null
   event_location_detail: string
   total_price: string
   dp_amount: string
@@ -423,7 +430,7 @@ export type ApiBooking = {
  *  sebanyak itu — untuk MUA tetap memotong 1, karena yang habis timnya. */
 export const buatBooking = (body: {
   service_id: string; event_date: string; start_time?: string
-  event_type: string; event_location_detail: string; quantity?: number
+  event_type?: string; event_location_detail: string; quantity?: number
   jam_tambahan?: number
   /** Ruang konsultasi asal rekomendasi paketnya, kalau ada (migrasi 017). */
   konsultasi_id?: string
@@ -674,6 +681,10 @@ export const kirimUlasan = (bookingId: string, rating: number, comment?: string)
 /** Publik: tamu yang belum masuk tetap bisa membaca ulasan di halaman detail. */
 export const listUlasanVendor = (vendorId: string) =>
   get<{ data: ApiUlasan[]; ringkasan: RingkasanUlasan }>(`/vendors/${vendorId}/ulasan`)
+
+/** Vendor menghapus ulasan di vendornya sendiri; rating dihitung ulang backend. */
+export const hapusUlasan = (reviewId: string) =>
+  kirim<{ message: string }>(`/vendors/me/ulasan/${reviewId}`, 'DELETE')
 
 // ------------------------------------------------------------
 // OBROLAN (migrasi 015)

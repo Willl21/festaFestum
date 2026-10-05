@@ -1,6 +1,6 @@
 import Bintang from './Bintang'
 import { useEffect, useState } from 'react'
-import { listUlasanVendor, type ApiUlasan, type RingkasanUlasan } from '../lib/api'
+import { hapusUlasan, listUlasanVendor, type ApiUlasan, type RingkasanUlasan } from '../lib/api'
 import { ChevronDown, StarIcon } from './icons'
 
 /* Tiga kartu per halaman, ganti halaman pakai blur-out lalu blur-in per kartu
@@ -17,12 +17,34 @@ const KELUAR = 150 + JEDA * (PER_HALAMAN - 1)
  *  harus diperbaiki waktu bentuk ulasannya berubah, dan tidak ada satu pun
  *  yang lebih mudah dibaca karenanya.
  */
-export default function UlasanVendor({ vendorId }: { vendorId: string }) {
+export default function UlasanVendor({
+  vendorId,
+  bisaHapus = false,
+}: {
+  vendorId: string
+  /** Hanya di /vendor/profil: pemilik vendor boleh menghapus ulasan. */
+  bisaHapus?: boolean
+}) {
   const [ulasan, setUlasan] = useState<ApiUlasan[]>([])
   const [ringkasan, setRingkasan] = useState<RingkasanUlasan | null>(null)
   const [memuat, setMemuat] = useState(true)
   const [halaman, setHalaman] = useState(0)
   const [keluar, setKeluar] = useState(false)
+  // Dinaikkan sesudah menghapus supaya daftar & ringkasan diambil ulang.
+  const [versi, setVersi] = useState(0)
+  const [galat, setGalat] = useState('')
+
+  const hapus = async (u: ApiUlasan) => {
+    if (!window.confirm(`Hapus ulasan dari ${u.user_name}? Rating vendor dihitung ulang dan tindakan ini tidak bisa dibatalkan.`)) return
+    setGalat('')
+    try {
+      await hapusUlasan(u.review_id)
+      setHalaman(0)
+      setVersi((v) => v + 1)
+    } catch (e) {
+      setGalat((e as Error).message)
+    }
+  }
 
   useEffect(() => {
     if (!vendorId) return
@@ -36,7 +58,7 @@ export default function UlasanVendor({ vendorId }: { vendorId: string }) {
       // yang sehat terlihat rusak.
       .catch(() => {})
       .finally(() => setMemuat(false))
-  }, [vendorId])
+  }, [vendorId, versi])
 
   if (memuat) return null
 
@@ -77,6 +99,8 @@ export default function UlasanVendor({ vendorId }: { vendorId: string }) {
           </div>
         )}
       </div>
+
+      {galat && <p role="alert" className="mt-3 text-[13px] text-[#c0392b]">{galat}</p>}
 
       {jumlah === 0 ? (
         <p className="mt-3 text-[15px] text-muted">
@@ -135,7 +159,7 @@ export default function UlasanVendor({ vendorId }: { vendorId: string }) {
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lavender text-[14px] font-semibold text-navy-900">
                     {u.user_name.trim().charAt(0).toUpperCase()}
                   </span>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="truncate text-[14px] font-semibold">{u.user_name}</p>
                     <p className="flex flex-wrap items-center gap-x-2 text-[12px] text-muted">
                       <Bintang nilai={u.rating} className="h-3 w-3" />
@@ -144,6 +168,15 @@ export default function UlasanVendor({ vendorId }: { vendorId: string }) {
                       })}
                     </p>
                   </div>
+                  {bisaHapus && (
+                    <button
+                      type="button"
+                      onClick={() => hapus(u)}
+                      className="shrink-0 rounded border border-line px-2.5 py-1 text-[11px] font-semibold text-maroon transition-colors hover:border-maroon"
+                    >
+                      Hapus
+                    </button>
+                  )}
                 </div>
               </li>
             ))}

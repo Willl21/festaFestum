@@ -173,6 +173,9 @@ function ok(label) {
         event_type: 'wedding', event_location_detail: 'Gedung Uji, Depok',
       },
     });
+    await api(`/bookings/${bk.body.booking.booking_id}/konfirmasi`, {
+      method: 'PATCH', token: vendorToken, body: { action: 'terima' },
+    });
 
     const c = await api('/payments/charge', {
       method: 'POST', token: customerToken,
@@ -193,6 +196,37 @@ function ok(label) {
   }
 
   if (gagal.length) console.log(`  -> metode bermasalah: ${gagal.join(', ')}`);
+
+  // --- 6c. Ubah metode: tagihan lama dimatikan, yang baru terbit -----------
+  const bkUbah = await api('/bookings', {
+    method: 'POST', token: customerToken,
+    body: {
+      service_id: service.body.service.service_id,
+      event_date: futureDate(140), start_time: '08:00',
+      event_type: 'wedding', event_location_detail: 'Gedung Uji, Depok',
+    },
+  });
+  const idUbah = bkUbah.body.booking.booking_id;
+  await api(`/bookings/${idUbah}/konfirmasi`, {
+    method: 'PATCH', token: vendorToken, body: { action: 'terima' },
+  });
+  const tagihan = (method) => api('/payments/charge', {
+    method: 'POST', token: customerToken,
+    body: { booking_id: idUbah, payment_type: 'down_payment', method },
+  });
+  const awal = await tagihan('bca_va');
+  assert.strictEqual(awal.status, 201, `charge awal gagal: ${JSON.stringify(awal.body)}`);
+  const ganti = await tagihan('indomaret');
+  assert.strictEqual(ganti.status, 201, `ubah metode gagal: ${JSON.stringify(ganti.body)}`);
+  assert.notStrictEqual(ganti.body.payment.payment_id, awal.body.payment.payment_id, 'metode baru harus tagihan baru');
+  assert.strictEqual(ganti.body.payment.method, 'indomaret');
+  const { rows: [lamaUbah] } = await pool.query(
+    'SELECT gateway_status FROM payments WHERE payment_id = $1', [awal.body.payment.payment_id]
+  );
+  assert.strictEqual(lamaUbah.gateway_status, 'failed', 'tagihan lama harus dimatikan');
+  const lagiUbah = await tagihan('indomaret');
+  assert.strictEqual(lagiUbah.body.payment.payment_id, ganti.body.payment.payment_id, 'metode sama harus memakai tagihan yang sama');
+  ok('ubah metode mematikan tagihan lama dan menerbitkan yang baru; metode sama dipakai ulang');
 
   // Sisa skenario butuh pembayaran benar-benar masuk. Dalam mode simulasi kita
   // bisa memicunya sendiri; kalau Midtrans aktif, VA-nya harus dibayar lewat

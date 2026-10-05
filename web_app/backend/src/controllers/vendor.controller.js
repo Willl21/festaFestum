@@ -247,7 +247,8 @@ async function getVendorDetail(req, res, next) {
       pool.query(
         `SELECT service_id, service_name, category, description, price,
                 minimum_notice_days, details,
-                durasi_menit, per_orang, harga_per_jam_tambahan
+                durasi_menit, per_orang, harga_per_jam_tambahan,
+                min_orang, harga_per_orang_tambahan
          FROM services
          WHERE vendor_id = $1 AND is_active = TRUE
          ORDER BY price ASC`,

@@ -35,17 +35,28 @@ const berbasisJam = (category) => BERBASIS_JAM.includes(category);
 const DURASI_BAWAAN = { makeup_artist: 180, photographer: 240 };
 const MAKS_JAM_TAMBAHAN = 6;
 
+/** Kalau ada orang tambahan, riasan harus SELESAI paling lambat jam ini
+ *  (menit sejak 00:00). Sama dengan jam terakhir RENTANG_JAM.mua di frontend
+ *  lib/durasi.ts. Tanpa orang tambahan aturan lama tetap: jam terakhir itu
+ *  last order, selesainya boleh lewat. */
+const BATAS_SELESAI_ORANG_TAMBAHAN = 20 * 60;
+
+/** Jumlah orang yang dihitung untuk paket per orang: paling sedikit
+ *  min_orang, karena orang sebanyak itu sudah termasuk harga paket (023). */
+const orangEfektif = ({ min_orang }, jumlah) => Math.max(jumlah, min_orang || 1);
+
 /** Durasi TOTAL yang dipesan, dalam menit, tanpa jeda perjalanan.
  *  Paket per orang dikali jumlah orang; hasilnya dibulatkan ke atas ke jam
  *  penuh karena jadwal dipilih per jam. Jam tambahan ditempel sesudahnya.
  *  Rumus yang sama dipakai frontend (lib/durasi.ts) untuk menyalakan blok jam
  *  — kalau salah satu diubah, ubah dua-duanya. */
-function durasiPesanan({ durasi_menit, per_orang }, jumlah, jamTambahan) {
-  const dasar = durasi_menit * (per_orang ? jumlah : 1);
+function durasiPesanan(layanan, jumlah, jamTambahan) {
+  const dasar = layanan.durasi_menit * (layanan.per_orang ? orangEfektif(layanan, jumlah) : 1);
   return Math.ceil(dasar / 60) * 60 + jamTambahan * 60;
 }
 
 module.exports = {
   PER_TIM, perTim, BOOKING_AKTIF,
-  BERBASIS_JAM, berbasisJam, DURASI_BAWAAN, MAKS_JAM_TAMBAHAN, durasiPesanan,
+  BERBASIS_JAM, berbasisJam, DURASI_BAWAAN, MAKS_JAM_TAMBAHAN, durasiPesanan, orangEfektif,
+  BATAS_SELESAI_ORANG_TAMBAHAN,
 };

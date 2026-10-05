@@ -224,21 +224,29 @@ function aturPaket(v, body) {
   console.log('\nPaket per orang (MUA, 45 menit/orang, 2 tim):');
   {
     const v = await siapkanVendor('makeup_artist', 2);
-    const atur = await aturPaket(v, { durasi_menit: 45, per_orang: true, harga_per_jam_tambahan: null });
+    // Model 023: harga paket mencakup 2 orang, tiap orang di atasnya 300 ribu.
+    const atur = await aturPaket(v, {
+      durasi_menit: 45, per_orang: true, harga_per_jam_tambahan: null,
+      min_orang: 2, harga_per_orang_tambahan: 300000,
+    });
     assert.strictEqual(atur.status, 200, JSON.stringify(atur.body));
     assert.strictEqual(atur.body.service.per_orang, true);
+    assert.strictEqual(atur.body.service.min_orang, 2);
 
     const a = await pesan(await register('customer'), v.serviceId, TGL_A, '08:00', 5);
     assert.strictEqual(a.status, 201, `pesanan 5 orang gagal: ${JSON.stringify(a.body)}`);
     assert.strictEqual(a.body.booking.durasi_menit, 240, '5 x 45 menit = 225, dibulatkan 4 jam');
-    assert.strictEqual(Number(a.body.booking.total_price), 5000000, 'harga harus dikali jumlah orang');
-    assert.strictEqual(Number(a.body.booking.dp_amount), 1500000, 'DP harus ikut jumlah orang');
-    ok('5 orang: 4 jam (225 menit dibulatkan), harga x 5');
+    assert.strictEqual(Number(a.body.booking.total_price), 1900000, 'paket 2 orang + 3 x 300 ribu');
+    assert.strictEqual(Number(a.body.booking.dp_amount), 570000, 'DP harus ikut orang tambahan');
+    ok('5 orang: 4 jam (225 menit dibulatkan), paket + 3 orang tambahan');
 
     const b = await pesan(await register('customer'), v.serviceId, TGL_A, '08:00', 1);
     assert.strictEqual(b.status, 201, 'tim kedua harusnya masih bisa di jam yang sama');
     assert.strictEqual(b.body.booking.slot_ke, 1, 'tim kedua harus memegang nomor 1');
-    ok('jam yang sama diterima tim kedua');
+    assert.strictEqual(b.body.booking.quantity, 2, '1 orang dibulatkan naik ke isi paket (2)');
+    assert.strictEqual(Number(b.body.booking.total_price), 1000000, 'di bawah isi paket tetap harga paket');
+    assert.strictEqual(b.body.booking.durasi_menit, 120, '2 x 45 menit dibulatkan 2 jam');
+    ok('jam yang sama diterima tim kedua; 1 orang = harga & durasi paket 2 orang');
 
     const c = await pesan(await register('customer'), v.serviceId, TGL_A, '09:00', 1);
     assert.strictEqual(c.status, 409, 'dua tim sedang sibuk');
@@ -256,6 +264,24 @@ function aturPaket(v, body) {
     console.log(`  201: ${sukses}  409: ${hasil.filter((r) => r.status === 409).length}`);
     assert.strictEqual(sukses, 2, 'harus tepat 2 yang berhasil');
     ok('ditembak bersamaan: tepat 2 tim yang terisi');
+
+    // Orang tambahan tidak boleh membuat riasan selesai lewat 20:00.
+    const lewat = await pesan(await register('customer'), v.serviceId, TGL_B, '17:00', 5);
+    assert.strictEqual(lewat.status, 400, '17:00 + 4 jam = 21:00 harus ditolak');
+    const pas = await pesan(await register('customer'), v.serviceId, TGL_B, '16:00', 5);
+    assert.strictEqual(pas.status, 201, `16:00 + 4 jam = 20:00 harus diterima: ${JSON.stringify(pas.body)}`);
+    const dasar = await pesan(await register('customer'), v.serviceId, TGL_B, '19:00', 2);
+    assert.strictEqual(dasar.status, 201, 'tanpa orang tambahan, selesai lewat 20:00 tetap boleh');
+    ok('orang tambahan dibatasi selesai jam 20:00; paket dasar tidak');
+
+    const tanpaTarif = await aturPaket(v, {
+      durasi_menit: 45, per_orang: true, harga_per_jam_tambahan: null,
+      min_orang: 2, harga_per_orang_tambahan: null,
+    });
+    assert.strictEqual(tanpaTarif.status, 200, JSON.stringify(tanpaTarif.body));
+    const lebih = await pesan(await register('customer'), v.serviceId, TGL_B, '08:00', 3);
+    assert.strictEqual(lebih.status, 400, 'paket tanpa tarif orang tambahan harus menolak orang ke-3');
+    ok('orang tambahan ditolak di paket tanpa tarif per orang');
 
     const sesi = await siapkanVendor('makeup_artist');
     const dua = await pesan(await register('customer'), sesi.serviceId, TGL_A, '08:00', 2);

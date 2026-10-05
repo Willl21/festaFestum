@@ -197,9 +197,32 @@ async function charge(req, res, next) {
       [booking_id, payment_type]
     );
 
+    // Metode sama = kembalikan tagihan itu. Metode beda = UBAH PEMBAYARAN:
+    // tagihan lama dimatikan di Midtrans DULU (expire, khusus transaksi
+    // pending), baru dibuat yang baru. Urutannya penting: kalau tagihan lama
+    // ternyata sudah dibayar, expire ditolak Midtrans dan kita berhenti di
+    // sini, jadi klien tidak pernah memegang dua tagihan hidup sekaligus.
     if (existing.rows.length > 0) {
-      await client.query('COMMIT');
-      return res.json({ payment: existing.rows[0], reused: true });
+      const lama = existing.rows[0];
+      if (lama.method === method) {
+        await client.query('COMMIT');
+        return res.json({ payment: lama, reused: true });
+      }
+      if (midtrans.enabled) {
+        try {
+          await midtrans.core.transaction.expire(lama.payment_id);
+        } catch (e) {
+          await client.query('ROLLBACK');
+          console.error('[midtrans] expire tagihan lama gagal:', e.message);
+          return res.status(409).json({
+            message: 'Tagihan sebelumnya tidak bisa dibatalkan, mungkin sudah dibayar. Buka tagihan itu dan tekan "Saya Sudah Bayar" untuk mengecek.',
+          });
+        }
+      }
+      await client.query(
+        `UPDATE payments SET gateway_status = 'failed' WHERE payment_id = $1`,
+        [lama.payment_id]
+      );
     }
 
     const expiresAt = new Date(Date.now() + VA_EXPIRY_HOURS * 3600 * 1000);

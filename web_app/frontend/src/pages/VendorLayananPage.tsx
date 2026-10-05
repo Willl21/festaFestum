@@ -50,6 +50,9 @@ type BaruLayanan = {
   durasi_menit?: number
   per_orang?: boolean
   harga_per_jam_tambahan?: number | null
+  /** Paket per orang (migrasi 023). */
+  min_orang?: number
+  harga_per_orang_tambahan?: number | null
 }
 
 /** Kategori yang dipesan per rentang jam. Sama dengan BERBASIS_JAM di
@@ -262,7 +265,7 @@ export default function VendorLayananPage() {
                         <div className="mt-4 flex items-end justify-between gap-3 border-t border-line pt-4">
                           <div>
                             <p className="text-[11px] font-semibold tracking-[0.04em] text-ink/60">
-                              {s.per_orang ? 'Harga per Orang' : 'Harga Paket'}
+                              {s.per_orang ? `Harga Paket ${s.min_orang || 1} Orang` : 'Harga Paket'}
                             </p>
                             <p className="mt-0.5 text-[19px] font-semibold">
                               {rupiahBulat(Number(s.price))}
@@ -488,7 +491,8 @@ function ServiceDialog({
 
     // Paket berbasis jam: durasi disimpan dalam MENIT. Paket per sesi diisi
     // dalam jam (lebih wajar untuk vendor), paket per orang dalam menit.
-    let jamPaket: Pick<BaruLayanan, 'durasi_menit' | 'per_orang' | 'harga_per_jam_tambahan'> = {}
+    let jamPaket: Pick<BaruLayanan,
+      'durasi_menit' | 'per_orang' | 'harga_per_jam_tambahan' | 'min_orang' | 'harga_per_orang_tambahan'> = {}
     if (KATEGORI_JAM.includes(category)) {
       const po = category === 'makeup_artist' && perOrang
       const angka = Number(data.get(po ? 'durasi_orang' : 'durasi_jam'))
@@ -504,6 +508,20 @@ function ServiceDialog({
         durasi_menit: menit,
         per_orang: po,
         harga_per_jam_tambahan: tambah ? Number(tambah) : null,
+      }
+      // Paket per orang (migrasi 023): harga paket mencakup min_orang orang,
+      // tiap orang di atasnya ditagih tarif tambahan (kosong = tidak bisa).
+      if (po) {
+        const minOrang = Number(data.get('min_orang'))
+        if (!Number.isInteger(minOrang) || minOrang < 1 || minOrang > 50) {
+          return setError('Jumlah orang dalam paket harus 1-50.')
+        }
+        const tarif = String(data.get('harga_per_orang_tambahan') || '').trim()
+        if (tarif && (!Number.isFinite(Number(tarif)) || Number(tarif) < 0)) {
+          return setError('Harga per orang tambahan harus angka positif, atau kosongkan.')
+        }
+        jamPaket.min_orang = minOrang
+        jamPaket.harga_per_orang_tambahan = tarif ? Number(tarif) : null
       }
     }
 
@@ -711,7 +729,7 @@ function ServiceDialog({
                     onChange={(e) => setPerOrang(e.target.checked)}
                     className="h-4 w-4 accent-navy-900"
                   />
-                  Harga & durasi per orang (pelanggan mengisi jumlah orang)
+                  Paket per orang (harga untuk sejumlah orang, pelanggan bisa menambah orang)
                 </label>
               )}
 
@@ -747,6 +765,28 @@ function ServiceDialog({
                   defaultValue={awal?.harga_per_jam_tambahan != null
                     ? Number(awal.harga_per_jam_tambahan) : undefined}
                 />
+                {kategori === 'makeup_artist' && perOrang && (
+                  <>
+                    <Field
+                      id="min_orang"
+                      label="JUMLAH ORANG DALAM PAKET"
+                      type="number"
+                      min={1}
+                      placeholder="2"
+                      defaultValue={awal?.min_orang ?? 2}
+                    />
+                    <Field
+                      id="harga_per_orang_tambahan"
+                      label="HARGA PER ORANG TAMBAHAN (RP)"
+                      type="number"
+                      min={0}
+                      wajib={false}
+                      placeholder="Kosong = tidak bisa tambah orang"
+                      defaultValue={awal?.harga_per_orang_tambahan != null
+                        ? Number(awal.harga_per_orang_tambahan) : undefined}
+                    />
+                  </>
+                )}
               </div>
             </div>
           )}

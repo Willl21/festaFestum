@@ -228,6 +228,24 @@ function tanggal(n) {
     'respons ulasan tidak boleh membawa data URL gambar'
   );
 
+  // --- 8. Vendor menghapus ulasan di vendornya sendiri ---
+  const reviewId = ulas.body.review.review_id;
+  const vendorLain = await daftar('vendor_owner');
+  const curi = await api(`/vendors/me/ulasan/${reviewId}`, { method: 'DELETE', token: vendorLain.token });
+  assert.strictEqual(curi.status, 404, 'vendor lain tidak boleh menghapus ulasan ini');
+  const klienHapus = await api(`/vendors/me/ulasan/${reviewId}`, { method: 'DELETE', token: customer.token });
+  assert.strictEqual(klienHapus.status, 403, 'pelanggan tidak boleh memakai jalur hapus vendor');
+
+  const hapus = await api(`/vendors/me/ulasan/${reviewId}`, { method: 'DELETE', token: vendor.token });
+  assert.strictEqual(hapus.status, 200, `hapus ulasan gagal: ${JSON.stringify(hapus.body)}`);
+  const sesudah = await pool.query(
+    'SELECT rating_avg, rating_count FROM vendors WHERE vendor_id = $1', [vendorId]
+  );
+  assert.strictEqual(Number(sesudah.rows[0].rating_avg), 0, 'rating_avg tidak dihitung ulang sesudah hapus');
+  assert.strictEqual(sesudah.rows[0].rating_count, 0, 'rating_count tidak dihitung ulang sesudah hapus');
+  const duaKali = await api(`/vendors/me/ulasan/${reviewId}`, { method: 'DELETE', token: vendor.token });
+  assert.strictEqual(duaKali.status, 404, 'ulasan yang sudah dihapus harus 404');
+
   console.log('SEMUA LOLOS');
 })()
   .catch((e) => {

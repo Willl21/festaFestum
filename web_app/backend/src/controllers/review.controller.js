@@ -141,4 +141,43 @@ async function listUlasanVendor(req, res, next) {
   }
 }
 
-module.exports = { buatUlasan, listUlasanVendor, hitungUlangRating };
+// DELETE /api/v1/vendors/me/ulasan/:reviewId  (vendor_owner)
+//
+// Diputuskan user 5 Okt 2026: vendor boleh menghapus ulasan di vendornya
+// sendiri, langsung tanpa persetujuan admin.
+// ponytail: vendor bisa membuang semua bintang rendah dan ratingnya ikut naik;
+// kalau itu jadi masalah, ganti jadi pengajuan ke admin (pola tabel laporan).
+// Ulasan orang lain dibalas 404 (kepemilikan di WHERE). Pesanannya kembali
+// tanpa ulasan, jadi klien boleh mengulas ulang.
+async function hapusUlasan(req, res, next) {
+  let client;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    const del = await client.query(
+      `DELETE FROM reviews r
+        USING vendors v
+        WHERE r.review_id = $1 AND r.vendor_id = v.vendor_id AND v.owner_user_id = $2
+        RETURNING r.vendor_id`,
+      [req.params.reviewId, req.user.user_id]
+    );
+
+    if (del.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Ulasan tidak ditemukan' });
+    }
+
+    await hitungUlangRating(client, del.rows[0].vendor_id);
+    await client.query('COMMIT');
+
+    res.json({ message: 'Ulasan dihapus' });
+  } catch (err) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    next(err);
+  } finally {
+    client?.release();
+  }
+}
+
+module.exports = { buatUlasan, listUlasanVendor, hitungUlangRating, hapusUlasan };

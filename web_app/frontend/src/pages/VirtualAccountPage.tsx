@@ -337,14 +337,24 @@ export default function VirtualAccountPage() {
               <aside className="h-fit space-y-7 lg:sticky lg:top-8">
                 <div className="rounded-sm border border-line bg-white p-6">
                   {keadaan === 'menunggu' ? (
-                    <button
-                      type="button"
-                      onClick={sudahBayar}
-                      disabled={mengecek}
-                      className="flex h-12 w-full items-center justify-center rounded-sm bg-ink text-[16px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                    >
-                      {mengecek ? 'Mengecek pembayaran…' : 'Saya Sudah Bayar'}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={sudahBayar}
+                        disabled={mengecek}
+                        className="flex h-12 w-full items-center justify-center rounded-sm bg-ink text-[16px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                      >
+                        {mengecek ? 'Mengecek pembayaran…' : 'Saya Sudah Bayar'}
+                      </button>
+                      {/* Metode lain di checkout = tagihan ini dibatalkan backend
+                          dan diganti yang baru. Metode yang sama = tagihan ini lagi. */}
+                      <Link
+                        to={keCheckout}
+                        className="mt-3 flex h-12 w-full items-center justify-center rounded-sm border border-ink text-[16px] transition-colors hover:bg-lavender/30"
+                      >
+                        Ubah Metode Pembayaran
+                      </Link>
+                    </>
                   ) : (
                     <Link
                       to={keadaan === 'lunas' ? `/pesanan/selesai/${payment.booking_id}` : keCheckout}

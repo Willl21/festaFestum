@@ -12,6 +12,10 @@ export type OrderSummary = {
   /** Ditempel di baris "Harga Paket", mis. "× 3". Diisi halaman yang punya
    *  input jumlah, supaya total yang berlipat tidak terbaca seperti salah. */
   satuan?: string
+  /** Kalau diisi, baris-baris ini menggantikan baris "Harga Paket" tunggal:
+   *  harga paket, orang tambahan, dan jam tambahan dipisah supaya total yang
+   *  naik bisa dibaca asalnya (MUA/fotografer). */
+  rincian?: { label: string; value: number }[]
   price: number
   /** DP dihitung BACKEND. Halaman ini cuma menampilkan, tidak menghitung —
    *  kalau dua-duanya menghitung, angkanya bisa berbeda dan user ditagih
@@ -65,10 +69,14 @@ export default function OrderLayout({
             <p className="mt-2 text-[15px] text-ink/80">{order.packageName}</p>
 
             <dl className="mt-7 space-y-3 text-[15px]">
-              <Row
-                label={`Harga Paket${order.satuan ? ` ${order.satuan}` : ''}`}
-                value={rupiah(order.price)}
-              />
+              {order.rincian ? (
+                order.rincian.map((r) => <Row key={r.label} label={r.label} value={rupiah(r.value)} />)
+              ) : (
+                <Row
+                  label={`Harga Paket${order.satuan ? ` ${order.satuan}` : ''}`}
+                  value={rupiah(order.price)}
+                />
+              )}
               {/* Bukan "dibayar sekarang": pembayaran baru dibuka SESUDAH vendor
                   menerima pesanan (backend menolak charge sebelum itu). */}
               <Row label="DP setelah vendor menerima" value={rupiah(order.dp)} />
@@ -147,6 +155,8 @@ export function OrderField({
   placeholder,
   value,
   onChange,
+  min,
+  max,
 }: {
   id: string
   label: string
@@ -154,6 +164,9 @@ export function OrderField({
   placeholder?: string
   value?: string
   onChange?: (v: string) => void
+  /** Batas bawah input date, format YYYY-MM-DD. */
+  min?: string
+  max?: string
 }) {
   return (
     <div>
@@ -164,6 +177,8 @@ export function OrderField({
         id={id}
         type={type}
         placeholder={placeholder}
+        min={min}
+        max={max}
         value={value}
         onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         className={fieldClass}

@@ -33,6 +33,19 @@ function statusPesanan(b: ApiBooking): Exclude<(typeof tabs)[number], 'Semua'> {
 
 const tone = { Menunggu: 'warn', Mendatang: 'info', Selesai: 'muted', Dibatalkan: 'muted' } as const
 
+/** Urutan daftar: yang menuntut tindakan dulu (Menunggu), lalu acara yang
+ *  akan datang dari yang terdekat, baru riwayat (Selesai, Dibatalkan) dari
+ *  yang terbaru. Backend mengurutkan tanggal naik saja, sehingga pesanan
+ *  lama tahun lalu menumpuk di atas dan permintaan baru tenggelam. */
+const URUTAN = { Menunggu: 0, Mendatang: 1, Selesai: 2, Dibatalkan: 3 } as const
+function bandingkan(a: ApiBooking, b: ApiBooking) {
+  const ka = statusPesanan(a)
+  const kb = statusPesanan(b)
+  if (ka !== kb) return URUTAN[ka] - URUTAN[kb]
+  const beda = a.event_date.localeCompare(b.event_date)
+  return ka === 'Menunggu' || ka === 'Mendatang' ? beda : -beda
+}
+
 export default function VendorPemesananPage() {
   const [tab, setTab] = useState<(typeof tabs)[number]>('Semua')
   const [bookings, setBookings] = useState<ApiBooking[]>([])
@@ -93,7 +106,7 @@ export default function VendorPemesananPage() {
   }, [])
 
   const rows = useMemo(
-    () => (tab === 'Semua' ? bookings : bookings.filter((b) => statusPesanan(b) === tab)),
+    () => [...(tab === 'Semua' ? bookings : bookings.filter((b) => statusPesanan(b) === tab))].sort(bandingkan),
     [bookings, tab]
   )
 
@@ -163,7 +176,7 @@ export default function VendorPemesananPage() {
                         <td className="px-6 py-5 max-md:order-1 max-md:col-span-2 max-md:p-0">
                           <p className="font-display text-[17px] font-semibold">{b.customer_name}</p>
                           <p className="mt-0.5 text-[13px] text-ink/70">
-                            {JENIS[b.event_type] ?? b.event_type} - {b.service_name}
+                            {b.event_type && `${JENIS[b.event_type] ?? b.event_type} - `}{b.service_name}
                           </p>
                           <p className="mt-0.5 text-[12px] text-muted">{b.customer_phone}</p>
                         </td>
@@ -180,7 +193,7 @@ export default function VendorPemesananPage() {
                         <td data-label="TOTAL BIAYA" className="px-6 py-5 text-right max-md:order-3 max-md:p-0 max-md:text-left max-md:before:mb-0.5 max-md:before:block max-md:before:text-[11px] max-md:before:font-semibold max-md:before:tracking-[0.04em] max-md:before:text-muted max-md:before:content-[attr(data-label)]">
                           <p className="font-semibold whitespace-nowrap">{rupiahBulat(Number(b.total_price))}</p>
                           <p className="mt-0.5 text-[12px] whitespace-nowrap text-muted">
-                            masuk {rupiahBulat(dibayar)}
+                            Masuk {rupiahBulat(dibayar)}
                           </p>
                         </td>
                         <td data-label="STATUS" className="px-6 py-5 max-md:order-5 max-md:p-0 max-md:before:mb-0.5 max-md:before:block max-md:before:text-[11px] max-md:before:font-semibold max-md:before:tracking-[0.04em] max-md:before:text-muted max-md:before:content-[attr(data-label)]">

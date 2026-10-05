@@ -44,9 +44,11 @@ async function createBooking(req, res, next) {
 
   // start_time tidak diperiksa di sini: florist memesan TANPA jam (revisi PM
   // 26 Sep 2026), dan kategorinya baru ketahuan sesudah layanan dibaca.
-  if (!service_id || !event_date || !event_type || !event_location_detail) {
+  // event_type opsional sejak migrasi 024 (form pesan tidak menanyakannya
+  // lagi); kalau dikirim, tetap harus salah satu nilai enum.
+  if (!service_id || !event_date || !event_location_detail) {
     return res.status(400).json({
-      message: 'service_id, event_date, event_type, dan event_location_detail wajib diisi',
+      message: 'service_id, event_date, dan event_location_detail wajib diisi',
     });
   }
   if (!isValidDate(event_date)) {
@@ -58,13 +60,13 @@ async function createBooking(req, res, next) {
   if (start_time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(start_time)) {
     return res.status(400).json({ message: 'start_time harus format HH:MM (24 jam)' });
   }
-  if (!VALID_EVENT_TYPES.includes(event_type)) {
+  if (event_type != null && !VALID_EVENT_TYPES.includes(event_type)) {
     return res.status(400).json({ message: 'event_type tidak valid', allowed: VALID_EVENT_TYPES });
   }
 
   // Jumlah = berapa orang (MUA), berapa buket (florist), berapa setel (sewa).
   // Tidak dikirim berarti 1, supaya pemanggil lama tetap jalan.
-  const jumlah = quantity === undefined || quantity === null ? 1 : Number(quantity);
+  let jumlah = quantity === undefined || quantity === null ? 1 : Number(quantity);
   if (!Number.isInteger(jumlah) || jumlah < 1 || jumlah > 999) {
     return res.status(400).json({ message: 'quantity harus bilangan bulat 1-999' });
   }
@@ -91,6 +93,7 @@ async function createBooking(req, res, next) {
     const svc = await client.query(
       `SELECT s.vendor_id, s.price, s.minimum_notice_days, s.category, s.service_name,
               s.durasi_menit, s.per_orang, s.harga_per_jam_tambahan,
+              s.min_orang, s.harga_per_orang_tambahan,
               v.daily_capacity, v.jeda_menit,
               ($2::date >= CURRENT_DATE + s.minimum_notice_days) AS notice_ok
          FROM services s
@@ -133,10 +136,11 @@ async function createBooking(req, res, next) {
       if (!/^([01]\d|2[0-3]):00$/.test(jamMulai)) {
         return res.status(400).json({ message: 'start_time harus jam penuh, format HH:00' });
       }
-      const d = bacaDurasi(layanan, jumlah, jam_tambahan);
+      const d = bacaDurasi(layanan, jumlah, jam_tambahan, jamMulai);
       if (d.galat) return res.status(400).json({ message: d.galat });
       durasi = d.durasi;
       tambahan = d.tambahan;
+      jumlah = d.jumlah;
     } else if (jam_tambahan) {
       return res.status(400).json({ message: 'Layanan ini tidak dipesan per jam' });
     }
@@ -264,9 +268,13 @@ async function createBooking(req, res, next) {
 
     // Nominal selalu dihitung ulang di sini dari harga layanan di DB — angka
     // dari browser tidak dipercaya, termasuk jumlahnya.
-    // Jam tambahan ditagih per pesanan, bukan per orang.
+    // Jam tambahan ditagih per pesanan, bukan per orang. Paket per orang
+    // (023): harga paket sudah mencakup min_orang, sisanya tarif tambahan.
+    const hargaBarang = layanan.per_orang
+      ? Number(price) + (jumlah - (layanan.min_orang || 1)) * Number(layanan.harga_per_orang_tambahan || 0)
+      : Number(price) * jumlah;
     const totalPrice = (
-      Number(price) * jumlah + tambahan * Number(layanan.harga_per_jam_tambahan || 0)
+      hargaBarang + tambahan * Number(layanan.harga_per_jam_tambahan || 0)
     ).toFixed(2);
     const dpAmount = (Number(totalPrice) * DP_RATE).toFixed(2);
 
@@ -299,7 +307,7 @@ async function createBooking(req, res, next) {
                now() + interval '24 hours', $13, $14, $15, $16)
        RETURNING *`,
       [userId, service_id, vendor_id, event_date, jamMulai, perTim,
-       slotKe, jumlah, event_type, event_location_detail, totalPrice, dpAmount,
+       slotKe, jumlah, event_type ?? null, event_location_detail, totalPrice, dpAmount,
        durasi, tambahan, perJam ? layanan.jeda_menit : 0, konsultasiId]
     );
 

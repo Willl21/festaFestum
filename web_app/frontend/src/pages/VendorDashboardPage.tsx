@@ -16,7 +16,7 @@ import {
  *  seolah customernya yang lambat, padahal gilirannya ada di vendor. Dan
  *  'dp_paid' dulu dilabeli "Dikonfirmasi", yang sekarang bentrok artinya
  *  dengan konfirmasi vendor. */
-function labelStatus(b: ApiBooking): { teks: string; tone: 'warn' | 'info' | 'muted' } {
+function labelStatus(b: ApiBooking): { teks: string; tone: 'warn' | 'info' | 'muted' | 'success' } {
   if (b.payment_status === 'cancelled') {
     return b.confirm_status === 'ditolak'
       ? { teks: 'Anda tolak', tone: 'muted' }
@@ -26,7 +26,7 @@ function labelStatus(b: ApiBooking): { teks: string; tone: 'warn' | 'info' | 'mu
   if (b.confirm_status === 'menunggu') return { teks: 'Perlu dijawab', tone: 'warn' }
   if (b.payment_status === 'pending') return { teks: 'Menunggu DP', tone: 'warn' }
   if (b.payment_status === 'dp_paid') return { teks: 'DP lunas', tone: 'info' }
-  return { teks: 'Lunas', tone: 'info' }
+  return { teks: 'Lunas', tone: 'success' }
 }
 
 const inisial = (nama: string) =>

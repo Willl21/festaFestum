@@ -137,7 +137,10 @@ export default function InvoicePage() {
         <div className="mt-7 rounded border border-line bg-cream p-5">
           <p className="text-[11px] tracking-wide text-muted uppercase">Detail acara</p>
           <div className="mt-3 grid gap-3 text-[13px] sm:grid-cols-3">
-            <Baris label="Jenis acara" nilai={labelAcara[booking.event_type] ?? booking.event_type} />
+            {/* Pesanan sesudah migrasi 024 boleh tanpa jenis acara. */}
+            {booking.event_type && (
+              <Baris label="Jenis acara" nilai={labelAcara[booking.event_type] ?? booking.event_type} />
+            )}
             <Baris
               label="Tanggal & jam"
               nilai={`${tanggalPanjang(booking.event_date)} · ${rentangJam(booking)}`}

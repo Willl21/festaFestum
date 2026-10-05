@@ -159,6 +159,54 @@ body {
   }
 }
 
+/* Bingkai gradien saat kartu vendor ditunjuk (adaptasi BackgroundGradient
+   Aceternity, warnanya navy seperti footer + sorotan lavender, tanpa framer-motion). Dipasang di
+   PEMBUNGKUS kartu: ::before = bingkai tajam 2px, ::after = pendar buram.
+   inset negatif, jadi ukuran kartu tidak berubah dan rangka muatnya tetap
+   pas. Hanya untuk perangkat ber-hover: di HP hover menempel sesudah tap.
+   Animasinya dijeda selama tak ditunjuk, supaya 20 kartu tidak repaint terus. */
+.bingkai-gradien {
+  position: relative;
+  isolation: isolate;
+}
+.bingkai-gradien > * {
+  position: relative;
+  z-index: 1;
+}
+.bingkai-gradien::before,
+.bingkai-gradien::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle farthest-side at 0 100%, var(--color-navy-700), transparent),
+    radial-gradient(circle farthest-side at 100% 0, var(--color-lavender), transparent),
+    radial-gradient(circle farthest-side at 100% 100%, var(--color-navy-700), transparent),
+    radial-gradient(circle farthest-side at 0 0, var(--color-navy-900), var(--color-navy-900));
+  background-size: 400% 400%;
+  opacity: 0;
+  transition: opacity 500ms var(--ease-out);
+  animation: bingkai-geser 5s ease-in-out infinite alternate paused;
+}
+.bingkai-gradien::after {
+  filter: blur(10px);
+}
+@media (hover: hover) {
+  .bingkai-gradien:hover::before {
+    opacity: 1;
+    animation-play-state: running;
+  }
+  .bingkai-gradien:hover::after {
+    opacity: 0.3;
+    animation-play-state: running;
+  }
+}
+@keyframes bingkai-geser {
+  from { background-position: 0 50%; }
+  to { background-position: 100% 50%; }
+}
+
 /* Umpan balik tekan (review 25 Sep): sebelumnya tidak ada satu tombol pun
    yang bereaksi saat ditekan, jadi klik di koneksi lambat terasa tidak kena.
    Memakai properti `scale`, bukan `transform`, supaya tidak menimpa transform
@@ -278,6 +326,12 @@ details[open] > summary .ff-panah {
   }
 
   .masuk-halus {
+    animation: none;
+  }
+
+  /* Bingkainya tetap muncul, gradiennya diam. */
+  .bingkai-gradien::before,
+  .bingkai-gradien::after {
     animation: none;
   }
 

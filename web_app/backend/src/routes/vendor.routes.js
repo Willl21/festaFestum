@@ -4,7 +4,7 @@ const {
   upsertMyDocument, listMyDocuments, getMyDocumentFile, setMyPhoto, getVendorPhoto,
 } = require('../controllers/vendor.controller');
 const { createService, listServices, listMyServices } = require('../controllers/service.controller');
-const { listUlasanVendor } = require('../controllers/review.controller');
+const { listUlasanVendor, hapusUlasan } = require('../controllers/review.controller');
 const { mulaiKonsultasi } = require('../controllers/chat.controller');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
 
@@ -21,6 +21,7 @@ router.get('/me/documents', requireAuth, requireRole('vendor_owner'), listMyDocu
 router.put('/me/documents/:docType', requireAuth, requireRole('vendor_owner'), upsertMyDocument);
 router.get('/me/documents/:docType/berkas', requireAuth, requireRole('vendor_owner'), getMyDocumentFile);
 router.put('/me/photos/:slot', requireAuth, requireRole('vendor_owner'), setMyPhoto);
+router.delete('/me/ulasan/:reviewId', requireAuth, requireRole('vendor_owner'), hapusUlasan);
 
 router.get('/:vendorId', getVendorDetail);
 router.get('/:vendorId/services', listServices);

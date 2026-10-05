@@ -29,17 +29,28 @@ export function daftarJam([mulai, selesai]: [number, number]) {
 
 export const berbasisJam = (l?: Pick<ApiService, 'durasi_menit'>) => l?.durasi_menit != null
 
+/** Orang yang sudah termasuk harga paket per orang (migrasi 023). */
+export const orangDasar = (l: ApiService) => l.min_orang || 1
+
+/** Jumlah orang yang dihitung: paling sedikit orangDasar. Sama dengan
+ *  orangEfektif di backend/src/lib/kategori.js. */
+export const orangEfektif = (l: ApiService, jumlah: number) => Math.max(jumlah, orangDasar(l))
+
 /** Durasi total dalam menit, tanpa jeda: per orang dikali jumlah orang,
  *  dibulatkan ke atas ke jam penuh, lalu ditambah jam tambahan. */
 export function durasiPesanan(l: ApiService, jumlah: number, tambahan: number) {
-  const dasar = (l.durasi_menit ?? 0) * (l.per_orang ? jumlah : 1)
+  const dasar = (l.durasi_menit ?? 0) * (l.per_orang ? orangEfektif(l, jumlah) : 1)
   return Math.ceil(dasar / 60) * 60 + tambahan * 60
 }
 
-/** Harga paket x jumlah + jam tambahan x harga per jam. Jam tambahan ditagih
- *  per pesanan, bukan per orang. */
+/** Paket per orang: harga paket (sudah mencakup orangDasar) + orang tambahan
+ *  x tarifnya. Lainnya: harga x jumlah. Jam tambahan ditagih per pesanan.
+ *  Rumus yang sama ada di createBooking — ubah dua-duanya. */
 export function hargaPesanan(l: ApiService, jumlah: number, tambahan: number) {
-  return Number(l.price) * jumlah + tambahan * Number(l.harga_per_jam_tambahan ?? 0)
+  const barang = l.per_orang
+    ? Number(l.price) + (orangEfektif(l, jumlah) - orangDasar(l)) * Number(l.harga_per_orang_tambahan ?? 0)
+    : Number(l.price) * jumlah
+  return barang + tambahan * Number(l.harga_per_jam_tambahan ?? 0)
 }
 
 /** "06:00" + 180 menit -> "09:00". Boleh lewat tengah malam ("02:00"). */

@@ -12,6 +12,13 @@ export function isoLokal(d: Date) {
   return `${d.getFullYear()}-${b}-${t}`
 }
 
+/** Tanggal YYYY-MM-DD digeser n hari (n negatif = mundur). */
+export function geserHari(tanggal: string, n: number) {
+  const d = new Date(`${tanggal}T00:00:00`)
+  d.setDate(d.getDate() + n)
+  return isoLokal(d)
+}
+
 /** Seluruh tampilan kalender dari token proyek — react-day-picker cuma
  *  dipakai untuk grid dan aksesibilitas keyboardnya. Dibagi dengan
  *  KalenderSlot supaya keduanya tidak pernah melenceng. */

@@ -1,7 +1,8 @@
 const pool = require('../config/db');
 const { acquireLock, lockHolder, LOCK_TTL_SECONDS } = require('../config/redis');
 const {
-  perTim, BOOKING_AKTIF, berbasisJam, durasiPesanan, MAKS_JAM_TAMBAHAN,
+  perTim, BOOKING_AKTIF, berbasisJam, durasiPesanan, orangEfektif, MAKS_JAM_TAMBAHAN,
+  BATAS_SELESAI_ORANG_TAMBAHAN,
 } = require('../lib/kategori');
 
 // Rentang maksimal satu permintaan ketersediaan. Kalender cuma butuh
@@ -92,7 +93,7 @@ const sqlKetersediaan = (svc, dari, sampai) => `
 async function cekTanggal(service_id, event_date) {
   const q = await pool.query(
     `SELECT s.vendor_id, s.service_name, s.price, s.minimum_notice_days, s.category,
-            s.durasi_menit, s.per_orang, s.harga_per_jam_tambahan,
+            s.durasi_menit, s.per_orang, s.harga_per_jam_tambahan, s.min_orang, s.harga_per_orang_tambahan,
             v.daily_capacity, v.jeda_menit,
             ($2::date >= CURRENT_DATE + s.minimum_notice_days) AS notice_ok,
             ($2::date <= CURRENT_DATE + ${HORIZON_HARI}) AS horizon_ok,
@@ -140,7 +141,7 @@ async function timKosong(db, { vendor_id, event_date, start_time, durasi, jeda, 
 
 /** Durasi pesanan berbasis jam, atau pesan galat. Aturan validasinya dipakai
  *  bersama createBooking dan /schedules/check. */
-function bacaDurasi(layanan, jumlah, jam_tambahan) {
+function bacaDurasi(layanan, jumlah, jam_tambahan, start_time) {
   const tambahan = jam_tambahan == null ? 0 : Number(jam_tambahan);
   if (!Number.isInteger(tambahan) || tambahan < 0 || tambahan > MAKS_JAM_TAMBAHAN) {
     return { galat: `jam_tambahan harus bilangan bulat 0-${MAKS_JAM_TAMBAHAN}` };
@@ -152,7 +153,21 @@ function bacaDurasi(layanan, jumlah, jam_tambahan) {
   if (!layanan.per_orang && jumlah !== 1) {
     return { galat: 'Paket ini per sesi, jumlah orang tidak bisa diubah' };
   }
-  return { tambahan, durasi: durasiPesanan(layanan, jumlah, tambahan) };
+  // Paket per orang: jumlah di bawah min_orang dibulatkan naik (sudah
+  // termasuk harga paket); di atasnya butuh tarif orang tambahan.
+  const orang = layanan.per_orang ? orangEfektif(layanan, jumlah) : 1;
+  if (layanan.per_orang && orang > (layanan.min_orang || 1) && layanan.harga_per_orang_tambahan == null) {
+    return { galat: 'Paket ini tidak menerima tambahan orang' };
+  }
+  const durasi = durasiPesanan(layanan, orang, tambahan);
+  // Orang tambahan tidak boleh mendorong selesainya lewat jam tutup.
+  if (layanan.per_orang && orang > (layanan.min_orang || 1) && start_time) {
+    const mulai = Number(start_time.slice(0, 2)) * 60;
+    if (mulai + durasi > BATAS_SELESAI_ORANG_TAMBAHAN) {
+      return { galat: 'Dengan orang tambahan, riasan selesai lewat jam 20:00. Kurangi orang atau pilih jam lebih awal.' };
+    }
+  }
+  return { tambahan, jumlah: orang, durasi };
 }
 
 // POST /api/v1/schedules  (vendor_owner)
@@ -296,6 +311,7 @@ async function listJamTerisi(req, res, next) {
 
     const svc = await pool.query(
       `SELECT s.vendor_id, s.category, s.durasi_menit, s.per_orang, s.harga_per_jam_tambahan,
+              s.min_orang, s.harga_per_orang_tambahan,
               v.daily_capacity, v.jeda_menit
          FROM services s
          JOIN vendors  v ON v.vendor_id = s.vendor_id
@@ -398,7 +414,7 @@ async function checkAvailability(req, res, next) {
         return res.status(400).json({ message: 'start_time harus jam penuh, format HH:00' });
       }
       const jumlah = quantity == null ? 1 : Number(quantity);
-      const d = bacaDurasi(r, jumlah, jam_tambahan);
+      const d = bacaDurasi(r, jumlah, jam_tambahan, start_time);
       if (d.galat) return res.status(400).json({ message: d.galat });
       const tim = await timKosong(pool, {
         vendor_id: r.vendor_id, event_date, start_time,

@@ -8,6 +8,7 @@ import BackButton from '../components/BackButton'
 import KalenderSlot from '../components/KalenderSlot'
 import DetailSkeleton from '../components/DetailSkeleton'
 import TukarHalus from '../components/TukarHalus'
+import Dropdown from '../components/Dropdown'
 import { ArrowRight } from '../components/icons'
 import { serviceIcons } from '../components/serviceIcons'
 import { categories, namaKota } from '../data/categories'
@@ -40,6 +41,9 @@ export default function FloristDetailPage() {
   // Tanggal yang dipilih user, lalu hasil pengecekannya ke backend. Florist
   // tidak menanyakan jam (revisi PM 26 Sep 2026).
   const [tanggal, setTanggal] = useState('')
+  // Layanan yang mau dipesan dipilih DULU, baru tanggalnya: ketersediaan &
+  // lead time per layanan. Datang dari kartu Festa AI (?layanan=) = terpilih.
+  const [paketId, setPaketId] = useState(() => new URLSearchParams(window.location.search).get('layanan') ?? '')
   const [cek, setCek] = useState<{ ada: boolean; alasan: string | null } | null>(null)
   const [mengecek, setMengecek] = useState(false)
 
@@ -54,14 +58,14 @@ export default function FloristDetailPage() {
       .finally(() => setMemuat(false))
   }, [id])
 
-  // Layanan pertama dipakai sebagai acuan harga & pengecekan jadwal. Satu
-  // vendor bisa punya banyak layanan; pemilihan paket dilakukan di halaman
-  // pesan berikutnya. Kecuali datang dari kartu Festa AI (?layanan=): layanan
-  // yang direkomendasikan itulah acuannya.
-  const utama = layanan.find((s) => s.service_id === new URLSearchParams(window.location.search).get('layanan')) ?? layanan[0]
+  const utama = layanan.find((s) => s.service_id === paketId)
+  const termurah = layanan.length ? Math.min(...layanan.map((s) => Number(s.price))) : 0
 
   async function ajukan() {
-    if (!utama) return
+    if (!utama) {
+      setCek({ ada: false, alasan: 'Pilih layanan yang mau dipesan dulu.' })
+      return
+    }
     if (!tanggal) {
       setCek({ ada: false, alasan: 'Pilih tanggal acara dulu.' })
       return
@@ -194,15 +198,35 @@ export default function FloristDetailPage() {
                 Detail Informasi
               </p>
 
-              <p className="mt-5 text-[14px] text-muted">Mulai dari</p>
+              <label htmlFor="paket" className="mt-5 block text-[15px] font-semibold">
+                Mau pesan apa?
+              </label>
+              {layanan.length > 0 && (
+                <div className="relative mt-2">
+                  <Dropdown
+                    id="paket"
+                    value={paketId}
+                    onChange={(v) => { setPaketId(v); setTanggal(''); setCek(null) }}
+                    className="h-11 w-full appearance-none rounded-sm border border-line bg-white px-3 pr-9 text-[14px] outline-none focus:border-navy-900"
+                  >
+                    <option value="" disabled>Pilih layanan…</option>
+                    {layanan.map((s) => (
+                      <option key={s.service_id} value={s.service_id}>{s.service_name}</option>
+                    ))}
+                  </Dropdown>
+                </div>
+              )}
+
+              <p className="mt-5 text-[14px] text-muted">{utama ? 'Harga' : 'Mulai dari'}</p>
               <p className="font-display text-[27px] font-semibold">
-                {utama ? `${rupiah(Number(utama.price))}/paket` : '-'}
+                {utama ? `${rupiah(Number(utama.price))}/paket` : layanan.length ? rupiah(termurah) : '-'}
               </p>
 
-              <p className="mt-5 text-[15px] font-semibold">Tanggal Acara</p>
               {/* Kalender menggantikan <input type="date"> polos: tanggal
                   yang vendornya tidak buka, sudah penuh, atau masih di dalam
-                  minimum_notice_days langsung mati di grid. */}
+                  minimum_notice_days langsung mati di grid. Baru tampil
+                  sesudah layanannya dipilih, karena jadwalnya per layanan. */}
+              {utama && <p className="mt-5 text-[15px] font-semibold">Tanggal Acara</p>}
               {utama ? (
                 <div className="mt-3">
                   <KalenderSlot
@@ -213,10 +237,12 @@ export default function FloristDetailPage() {
                     onPilih={(t) => { setTanggal(t); setCek(null) }}
                   />
                 </div>
-              ) : (
+              ) : layanan.length === 0 ? (
                 <p className="mt-3 text-[13px] text-muted">
                   Vendor ini belum menambahkan paket, jadi jadwalnya belum bisa dilihat.
                 </p>
+              ) : (
+                <p className="mt-3 text-[13px] text-muted">Pilih layanan dulu, lalu tanggal acaranya.</p>
               )}
 
               {/* Ketersediaan dicek ke backend dulu. Kalau slotnya penuh atau lead
@@ -230,7 +256,7 @@ export default function FloristDetailPage() {
               <button
                 type="button"
                 onClick={ajukan}
-                disabled={mengecek || !utama}
+                disabled={mengecek || layanan.length === 0}
                 className="mt-6 flex h-11 w-full items-center justify-center gap-3 rounded-sm bg-amber text-[15px] font-semibold text-navy-900 transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 {mengecek ? 'Mengecek jadwal…' : 'Ajukan Pesanan'}

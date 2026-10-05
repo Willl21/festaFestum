@@ -11,22 +11,16 @@ import {
   type ApiService, type ApiVendor,
 } from '../lib/api'
 import Dropdown from '../components/Dropdown'
+import { RENTANG_JAM, daftarJam } from '../lib/durasi'
+import { geserHari, isoLokal } from '../lib/kalender'
+
+// Jam pengambilan & fitting cukup per jam penuh, bukan diketik per menit.
+const PILIHAN_JAM = daftarJam(RENTANG_JAM.attire).map((j) => ({ value: j, label: j }))
 
 const kat = categories.attire
 
 const sizes = ['S', 'M', 'L', 'XL', 'XLL']
 const colors = ['Hitam', 'Navy', 'Hijau tua']
-
-/** Sewa busana tidak punya "jenis acara" di mockup, tapi POST /bookings
- *  mewajibkannya. 'wedding' dipakai sebagai default karena itu yang paling
- *  umum untuk jas & kebaya; user tetap bisa mengubahnya. */
-const JENIS_ACARA = [
-  { value: 'wedding', label: 'Pernikahan' },
-  { value: 'engagement', label: 'Lamaran' },
-  { value: 'graduation', label: 'Wisuda' },
-  { value: 'gala_dinner', label: 'Gala Dinner' },
-  { value: 'corporate_seminar', label: 'Seminar / Korporat' },
-]
 
 export default function AttireOrderPage() {
   const { id = '' } = useParams()
@@ -48,15 +42,14 @@ export default function AttireOrderPage() {
   const [tglSewa, setTglSewa] = useState(params.get('date') ?? '')
   // Tanpa nilai bawaan. Dulu shift dipatok 'pagi' diam-diam, jadi penyewaan
   // di tanggal yang slot paginya penuh gagal tanpa penyewa pernah diberi
-  // pilihan; sekarang jamnya diketik sendiri dan tidak mengunci apa pun.
+  // pilihan; sekarang jam PENGAMBILAN dipilih per jam dan tidak mengunci apa pun.
   const [jam, setJam] = useState(params.get('jam') ?? '')
   const [tglAmbil, setTglAmbil] = useState(params.get('ambil') ?? '')
   const [fitting, setFitting] = useState(params.get('fitting') !== 'false')
   const [tglFitting, setTglFitting] = useState(params.get('tglFitting') ?? '')
 
   const [warna, setWarna] = useState('')
-  const [jamFitting, setJamFitting] = useState('')
-  const [jenisAcara, setJenisAcara] = useState(JENIS_ACARA[0].value)
+  const [jamFitting, setJamFitting] = useState(params.get('jamFitting') ?? '')
   const [catatan, setCatatan] = useState('')
 
   useEffect(() => {
@@ -80,9 +73,20 @@ export default function AttireOrderPage() {
     setGalat('')
     if (!paket) return setGalat('Vendor ini belum punya layanan aktif.')
     if (!tglSewa) return setGalat('Tanggal sewa wajib diisi.')
-    if (!jam) return setGalat('Pilih jam dulu.')
+    if (!jam) return setGalat('Pilih jam pengambilan dulu.')
     if (!ukuran) return setGalat('Ukuran wajib dipilih.')
     if (!tglAmbil) return setGalat('Tanggal pengambilan wajib diisi.')
+    // min/max di input date cuma membatasi pemilihnya; ketikan tetap lolos.
+    if (fitting && !tglFitting) return setGalat('Tanggal fitting wajib diisi.')
+    if (fitting && (tglFitting < isoLokal(new Date()) || tglFitting >= tglSewa)) {
+      return setGalat('Tanggal fitting harus antara hari ini dan sehari sebelum tanggal sewa.')
+    }
+    if (tglAmbil < (fitting ? tglFitting : isoLokal(new Date())) || tglAmbil >= tglSewa) {
+      return setGalat('Tanggal pengambilan harus sesudah fitting (atau hari ini) dan sebelum tanggal sewa.')
+    }
+    if (fitting && tglAmbil === tglFitting && jamFitting && jam <= jamFitting) {
+      return setGalat('Jam pengambilan harus sesudah jam fitting.')
+    }
 
     // Tabel bookings tidak punya kolom ukuran/warna/fitting. Semuanya
     // dititipkan ke event_location_detail; menambah kolom demi satu kategori
@@ -102,7 +106,6 @@ export default function AttireOrderPage() {
         service_id: paket.service_id,
         event_date: tglSewa,
         start_time: jam,
-        event_type: jenisAcara,
         event_location_detail: detail,
         quantity: jumlah,
       })
@@ -138,7 +141,7 @@ export default function AttireOrderPage() {
             galat={galat}
           >
             {/* Sewa busana tidak punya lokasi acara — yang dibutuhkan ukuran,
-                warna, dan tiga tanggal (sewa, pengambilan, fitting). */}
+                warna, dan tiga tanggal (sewa, fitting, pengambilan). */}
             <OrderSection title="Informasi Acara" icon={<CalendarIcon />}>
               {layanan.length > 1 && (
                 <div className="mb-5">
@@ -164,10 +167,6 @@ export default function AttireOrderPage() {
                   value={String(jumlah)}
                   onChange={(v) => setJumlah(Math.min(999, Math.max(1, Number(v) || 1)))}
                 />
-                <Select
-                  id="jenis" label="JENIS ACARA" value={jenisAcara} onChange={setJenisAcara}
-                  options={JENIS_ACARA}
-                />
               </div>
 
               <p className="mt-6 block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
@@ -179,10 +178,9 @@ export default function AttireOrderPage() {
                     serviceId={paket.service_id}
                     kategori="attire"
                     tanggal={tglSewa}
-                    jam={jam}
-                    labelJam="Jam Pengambilan"
-                    keteranganJam="Jam Anda mengambil setelannya di gerai vendor."
-                    onPilih={(t, j) => { setTglSewa(t); setJam(j) }}
+                    jam=""
+                    tanpaJam
+                    onPilih={(t) => setTglSewa(t)}
                   />
                 </div>
               ) : (
@@ -191,20 +189,11 @@ export default function AttireOrderPage() {
                 </p>
               )}
 
-              {/* Sama seperti panel di halaman detail: yang bergantung pada
-                  tanggal sewa baru muncul setelah tanggal sewanya ada. Dulu
-                  TANGGAL PENGAMBILAN malah duduk di grid paling atas, di ATAS
-                  tanggal sewa yang membatasinya. */}
+              {/* Urut seperti di halaman detail: sewa -> fitting -> pengambilan.
+                  Yang bergantung pada tanggal sebelumnya baru muncul setelah
+                  tanggal itu terisi, jadi baju tidak bisa diambil sebelum
+                  di-fitting. */}
               {tglSewa && (
-                <div className="mt-6 max-w-[320px]">
-                  <OrderField
-                    id="tanggal-ambil" label="TANGGAL PENGAMBILAN" type="date"
-                    value={tglAmbil} onChange={setTglAmbil}
-                  />
-                </div>
-              )}
-
-              {tglSewa && tglAmbil && (
                 <>
               <fieldset className="mt-6 flex items-center gap-6">
                 <legend className="float-left mr-6 text-[11px] font-semibold tracking-[0.06em] text-ink/70">
@@ -231,15 +220,32 @@ export default function AttireOrderPage() {
                 <div className="mt-5 grid gap-5 sm:grid-cols-2">
                   <OrderField
                     id="tanggal-fitting" label="TANGGAL FITTING" type="date"
-                    value={tglFitting} onChange={setTglFitting}
+                    value={tglFitting} onChange={setTglFitting} min={isoLokal(new Date())}
+                    // Paling lambat H-1: fitting di hari H atau sesudahnya tidak ada gunanya.
+                    max={geserHari(tglSewa, -1)}
                   />
-                  <OrderField
-                    id="jam-fitting" label="JAM FITTING" type="time"
+                  <Select
+                    id="jam-fitting" label="JAM FITTING" options={PILIHAN_JAM}
                     value={jamFitting} onChange={setJamFitting}
                   />
                 </div>
               )}
                 </>
+              )}
+
+              {tglSewa && (!fitting || tglFitting) && (
+                <div className="mt-6 grid gap-5 sm:grid-cols-2">
+                  <OrderField
+                    id="tanggal-ambil" label="TANGGAL PENGAMBILAN" type="date"
+                    value={tglAmbil} onChange={setTglAmbil}
+                    // Sesudah fitting (atau hari ini), paling lambat H-1.
+                    min={fitting ? tglFitting : isoLokal(new Date())} max={geserHari(tglSewa, -1)}
+                  />
+                  <Select
+                    id="jam-ambil" label="JAM PENGAMBILAN" options={PILIHAN_JAM}
+                    value={jam} onChange={setJam}
+                  />
+                </div>
               )}
             </OrderSection>
 

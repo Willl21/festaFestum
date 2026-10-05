@@ -290,34 +290,36 @@ export default function FestaAiPage() {
                       return (
                         <article
                           key={r.service_id}
-                          className="grid gap-6 rounded-sm border border-line bg-white p-4 sm:grid-cols-[320px_1fr]"
+                          className="bingkai-gradien"
                         >
-                          <Img
-                            src={r.has_photo ? urlFotoLayanan(r.service_id) : undefined}
-                            alt={r.service_name}
-                            tint={kat.tint}
-                            className="h-[200px] w-full object-cover"
-                          />
+                          <div className="grid gap-6 rounded-sm border border-line bg-white p-4 sm:grid-cols-[320px_1fr]">
+                            <Img
+                              src={r.has_photo ? urlFotoLayanan(r.service_id) : undefined}
+                              alt={r.service_name}
+                              tint={kat.tint}
+                              className="h-[200px] w-full object-cover"
+                            />
 
-                          <div className="flex flex-col py-2 pr-2">
-                            {/* Yang direkomendasikan LAYANAN, bukan vendornya. */}
-                            <h3 className="font-display text-[26px] font-semibold">{r.service_name}</h3>
-                            <p className="mt-2 max-w-[420px] text-[14px] leading-relaxed text-ink/75">
-                              oleh {r.business_name}
-                            </p>
-                            <span className="mt-3 w-fit rounded-sm bg-[#fdeceb] px-3 py-1.5 text-[13px] text-[#c0392b]">
-                              {kat.label} - {namaKota(r.city)} - rating {Number(r.rating_avg)}
-                            </span>
-                            <div className="mt-auto flex items-end justify-between gap-4 pt-6">
-                              <Link
-                                to={`/${kat.slug}/${r.vendor_id}?layanan=${r.service_id}&dari=festa-ai`}
-                                className="rounded-sm border border-line px-4 py-2 text-[13px] transition-colors hover:border-navy-900"
-                              >
-                                Lihat Layanan
-                              </Link>
-                              <p className="font-display text-[24px] font-semibold">
-                                {rupiah(Number(r.price))}
+                            <div className="flex flex-col py-2 pr-2">
+                              {/* Yang direkomendasikan LAYANAN, bukan vendornya. */}
+                              <h3 className="font-display text-[26px] font-semibold">{r.service_name}</h3>
+                              <p className="mt-2 max-w-[420px] text-[14px] leading-relaxed text-ink/75">
+                                oleh {r.business_name}
                               </p>
+                              <span className="mt-3 w-fit rounded-sm bg-[#fdeceb] px-3 py-1.5 text-[13px] text-[#c0392b]">
+                                {kat.label} - {namaKota(r.city)} - rating {Number(r.rating_avg)}
+                              </span>
+                              <div className="mt-auto flex items-end justify-between gap-4 pt-6">
+                                <Link
+                                  to={`/${kat.slug}/${r.vendor_id}?layanan=${r.service_id}&dari=festa-ai`}
+                                  className="rounded-sm border border-line px-4 py-2 text-[13px] transition-colors hover:border-navy-900"
+                                >
+                                  Lihat Layanan
+                                </Link>
+                                <p className="font-display text-[24px] font-semibold">
+                                  {rupiah(Number(r.price))}
+                                </p>
+                              </div>
                             </div>
                           </div>
                         </article>

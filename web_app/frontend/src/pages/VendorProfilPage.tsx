@@ -13,6 +13,7 @@ import { AVATAR, bacaDokumen, kecilkanGambar } from '../lib/gambar'
 import Dropdown from '../components/Dropdown'
 import RekeningBank from '../components/RekeningBank'
 import DuaLangkah from '../components/DuaLangkah'
+import UlasanVendor from '../components/UlasanVendor'
 import type { Rekening } from '../data/banks'
 
 /** Kelola profil vendor sesudah onboarding (revisi PM 26 Sep 2026).
@@ -346,6 +347,10 @@ export default function VendorProfilPage() {
                     })}
                   </div>
                   <p className="mt-2 text-[11px] text-muted">JPG, PNG, atau PDF maks. 700 KB.</p>
+                </section>
+
+                <section className="rounded-lg border border-line bg-white p-6">
+                  <UlasanVendor vendorId={vendor.vendor_id} bisaHapus />
                 </section>
 
                 {galat && <p role="alert" className="text-[14px] text-maroon">{galat}</p>}

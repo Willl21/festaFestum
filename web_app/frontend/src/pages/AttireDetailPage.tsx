@@ -7,6 +7,7 @@ import VendorLocation from '../components/VendorLocation'
 import BackButton from '../components/BackButton'
 import KalenderSlot from '../components/KalenderSlot'
 import KalenderTanggal from '../components/KalenderTanggal'
+import { isoLokal } from '../lib/kalender'
 import DetailSkeleton from '../components/DetailSkeleton'
 import TukarHalus from '../components/TukarHalus'
 import { ArrowRight } from '../components/icons'
@@ -102,6 +103,7 @@ export default function AttireDetailPage() {
   const [tglSewa, setTglSewa] = useState('')
   const [tglAmbil, setTglAmbil] = useState('')
   const [tglFitting, setTglFitting] = useState('')
+  const [jamFitting, setJamFitting] = useState('')
   const [cek, setCek] = useState<{ ada: boolean; alasan: string | null } | null>(null)
   const [mengecek, setMengecek] = useState(false)
 
@@ -144,21 +146,36 @@ export default function AttireDetailPage() {
     if (sisa.length && !sisa.some((s) => s.service_id === produkId)) pilihProduk(sisa[0].service_id)
   }
 
+  /** Pengambilan tidak boleh sebelum fitting: yang sudah terpilih lebih awal
+   *  dari tanggal fitting baru dikosongkan. */
+  function pilihFitting(t: string) {
+    setTglFitting(t)
+    if (tglAmbil && tglAmbil < t) setTglAmbil('')
+  }
+
   // Jadwal sewa dipakai sebagai tanggal acara — itu hari busananya dipakai.
-  // Jamnya jam PENGAMBILAN setelan, diisi bebas oleh penyewa. Dia tidak
+  // Jamnya jam PENGAMBILAN setelan, dipilih di samping kalender pengambilan. Dia tidak
   // menentukan ketersediaan apa pun — yang habis kapasitas harian vendor.
   async function lanjutkan() {
     if (!utama) return
-    if (!tglSewa || !jam) {
-      setCek({ ada: false, alasan: 'Pilih tanggal dan jam dulu.' })
+    if (!tglSewa) {
+      setCek({ ada: false, alasan: 'Pilih tanggal sewa dulu.' })
       return
     }
     if (!size) {
       setCek({ ada: false, alasan: 'Pilih ukuran dulu.' })
       return
     }
-    if (!tglAmbil) {
-      setCek({ ada: false, alasan: 'Pilih jadwal pengambilan dulu.' })
+    if (fitting && (!tglFitting || !jamFitting)) {
+      setCek({ ada: false, alasan: 'Pilih tanggal dan jam fitting dulu.' })
+      return
+    }
+    if (!tglAmbil || !jam) {
+      setCek({ ada: false, alasan: 'Pilih tanggal dan jam pengambilan dulu.' })
+      return
+    }
+    if (fitting && tglAmbil === tglFitting && jam <= jamFitting) {
+      setCek({ ada: false, alasan: 'Jam pengambilan harus sesudah jam fitting.' })
       return
     }
 
@@ -172,7 +189,7 @@ export default function AttireDetailPage() {
         const q = new URLSearchParams({
           service: utama.service_id, date: tglSewa, jam: jam,
           jenis: jenisUkuran, size, color, fitting: String(fitting),
-          ambil: tglAmbil, ...(fitting && tglFitting ? { tglFitting } : {}),
+          ambil: tglAmbil, ...(fitting && tglFitting ? { tglFitting, jamFitting } : {}),
         })
         navigate(`/${kat.slug}/${id}/pesan?${q}`)
       }
@@ -386,10 +403,13 @@ export default function AttireDetailPage() {
                     serviceId={utama.service_id}
                     kategori="attire"
                     tanggal={tglSewa}
-                    jam={jam}
-                    labelJam="Jam Pengambilan"
-                    keteranganJam="Jam Anda mengambil setelannya di gerai vendor."
-                    onPilih={(t, j) => { setTglSewa(t); setJam(j); setCek(null) }}
+                    jam=""
+                    tanpaJam
+                    onPilih={(t) => {
+                      // Fitting & pengambilan dibatasi tanggal sewa; ganti sewa = pilih ulang.
+                      if (t !== tglSewa) { setTglFitting(''); setTglAmbil('') }
+                      setTglSewa(t); setCek(null)
+                    }}
                   />
                 </div>
               ) : (
@@ -397,32 +417,13 @@ export default function AttireDetailPage() {
                   Vendor ini belum menambahkan koleksi, jadi jadwalnya belum bisa dilihat.
                 </p>
               )}
-              {/* BERTAHAP: tiap tanggal baru muncul setelah yang sebelumnya
-                  terisi. Tiga kalender sekaligus di satu panel sempit bukan
-                  cuma panjang — urutannya juga tidak kelihatan, padahal dua
-                  tanggal di bawah memang BERGANTUNG pada tanggal sewa
-                  (pengambilan dibatasi olehnya, fitting harus sebelumnya).
-                  Yang belum relevan tidak ditampilkan, bukan dinonaktifkan:
-                  kontrol mati yang menumpuk sama membingungkannya. */}
-              {tglSewa && jam && (
-                <>
-                  {/* Pengambilan bukan slot pemesanan — tidak tersimpan di
-                      vendor_schedules dan tidak memakan kuota — jadi
-                      kalendernya polos: tanpa jam, tanpa pengabuan
-                      ketersediaan. Batas paling awalnya tanggal sewa, karena
-                      baju tidak bisa diambil setelah hari pakainya lewat. */}
-                  <p className="mt-5 text-[15px] font-semibold">Jadwal Pengambilan</p>
-                  <div className="mt-3">
-                    <KalenderTanggal
-                      tanggal={tglAmbil}
-                      onPilih={setTglAmbil}
-                      mulaiDari={tglSewa || undefined}
-                    />
-                  </div>
-                </>
-              )}
-
-              {tglSewa && jam && tglAmbil && (
+              {/* BERTAHAP, urut seperti kejadiannya: sewa -> fitting ->
+                  pengambilan. Tiap bagian baru muncul setelah yang sebelumnya
+                  terisi, jadi urutannya kelihatan dan baju tidak bisa diambil
+                  sebelum di-fitting. Yang belum relevan tidak ditampilkan,
+                  bukan dinonaktifkan: kontrol mati yang menumpuk sama
+                  membingungkannya. */}
+              {tglSewa && (
                 <>
                   <p className="mt-5 text-[15px] font-semibold">Perlu Fitting?</p>
                   <div className="mt-2 flex gap-4">
@@ -434,17 +435,48 @@ export default function AttireDetailPage() {
                     </Toggle>
                   </div>
 
-                  {/* Jadwal fitting hanya relevan kalau user memang mau fitting. */}
+                  {/* Fitting: hari ini sampai H-1. */}
                   {fitting && (
                     <>
                       <p className="mt-5 text-[15px] font-semibold">Jadwal Fitting</p>
                       <div className="mt-3">
-                        {/* Fitting harus SEBELUM hari pakai, jadi tidak
-                            dibatasi tanggal sewa seperti pengambilan. */}
-                        <KalenderTanggal tanggal={tglFitting} onPilih={setTglFitting} />
+                        <KalenderTanggal
+                          tanggal={tglFitting}
+                          onPilih={pilihFitting}
+                          mulaiDari={isoLokal(new Date())}
+                          sebelum={tglSewa}
+                          jam={jamFitting}
+                          onPilihJam={(j) => { setJamFitting(j); setCek(null) }}
+                          labelJam="Jam Fitting"
+                        />
                       </div>
                     </>
                   )}
+                </>
+              )}
+
+              {tglSewa && (!fitting || (tglFitting && jamFitting)) && (
+                <>
+                  {/* Pengambilan bukan slot pemesanan — tidak tersimpan di
+                      vendor_schedules dan tidak memakan kuota — jadi
+                      kalendernya polos, tanpa pengabuan ketersediaan.
+                      Rentangnya dari tanggal fitting (atau hari ini) sampai
+                      H-1: diambil sesudah di-fitting, sebelum hari pakainya. */}
+                  <p className="mt-5 text-[15px] font-semibold">Jadwal Pengambilan</p>
+                  <div className="mt-3">
+                    <KalenderTanggal
+                      tanggal={tglAmbil}
+                      onPilih={setTglAmbil}
+                      mulaiDari={fitting ? tglFitting : isoLokal(new Date())}
+                      sebelum={tglSewa}
+                      jamMinimal={fitting && tglAmbil === tglFitting ? jamFitting : undefined}
+                      jam={jam}
+                      onPilihJam={(j) => { setJam(j); setCek(null) }}
+                    />
+                    <p className="mt-3 text-[12px] leading-relaxed text-muted">
+                      Jam Anda mengambil setelannya di gerai vendor.
+                    </p>
+                  </div>
                 </>
               )}
 

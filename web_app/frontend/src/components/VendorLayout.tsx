@@ -279,7 +279,7 @@ export function StatusPill({
   tone,
   children,
 }: {
-  tone: 'info' | 'warn' | 'muted' | 'danger'
+  tone: 'info' | 'warn' | 'muted' | 'danger' | 'success'
   children: React.ReactNode
 }) {
   const tones = {
@@ -287,6 +287,8 @@ export function StatusPill({
     warn: 'border border-amber/60 bg-amber/12 text-[#8a5a06]',
     muted: 'bg-stone-100 text-ink/70',
     danger: 'border border-maroon/40 bg-maroon/5 text-maroon',
+    // Hijau gelap, bukan #16a34a: teks hijau terang gagal kontras di latar terang.
+    success: 'bg-[#2e6b52]/10 text-[#2e6b52]',
   }
   return (
     <span className={`inline-block rounded-full px-3 py-1 text-[12px] font-medium ${tones[tone]}`}>

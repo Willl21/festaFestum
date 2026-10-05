@@ -5,7 +5,7 @@ import TukarHalus from '../components/TukarHalus'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import OrderLayout, { OrderField, OrderSection, OrderTextarea } from '../components/OrderLayout'
 import { CalendarIcon, MapPinIcon, NoteIcon } from '../components/icons'
-import { berbasisJam, hargaPesanan } from '../lib/durasi'
+import { berbasisJam, hargaPesanan, orangDasar, orangEfektif } from '../lib/durasi'
 import { categories, type CategoryKey } from '../data/categories'
 import {
   getVendor, getVendorServices, buatBooking, urlFotoLayanan,
@@ -60,16 +60,6 @@ const variants = {
   },
 } satisfies Record<string, Variant>
 
-/** Mengikuti enum event_type di DB. Wajib dipilih: POST /bookings menolak
- *  tanpa ini, dan nilainya harus persis salah satu dari lima ini. */
-const JENIS_ACARA = [
-  { value: 'wedding', label: 'Pernikahan' },
-  { value: 'engagement', label: 'Lamaran' },
-  { value: 'graduation', label: 'Wisuda' },
-  { value: 'gala_dinner', label: 'Gala Dinner' },
-  { value: 'corporate_seminar', label: 'Seminar / Korporat' },
-]
-
 export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }) {
   const v: Variant = variants[kind]
   const kat = categories[v.kategori]
@@ -95,7 +85,6 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
   const [jumlah, setJumlah] = useState(() => Math.max(1, Number(params.get('orang')) || 1))
   const [tambahan, setTambahan] = useState(() => Math.max(0, Number(params.get('tambah')) || 0))
 
-  const [jenisAcara, setJenisAcara] = useState(JENIS_ACARA[0].value)
   const [estimasi, setEstimasi] = useState('')
   const [venue, setVenue] = useState('')
   const [alamat, setAlamat] = useState('')
@@ -121,6 +110,23 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
   const qty = jamBased && paket?.per_orang ? jumlah : 1
   const jamTambah = jamBased ? tambahan : 0
   const harga = paket ? hargaPesanan(paket, qty, jamTambah) : 0
+  // Rincian ringkasan: paket, orang tambahan, jam tambahan dipisah. Jumlahnya
+  // sama dengan hargaPesanan() (rumus backend), cuma dipecah per baris.
+  const ekstraOrang = paket?.per_orang ? orangEfektif(paket, qty) - orangDasar(paket) : 0
+  const rincian = paket && [
+    {
+      label: paket.per_orang ? `Harga Paket (${orangDasar(paket)} orang)` : 'Harga Paket',
+      value: Number(paket.price),
+    },
+    ...(ekstraOrang > 0 ? [{
+      label: `Orang tambahan × ${ekstraOrang}`,
+      value: ekstraOrang * Number(paket.harga_per_orang_tambahan ?? 0),
+    }] : []),
+    ...(jamTambah > 0 ? [{
+      label: `Jam tambahan × ${jamTambah}`,
+      value: jamTambah * Number(paket.harga_per_jam_tambahan ?? 0),
+    }] : []),
+  ]
 
   async function ajukan() {
     setGalat('')
@@ -145,7 +151,6 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
         service_id: paket.service_id,
         event_date: tanggal,
         start_time: jam,
-        event_type: jenisAcara,
         event_location_detail: detail,
         quantity: qty,
         ...(jamTambah ? { jam_tambahan: jamTambah } : {}),
@@ -174,8 +179,7 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
             order={{
               vendor: vendor.business_name,
               packageName: paket?.service_name ?? 'Belum ada paket',
-              satuan: [qty > 1 && `× ${qty} orang`, jamTambah > 0 && `+ ${jamTambah} jam`]
-                .filter(Boolean).join(' ') || undefined,
+              rincian: rincian || undefined,
               price: harga,
               // DP 30% mengikuti backend. Angka yang MENGIKAT tetap dp_amount yang
               // dikembalikan POST /bookings dan ditampilkan di halaman checkout.
@@ -233,24 +237,11 @@ export default function VenueOrderPage({ kind }: { kind: keyof typeof variants }
                 </p>
               )}
 
-              <div className="mt-5 grid gap-5 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="jenis" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
-                    JENIS ACARA
-                  </label>
-                  <Dropdown
-                    id="jenis"
-                    value={jenisAcara}
-                    onChange={(v) => setJenisAcara(v)}
-                    className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
-                  >
-                    {JENIS_ACARA.map((t) => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </Dropdown>
+              {v.estimate && (
+                <div className="mt-5 grid gap-5 sm:grid-cols-2">
+                  <OrderField {...v.estimate} value={estimasi} onChange={setEstimasi} />
                 </div>
-                {v.estimate && <OrderField {...v.estimate} value={estimasi} onChange={setEstimasi} />}
-              </div>
+              )}
             </OrderSection>
 
             <OrderSection title="Lokasi Acara" icon={<MapPinIcon className="h-4 w-4" />}>

@@ -7,7 +7,7 @@ import OrderLayout, { OrderField, OrderSection, OrderTextarea } from '../compone
 import { CalendarIcon, MapPinIcon, NoteIcon } from '../components/icons'
 import { categories } from '../data/categories'
 import {
-  getVendor, getVendorServices, buatBooking, urlFotoLayanan,
+  getVendor, getVendorServices, buatBooking, urlFotoLayanan, cekKetersediaan,
   type ApiService, type ApiVendor,
 } from '../lib/api'
 import Dropdown from '../components/Dropdown'
@@ -18,21 +18,25 @@ const tabs = [
   { id: 'acara', label: 'BUNGA ACARA' },
   { id: 'buket', label: 'BUKET / HADIAH' },
 ] as const
+type Tab = (typeof tabs)[number]['id']
 
-const JENIS_ACARA = [
-  { value: 'wedding', label: 'Pernikahan' },
-  { value: 'engagement', label: 'Lamaran' },
-  { value: 'graduation', label: 'Wisuda' },
-  { value: 'gala_dinner', label: 'Gala Dinner' },
-  { value: 'corporate_seminar', label: 'Seminar / Korporat' },
-]
+/** Tab awal menurut layanan: hadiah & ucapan dikirim ke PENERIMA (tab buket,
+ *  dengan nama penerima & kartu ucapan), sisanya dipasang di lokasi acara.
+ *  ponytail: ditebak dari nama/jenis produk karena layanan florist belum
+ *  punya kolom "cara kirim"; tambahkan pilihan itu di form layanan kalau
+ *  tebakannya mulai meleset. Pengguna tetap bisa pindah tab sendiri. */
+function tabUntuk(s: ApiService): Tab {
+  return /hadiah|ucapan|gift|kado/i.test(`${s.service_name} ${s.details?.jenis_produk ?? ''}`) ? 'buket' : 'acara'
+}
 
 export default function FloristOrderPage() {
   const { id = '' } = useParams()
   const [params] = useSearchParams()
   const navigate = useNavigate()
 
-  const [tab, setTab] = useState<'acara' | 'buket'>('acara')
+  // Tab yang dipilih SENDIRI oleh pengguna, berlaku untuk layanan itu saja.
+  // Selama belum dipilih, tab diturunkan dari layanannya (tabUntuk).
+  const [tabPilihan, setTabPilihan] = useState<{ id: string; tab: Tab } | null>(null)
 
   const [vendor, setVendor] = useState<ApiVendor | null>(null)
   const [layanan, setLayanan] = useState<ApiService[]>([])
@@ -45,8 +49,6 @@ export default function FloristOrderPage() {
   // untuk mengalikan harga sekaligus memotong kapasitas harian vendor.
   const [jumlah, setJumlah] = useState(1)
   const [tanggal, setTanggal] = useState(params.get('date') ?? '')
-  const [jenisAcara, setJenisAcara] = useState(JENIS_ACARA[0].value)
-  const [durasi, setDurasi] = useState('')
 
   // Tab "acara"
   const [venue, setVenue] = useState('')
@@ -74,6 +76,27 @@ export default function FloristOrderPage() {
   }, [id, params])
 
   const paket = layanan.find((s) => s.service_id === serviceId) ?? layanan[0]
+  const tab: Tab = paket && tabPilihan?.id === paket.service_id
+    ? tabPilihan.tab
+    : paket ? tabUntuk(paket) : 'acara'
+
+  // Stok tersisa vendor di tanggal terpilih (kapasitas harian dikurangi
+  // pesanan orang lain), supaya jumlah buket tidak melebihinya. Disimpan
+  // bersama kuncinya: jawaban untuk tanggal lama tidak dipakai menilai
+  // tanggal baru selagi request-nya masih jalan. Backend tetap menolak 409
+  // kalau stoknya keburu habis.
+  const kunciStok = paket && tanggal ? `${paket.service_id}|${tanggal}` : ''
+  const [stokData, setStokData] = useState<{ kunci: string; sisa: number } | null>(null)
+  useEffect(() => {
+    if (!kunciStok) return
+    const [service_id, event_date] = kunciStok.split('|')
+    let batal = false
+    cekKetersediaan({ service_id, event_date })
+      .then((r) => !batal && setStokData({ kunci: kunciStok, sisa: r.available ? r.sisa_kapasitas ?? 999 : 0 }))
+      .catch(() => {})
+    return () => { batal = true }
+  }, [kunciStok])
+  const stok = stokData && stokData.kunci === kunciStok ? stokData.sisa : null
   const satuanHarga = paket ? Number(paket.price) : 0
   // Florist memotong kapasitas harian vendor sebanyak jumlah ini, bukan satu.
   const harga = satuanHarga * jumlah
@@ -82,6 +105,11 @@ export default function FloristOrderPage() {
     setGalat('')
     if (!paket) return setGalat('Vendor ini belum punya layanan aktif.')
     if (!tanggal) return setGalat('Tanggal acara wajib diisi.')
+    if (stok !== null && jumlah > stok) {
+      return setGalat(stok === 0
+        ? 'Stok vendor di tanggal ini sudah habis. Pilih tanggal lain.'
+        : `Stok vendor di tanggal ini tinggal ${stok}. Kurangi jumlahnya.`)
+    }
 
     if (tab === 'acara' && (!venue.trim() || !alamat.trim())) {
       return setGalat('Venue dan alamat lengkap wajib diisi.')
@@ -95,7 +123,6 @@ export default function FloristOrderPage() {
     const detail = tab === 'acara'
       ? [
           `Bunga acara — ${venue.trim()} — ${alamat.trim()}`,
-          durasi && `Estimasi durasi: ${durasi}`,
           catatan.trim() && `Catatan: ${catatan.trim()}`,
         ].filter(Boolean).join('\n')
       : [
@@ -111,7 +138,6 @@ export default function FloristOrderPage() {
       const r = await buatBooking({
         service_id: paket.service_id,
         event_date: tanggal,
-        event_type: jenisAcara,
         event_location_detail: detail,
         quantity: jumlah,
       })
@@ -186,32 +212,23 @@ export default function FloristOrderPage() {
               )}
 
               <div className="mt-5 grid gap-5 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="jenis" className="block text-[11px] font-semibold tracking-[0.06em] text-ink/70">
-                    JENIS ACARA
-                  </label>
-                  <Dropdown
-                    id="jenis"
-                    value={jenisAcara}
-                    onChange={(v) => setJenisAcara(v)}
-                    className="mt-2 h-11 w-full rounded-sm border border-line bg-white px-3 text-[14px] outline-none focus:border-navy-900"
-                  >
-                    {JENIS_ACARA.map((t) => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </Dropdown>
-                </div>
-                <OrderField
-                  id="durasi" label="ESTIMASI DURASI ACARA" placeholder="Contoh: 4 jam"
-                  value={durasi} onChange={setDurasi}
-                />
                 <OrderField
                   id="jumlah" label="JUMLAH BUKET / RANGKAIAN" type="number"
                   placeholder="1"
                   value={String(jumlah)}
-                  onChange={(v) => setJumlah(Math.min(999, Math.max(1, Number(v) || 1)))}
+                  max={stok ? String(stok) : undefined}
+                  onChange={(v) => setJumlah(Math.min(stok || 999, Math.max(1, Number(v) || 1)))}
                 />
               </div>
+              {stok !== null && (
+                <p className={`mt-2 text-[12px] ${jumlah > stok ? 'text-maroon' : 'text-muted'}`}>
+                  {stok === 0
+                    ? 'Stok vendor di tanggal ini sudah habis.'
+                    : jumlah > stok
+                      ? `Stok tinggal ${stok} di tanggal ini, kurangi jumlahnya.`
+                      : `Stok tersedia ${stok} di tanggal ini.`}
+                </p>
+              )}
             </OrderSection>
 
             {/* Bunga untuk acara dan buket hadiah butuh data yang beda:
@@ -222,7 +239,7 @@ export default function FloristOrderPage() {
                   <button
                     key={t.id}
                     type="button"
-                    onClick={() => setTab(t.id)}
+                    onClick={() => setTabPilihan({ id: paket?.service_id ?? '', tab: t.id })}
                     aria-pressed={tab === t.id}
                     className={`flex-1 border-b-2 pb-3 text-[12px] font-semibold tracking-[0.06em] transition-colors ${
                       tab === t.id ? 'border-ink text-ink' : 'border-transparent text-muted hover:text-ink'

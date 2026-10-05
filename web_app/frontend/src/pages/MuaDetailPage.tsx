@@ -171,6 +171,14 @@ export default function MuaDetailPage() {
                       <p className="font-display text-[21px] font-semibold">
                         {rupiah(Number(p.price))}
                       </p>
+                      {/* Paket per orang (023): harganya untuk sejumlah orang, bukan per orang. */}
+                      {p.per_orang && (
+                        <p className="mt-0.5 text-[12px] text-muted">
+                          untuk {p.min_orang || 1} orang
+                          {p.harga_per_orang_tambahan != null
+                            && `, +${rupiah(Number(p.harga_per_orang_tambahan))} per orang tambahan`}
+                        </p>
+                      )}
                     </div>
                   </article>
                 ))}

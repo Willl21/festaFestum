@@ -28,7 +28,7 @@ const GEAR = [
   'DJI Mavic 3 Pro (Aerial)',
 ]
 
-const CAPTION = ['Wisuda', '', '', 'Potret Editorial']
+const CAPTION = ['Wisuda', '', '']
 
 export default function FotograferDetailPage() {
   const { id = '' } = useParams()
@@ -128,11 +128,13 @@ export default function FotograferDetailPage() {
             {vendor.description || 'Vendor ini belum menuliskan deskripsi.'}
           </p>
 
-          {/* PORTOFOLIO — foto belum ada, semuanya jatuh ke blok warna. */}
+          {/* PORTOFOLIO — tiga kotak sesuai SLOT_FOTO 0-2 (satu besar + dua
+              kecil). Dulu empat kotak meniru mockup, jadi yang keempat
+              selalu kosong. */}
           <section className="mt-10">
             <h2 className="font-display text-[19px] font-semibold">Portofolio</h2>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-4">
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
               <Photo n={0} nama={vendor.business_name}
                 src={fotoSlot.includes(0) ? urlFotoVendor(id, 0) : undefined}
                 className="h-[300px] md:col-span-2 md:h-[510px]" />
@@ -144,9 +146,6 @@ export default function FotograferDetailPage() {
                 src={fotoSlot.includes(2) ? urlFotoVendor(id, 2) : undefined}
                 className="h-[180px] md:h-[249px]" />
               </div>
-              <Photo n={3} nama={vendor.business_name}
-                src={fotoSlot.includes(3) ? urlFotoVendor(id, 3) : undefined}
-                className="h-[300px] md:h-[510px]" />
             </div>
           </section>
 
@@ -180,10 +179,8 @@ export default function FotograferDetailPage() {
 
                     <div className="flex items-start justify-between gap-4">
                       <h3 className="font-display text-[20px] font-semibold">{p.service_name}</h3>
-                      <p className="shrink-0 text-right text-[15px] font-semibold">
-                        Rp
-                        <br />
-                        {Number(p.price).toLocaleString('id-ID')}
+                      <p className="shrink-0 text-right text-[15px] font-semibold whitespace-nowrap">
+                        {rupiah(Number(p.price))}
                       </p>
                     </div>
                     <p className="mt-2 text-[12px] leading-relaxed text-ink/70">{p.description}</p>
@@ -307,9 +304,7 @@ export default function FotograferDetailPage() {
   )
 }
 
-/** Slot 3 sengaja tidak pernah punya foto: portofolio cuma tiga slot
- *  (SLOT_FOTO 0-2), sementara mockup fotografer menggambar empat kotak.
- *  Yang keempat jatuh ke blok warna. */
+/** Satu kotak portofolio; slot kosong jatuh ke blok warna lewat <Img>. */
 function Photo({ n, nama, src, className }: {
   n: number; nama: string; src?: string; className: string
 }) {
