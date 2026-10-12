@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import AuthLayout, { inputClass } from '../components/AuthLayout'
 import { post } from '../lib/api'
+import OtpInput from '../components/OTP'
 
 /** Lupa kata sandi (migrasi 022): email -> kode 6 digit -> sandi baru.
  *
@@ -47,6 +48,7 @@ export default function LupaSandiPage() {
     setGalat('')
     // Dicek di sini, bukan di backend: salah ketik sandi baru = terkunci dari
     // akun sendiri, dan backend tidak punya cara mendeteksinya.
+    if (kode.length !== 6) return setGalat('Masukkan 6 digit kode dari email.')
     if (sandi.baru !== sandi.ulang) return setGalat('Konfirmasi sandi tidak sama dengan sandi baru.')
     setSibuk(true)
     try {
@@ -112,20 +114,8 @@ export default function LupaSandiPage() {
         <form onSubmit={aturUlang} className="mt-7">
           <p role="status" className="rounded bg-lavender px-4 py-3 text-[14px] text-navy-900">{info}</p>
 
-          <label htmlFor="kode" className={`mt-5 ${label}`}>KODE VERIFIKASI</label>
-          <input
-            id="kode"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            autoFocus
-            required
-            pattern="\d{6}"
-            maxLength={6}
-            value={kode}
-            onChange={(e) => setKode(e.target.value.replace(/\D/g, ''))}
-            placeholder="000000"
-            className={`mt-2.5 ${inputClass} text-center font-mono tracking-[0.5em]`}
-          />
+          <p className={`mt-5 ${label}`}>KODE VERIFIKASI</p>
+          <OtpInput autoFocus onChange={setKode} className="mt-2.5" />
 
           <label htmlFor="sandi_baru" className={`mt-5 ${label}`}>KATA SANDI BARU</label>
           <input

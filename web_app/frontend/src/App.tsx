@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Outlet, Navigate, useLocation } from 'rea
 import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
+import { KonfirmasiHost } from './components/Konfirmasi'
 import { getToken } from './lib/api'
 import LandingPage from './pages/LandingPage'
 // Semua halaman selain landing dimuat saat DIBUKA, bukan ikut di bundel awal
@@ -196,6 +197,7 @@ export default function App() {
         <Route path="/daftar" element={<RegisterPage />} />
       </Routes>
       </Suspense>
+      <KonfirmasiHost />
       </MotionConfig>
     </BrowserRouter>
   )

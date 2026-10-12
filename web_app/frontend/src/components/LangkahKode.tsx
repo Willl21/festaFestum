@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { inputClass } from './AuthLayout'
+import OtpInput, { type OtpStatus } from './OTP'
 import { post, type AuthResponse, type TantanganKode } from '../lib/api'
 import { UMUR_KODE_MS, formatSisa, sisaKode, useDetik } from '../lib/hitungMundur'
 
@@ -18,6 +18,7 @@ export default function LangkahKode({
 }) {
   const [kode, setKode] = useState('')
   const [galat, setGalat] = useState('')
+  const [status, setStatus] = useState<OtpStatus>('idle')
   const [sibuk, setSibuk] = useState(false)
   // ponytail: dihitung dari saat layar ini muncul, bukan dari server. Masuk ulang
   // dalam 60 dtk memakai kode lama, jadi kode bisa habis <=1 menit lebih awal.
@@ -25,21 +26,23 @@ export default function LangkahKode({
   const [berakhir] = useState(() => Date.now() + UMUR_KODE_MS)
   const sisa = sisaKode(berakhir, useDetik())
 
-  async function kirim(e: React.FormEvent) {
-    e.preventDefault()
+  // Dipanggil tombol (lewat form) dan otomatis saat digit ke-6 terisi.
+  async function kirim(isi = kode) {
+    if (sibuk || !sisa || isi.length !== 6) return
     setGalat('')
     setSibuk(true)
     try {
-      onMasuk(await post<AuthResponse>('/auth/login/kode', { tiket: tantangan.tiket, kode }))
+      onMasuk(await post<AuthResponse>('/auth/login/kode', { tiket: tantangan.tiket, kode: isi }))
     } catch (err) {
       setGalat((err as Error).message)
+      setStatus('error')
     } finally {
       setSibuk(false)
     }
   }
 
   return (
-    <form onSubmit={kirim} className="mt-7">
+    <form onSubmit={(e) => { e.preventDefault(); kirim() }} className="mt-7">
       <p className="rounded bg-lavender px-4 py-3 text-[14px] text-navy-900" role="status">
         Kode 6 digit sudah dikirim ke <span className="font-semibold">{tantangan.email}</span>.
       </p>
@@ -51,21 +54,14 @@ export default function LangkahKode({
         )}
       </p>
 
-      <label htmlFor="kode" className="mt-5 block text-[12px] font-semibold tracking-[0.08em] text-navy-900">
-        KODE VERIFIKASI
-      </label>
-      <input
-        id="kode"
-        inputMode="numeric"
-        autoComplete="one-time-code"
+      <p className="mt-5 text-[12px] font-semibold tracking-[0.08em] text-navy-900">KODE VERIFIKASI</p>
+      <OtpInput
         autoFocus
-        required
-        pattern="\d{6}"
-        maxLength={6}
-        value={kode}
-        onChange={(e) => setKode(e.target.value.replace(/\D/g, ''))}
-        placeholder="000000"
-        className={`mt-2.5 ${inputClass} text-center font-mono tracking-[0.5em]`}
+        status={status}
+        disabled={sibuk || !sisa}
+        onChange={(v) => { setKode(v); setStatus('idle') }}
+        onComplete={kirim}
+        className="mt-2.5"
       />
 
       {galat && <p role="alert" className="mt-4 text-[14px] text-maroon">{galat}</p>}

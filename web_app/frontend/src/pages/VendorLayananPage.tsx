@@ -15,6 +15,7 @@ import {
 } from '../lib/api'
 import { kecilkanGambar, PORTOFOLIO } from '../lib/gambar'
 import Dropdown from '../components/Dropdown'
+import { konfirmasi } from '../lib/konfirmasi'
 
 /** Katalog layanan + galeri portofolio milik vendor.
  *
@@ -129,6 +130,19 @@ export default function VendorLayananPage() {
   }
 
   async function hapusFotoVendor(slot: number) {
+    if (!(await konfirmasi({
+      judul: 'Hapus foto portofolio?',
+      isi: <>
+        <img
+          src={urlFotoVendor(vendorId, slot, versiFoto)}
+          alt=""
+          className="mb-3 aspect-[3/2] w-full rounded object-cover"
+        />
+        Foto ini hilang dari halaman vendor Anda dan tidak bisa dikembalikan.
+      </>,
+      ya: 'Hapus Foto',
+      bahaya: true,
+    }))) return
     setGalat('')
     setUnggahSlot(slot)
     try {
@@ -189,7 +203,12 @@ export default function VendorLayananPage() {
   // dipesan ditolak backend (409, ON DELETE RESTRICT) — pesannya sudah
   // menyarankan menyembunyikan, jadi di sini cukup ditampilkan apa adanya.
   async function hapus(s: ApiService) {
-    if (!window.confirm(`Hapus "${s.service_name}" permanen? Tindakan ini tidak bisa dibatalkan.`)) return
+    if (!(await konfirmasi({
+      judul: 'Hapus layanan?',
+      isi: <>&ldquo;{s.service_name}&rdquo; dihapus permanen dan tidak bisa dikembalikan. Kalau hanya ingin menyembunyikannya, pakai tombol mata.</>,
+      ya: 'Hapus Layanan',
+      bahaya: true,
+    }))) return
     setGalat('')
     try {
       await hapusLayanan(s.service_id)

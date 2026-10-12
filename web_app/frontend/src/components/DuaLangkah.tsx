@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { inputClass } from './AuthLayout'
+import OtpInput, { type OtpStatus } from './OTP'
 import { gantiToken, post } from '../lib/api'
 import { UMUR_KODE_MS, formatSisa, sisaKode, useDetik } from '../lib/hitungMundur'
 
@@ -25,6 +26,7 @@ export default function DuaLangkah({
   const [kode, setKode] = useState('')
   const [tiket, setTiket] = useState({ tiket: '', email: '' })
   const [galat, setGalat] = useState('')
+  const [status, setStatus] = useState<OtpStatus>('idle')
   const [pesan, setPesan] = useState('')
   const [sibuk, setSibuk] = useState(false)
   const [berakhir, setBerakhir] = useState(0)
@@ -37,7 +39,9 @@ export default function DuaLangkah({
     setGalat('')
   }
 
-  async function lanjut() {
+  // isi: kode dari onComplete OtpInput, sebelum state `kode` sempat diperbarui.
+  async function lanjut(isi = kode) {
+    if (sibuk) return
     setGalat('')
     setPesan('')
     setSibuk(true)
@@ -54,7 +58,7 @@ export default function DuaLangkah({
         setSandi('')
         setLangkah('kode')
       } else {
-        const r = await post<{ token: string }>('/auth/dua-langkah/konfirmasi', { tiket: tiket.tiket, kode })
+        const r = await post<{ token: string }>('/auth/dua-langkah/konfirmasi', { tiket: tiket.tiket, kode: isi })
         // Server mencabut semua sesi lama, termasuk token halaman ini.
         gantiToken(r.token)
         onBerubah(true)
@@ -63,6 +67,7 @@ export default function DuaLangkah({
       }
     } catch (err) {
       setGalat((err as Error).message)
+      if (langkah === 'kode') setStatus('error')
     } finally {
       setSibuk(false)
     }
@@ -134,18 +139,14 @@ export default function DuaLangkah({
                   'Kode sudah kedaluwarsa. Tekan Batal lalu nyalakan lagi untuk kode baru.'
                 )}
               </p>
-              <label htmlFor="kode_2fa" className={`mt-3 ${label}`}>Kode verifikasi</label>
-              <input
-                id="kode_2fa"
-                inputMode="numeric"
-                autoComplete="one-time-code"
+              <p className={`mt-3 ${label}`}>Kode verifikasi</p>
+              <OtpInput
                 autoFocus
-                maxLength={6}
-                value={kode}
-                onChange={(e) => setKode(e.target.value.replace(/\D/g, ''))}
-                onKeyDown={enter}
-                placeholder="000000"
-                className={`mt-2 ${inputClass} text-center font-mono tracking-[0.5em]`}
+                status={status}
+                disabled={sibuk || !sisa}
+                onChange={(v) => { setKode(v); setStatus('idle') }}
+                onComplete={(v) => { if (sisa) lanjut(v) }}
+                className="mt-2"
               />
             </>
           )}
@@ -155,7 +156,7 @@ export default function DuaLangkah({
           <div className="mt-4 flex gap-3">
             <button
               type="button"
-              onClick={lanjut}
+              onClick={() => lanjut()}
               disabled={sibuk || (langkah === 'sandi' ? !sandi : !sisa || kode.length !== 6)}
               className="h-10 rounded bg-navy-900 px-5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >

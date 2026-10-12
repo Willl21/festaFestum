@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-const { acquireLock, lockHolder, LOCK_TTL_SECONDS } = require('../config/redis');
+const { lockHolder } = require('../config/redis');
 const {
   perTim, BOOKING_AKTIF, berbasisJam, durasiPesanan, orangEfektif, MAKS_JAM_TAMBAHAN,
   BATAS_SELESAI_ORANG_TAMBAHAN,
@@ -88,7 +88,7 @@ const sqlKetersediaan = (svc, dari, sampai) => `
     FROM hari h
    ORDER BY h.event_date`;
 
-// Verdict satu tanggal, dipakai /schedules/check dan /schedules/hold supaya
+// Verdict satu tanggal, dipakai /schedules/check dan Festa AI supaya
 // keduanya tidak pernah menjawab beda untuk pertanyaan yang sama.
 async function cekTanggal(service_id, event_date) {
   const q = await pool.query(
@@ -442,51 +442,6 @@ async function checkAvailability(req, res, next) {
   }
 }
 
-// POST /api/v1/schedules/hold  (login)
-// Dipanggil saat user klik "Pesan" dan masuk halaman checkout. Inilah gunanya
-// Redis: menahan tanggal SEBELUM baris booking dibuat, supaya user lain
-// langsung ditolak alih-alih baru tahu setelah capek isi form.
-//
-// Yang tidak eksklusif seharian tidak ditahan: kapasitasnya lebih dari satu,
-// jadi memaksa pembeli antre satu-satu di checkout cuma menghalangi mereka
-// tanpa mencegah apa pun.
-async function holdSlot(req, res, next) {
-  try {
-    const { service_id, event_date } = req.body;
-
-    if (!service_id || !isValidDate(event_date)) {
-      return res.status(400).json({
-        message: 'service_id dan event_date (YYYY-MM-DD) wajib diisi dengan benar',
-      });
-    }
-
-    const r = await cekTanggal(service_id, event_date);
-    if (!r) {
-      return res.status(404).json({ message: 'Layanan tidak ditemukan atau sudah tidak aktif' });
-    }
-    if (!r.notice_ok || !r.horizon_ok || r.status !== 'available') {
-      return res.status(409).json({ message: 'Tanggal tidak tersedia' });
-    }
-
-    const eksklusif = eksklusifSeharian(r.category, r.daily_capacity);
-    if (eksklusif) {
-      const got = await acquireLock(r.vendor_id, event_date, req.user.user_id);
-      if (!got) {
-        return res.status(409).json({ message: 'Tanggal sedang diproses user lain, coba beberapa menit lagi' });
-      }
-    }
-
-    res.json({
-      vendor_id: r.vendor_id,
-      event_date,
-      sisa_kapasitas: r.sisa_kapasitas,
-      hold_expires_in_seconds: eksklusif ? LOCK_TTL_SECONDS : 0,
-    });
-  } catch (err) {
-    next(err);
-  }
-}
-
 // GET /api/v1/schedules/me?from=YYYY-MM-DD&to=YYYY-MM-DD  (role: vendor_owner)
 // Mengisi kalender di halaman Jadwal vendor.
 //
@@ -613,6 +568,6 @@ async function bukaSlot(req, res, next) {
 
 module.exports = {
   isValidDate, cekTanggal, listJamTerisi, timKosong, bacaDurasi,
-  tutupTanggal, checkAvailability, listAvailability, holdSlot, listMySchedules,
+  tutupTanggal, checkAvailability, listAvailability, listMySchedules,
   bukaSlot,
 };

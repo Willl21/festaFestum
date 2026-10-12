@@ -6,6 +6,7 @@ import { namaKota } from '../data/categories'
 import { rupiahBulat } from '../lib/format'
 import { get, kirim } from '../lib/api'
 import { BANKS } from '../data/banks'
+import { konfirmasi } from '../lib/konfirmasi'
 
 /** Pusat Escrow — antrean pencairan dana lintas vendor.
  *
@@ -132,6 +133,24 @@ export default function AdminEscrowPage() {
       setGalatDi({ id: po.payout_id, pesan: 'Alasan penolakan wajib diisi. Vendor membacanya di halaman keuangannya.' })
       return
     }
+    const nominal = <span className="font-semibold">{rupiahBulat(Number(po.amount))}</span>
+    if (!(await konfirmasi(action === 'approve'
+      ? {
+          judul: 'Setujui pencairan?',
+          isi: <>
+            {nominal} untuk {po.business_name} ke{' '}
+            <span className="font-semibold uppercase">{po.bank_name}</span>{' '}
+            <span className="font-mono">{po.bank_account_number}</span> a.n {po.bank_account_holder}.
+            Setujui hanya setelah dana benar-benar ditransfer.
+          </>,
+          ya: 'Setujui Pencairan',
+        }
+      : {
+          judul: 'Tolak pencairan?',
+          isi: <>Pengajuan {nominal} dari {po.business_name} ditolak dan dananya kembali ke saldo vendor.</>,
+          ya: 'Tolak Pencairan',
+          bahaya: true,
+        }))) return
 
     setSibuk(po.payout_id)
     setGalatDi(null)
@@ -155,10 +174,28 @@ export default function AdminEscrowPage() {
       setGalatDi({ id: l.laporan_id, pesan: 'Alasan penolakan wajib diisi, klien membacanya di Pesanan Saya.' })
       return
     }
-    if (action === 'setujui' && l.jenis === 'refund'
-      && !window.confirm(`Setujui refund ${rupiahBulat(Number(l.dibayar))}? Pesanan dibatalkan dan dana ditarik dari escrow/saldo vendor.`)) {
-      return
-    }
+    if (!(await konfirmasi(action === 'tolak'
+      ? {
+          judul: l.jenis === 'refund' ? 'Tolak refund?' : 'Tolak laporan?',
+          isi: <>Pengajuan {l.customer_name} untuk {l.service_name} ({l.business_name}) ditolak. Klien membaca alasannya di Pesanan Saya.</>,
+          ya: 'Tolak',
+          bahaya: true,
+        }
+      : l.jenis === 'refund'
+        ? {
+            judul: 'Setujui refund?',
+            isi: <>
+              <span className="font-semibold">{rupiahBulat(Number(l.dibayar))}</span> dikembalikan ke {l.customer_name}.
+              Pesanan dibatalkan dan dana ditarik dari escrow atau saldo {l.business_name}. Tindakan ini permanen.
+            </>,
+            ya: 'Setujui Refund',
+            bahaya: true,
+          }
+        : {
+            judul: 'Tandai ditindaklanjuti?',
+            isi: <>Laporan {l.customer_name} terhadap {l.business_name} ditutup sebagai sudah ditindaklanjuti.</>,
+            ya: 'Tandai Ditindaklanjuti',
+          }))) return
 
     setSibuk(l.laporan_id)
     setGalatDi(null)

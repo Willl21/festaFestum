@@ -6,6 +6,10 @@ const { gambarBermasalah } = require('../lib/gambar');
 const { terbitkanKode, cocokkanKode, samarkanEmail } = require('../lib/kodeOtp');
 
 const SALT_ROUNDS = 10;
+// Hash sandi acak untuk dibandingkan saat email tidak terdaftar, supaya login
+// gagal karena email & karena sandi makan waktu yang sama. Tanpa ini, balasan
+// ~70 ms lebih cepat membocorkan email mana yang tidak punya akun.
+const HASH_PALSU = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), SALT_ROUNDS);
 const ALLOWED_SELF_REGISTER_ROLES = ['customer', 'vendor_owner'];
 
 /** Detik sekarang menurut jam NODE — sumber yang sama dengan iat di JWT.
@@ -74,12 +78,8 @@ async function login(req, res, next) {
 
     // Pesan generik sengaja dipakai untuk email & password salah,
     // supaya tidak bocorin info email mana saja yang terdaftar.
-    if (!user) {
-      return res.status(401).json({ message: 'Email atau password salah' });
-    }
-
-    const isValidPassword = await bcrypt.compare(password, user.password_hash);
-    if (!isValidPassword) {
+    const isValidPassword = await bcrypt.compare(String(password), user?.password_hash ?? HASH_PALSU);
+    if (!user || !isValidPassword) {
       return res.status(401).json({ message: 'Email atau password salah' });
     }
 
@@ -150,7 +150,7 @@ async function googleLogin(req, res, next) {
     // lower(): email dari Google selalu huruf kecil, sedangkan form daftar
     // menyimpan apa adanya.
     const ada = await pool.query(
-      `SELECT user_id, name, email, phone, role, avatar_url
+      `SELECT user_id, name, email, phone, role, avatar_url, email_terverifikasi
          FROM users WHERE lower(email) = lower($1)
         ORDER BY created_at LIMIT 1`,
       [info.email]
@@ -167,13 +167,27 @@ async function googleLogin(req, res, next) {
         message: 'Akun vendor/admin masuk lewat halaman masuknya sendiri dengan sandi',
       });
     }
+    const sandiAcak = () => bcrypt.hash(crypto.randomBytes(32).toString('hex'), SALT_ROUNDS);
+    // Akun ber-sandi yang emailnya belum pernah dibuktikan bisa saja dibuat
+    // orang lain atas nama email ini (daftar tidak memverifikasi email). Google
+    // baru saja membuktikan pemilik aslinya, jadi sandi lama dimatikan dan
+    // semua sesi lain dicabut SEBELUM pemiliknya masuk. Pemilik sah yang lupa
+    // memakai sandi lama tinggal memakai Lupa Sandi.
+    if (user && !user.email_terverifikasi) {
+      await pool.query(
+        `UPDATE users SET password_hash = $1, sesi_sejak = to_timestamp($2),
+                          email_terverifikasi = TRUE, updated_at = now()
+          WHERE user_id = $3`,
+        [await sandiAcak(), detikIni(), user.user_id]
+      );
+    }
+    delete user?.email_terverifikasi;
     if (!user) {
-      const sandiAcak = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), SALT_ROUNDS);
       const dibuat = await pool.query(
-        `INSERT INTO users (name, email, phone, password_hash, role)
-         VALUES ($1, $2, '', $3, 'customer')
+        `INSERT INTO users (name, email, phone, password_hash, role, email_terverifikasi)
+         VALUES ($1, $2, '', $3, 'customer', TRUE)
          RETURNING user_id, name, email, phone, role, avatar_url`,
-        [(info.name || info.email.split('@')[0]).slice(0, 150), info.email, sandiAcak]
+        [(info.name || info.email.split('@')[0]).slice(0, 150), info.email, await sandiAcak()]
       );
       user = dibuat.rows[0];
       baru = true;
@@ -432,7 +446,8 @@ async function loginKode(req, res, next) {
     if (hasil.salah) return res.status(401).json({ message: hasil.salah });
 
     const { rows: [user] } = await pool.query(
-      'SELECT user_id, name, email, phone, role, avatar_url FROM users WHERE user_id = $1',
+      `UPDATE users SET email_terverifikasi = TRUE WHERE user_id = $1
+       RETURNING user_id, name, email, phone, role, avatar_url`,
       [hasil.user_id]
     );
     if (!user) return res.status(401).json({ message: 'Akun tidak ditemukan' });
@@ -486,7 +501,8 @@ async function resetSandi(req, res, next) {
     if (hasil.salah) return res.status(401).json({ message: hasil.salah });
 
     await pool.query(
-      `UPDATE users SET password_hash = $1, sesi_sejak = to_timestamp($3), updated_at = now()
+      `UPDATE users SET password_hash = $1, sesi_sejak = to_timestamp($3),
+                        email_terverifikasi = TRUE, updated_at = now()
         WHERE user_id = $2`,
       [await bcrypt.hash(String(sandi_baru), SALT_ROUNDS), hasil.user_id, detikIni()]
     );
@@ -538,7 +554,8 @@ async function duaLangkahKonfirmasi(req, res, next) {
     if (hasil.salah) return res.status(401).json({ message: hasil.salah });
 
     const { rows: [u] } = await pool.query(
-      `UPDATE users SET dua_langkah = true, sesi_sejak = to_timestamp($2), updated_at = now()
+      `UPDATE users SET dua_langkah = true, email_terverifikasi = TRUE,
+                        sesi_sejak = to_timestamp($2), updated_at = now()
         WHERE user_id = $1 RETURNING user_id, role`,
       [req.user.user_id, detikIni()]
     );

@@ -10,6 +10,7 @@ import {
   GridIcon, CalendarIcon, ClockIcon, FolderIcon, WalletIcon,
   ChatIcon, UserCircleIcon, HelpIcon, SettingsIcon, MenuIcon,
 } from './icons'
+import { konfirmasi } from '../lib/konfirmasi'
 
 /** Kerangka dashboard vendor: sidebar kiri tetap + topbar, isinya lewat
  *  <Outlet />. Sengaja terpisah dari SiteLayout karena sisi vendor tidak
@@ -80,7 +81,8 @@ export default function VendorLayout() {
   const tolak = cekAkses('vendor_owner', '/vendor/masuk')
   if (tolak) return tolak
 
-  function keluar() {
+  async function keluar() {
+    if (!(await konfirmasi({ judul: 'Keluar dari akun?', ya: 'Keluar', bahaya: true }))) return
     clearAuth()
     navigate('/vendor/masuk')
   }

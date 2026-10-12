@@ -4,6 +4,7 @@ import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { ChatIcon, MenuIcon } from './icons'
 import { clearAuth, listMyBookings, pesanBelumDibaca, usePengguna } from '../lib/api'
+import { konfirmasi } from '../lib/konfirmasi'
 
 export default function Navbar() {
   const navigate = useNavigate()
@@ -69,7 +70,8 @@ export default function Navbar() {
       </span>
     ) : null
 
-  function keluar() {
+  async function keluar() {
+    if (!(await konfirmasi({ judul: 'Keluar dari akun?', ya: 'Keluar', bahaya: true }))) return
     clearAuth()
     navigate('/masuk')
   }

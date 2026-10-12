@@ -7,7 +7,9 @@ const hits = new Map(); // "path:ip" -> { count, resetAt }
 // Yang dihitung cuma percobaan GAGAL (>= 400). Brute force itu rentetan gagal;
 // login yang benar tidak perlu makan jatah — kalau ikut dihitung, script test
 // dan satu keluarga di balik NAT yang sama bisa ikut kena blokir.
-function rateLimit(max, windowMs = WINDOW_MS) {
+// `semua` = hitung SEMUA permintaan, untuk endpoint yang mahal walau sukses
+// (Festa AI memakai kuota model AI tim).
+function rateLimit(max, windowMs = WINDOW_MS, semua = false) {
   return (req, res, next) => {
     const now = Date.now();
     const key = `${req.baseUrl}${req.path}:${req.ip}`;
@@ -22,7 +24,7 @@ function rateLimit(max, windowMs = WINDOW_MS) {
     }
 
     res.on('finish', () => {
-      if (res.statusCode < 400) return;
+      if (!semua && res.statusCode < 400) return;
       const cur = hits.get(key);
       if (!cur || Date.now() > cur.resetAt) {
         hits.set(key, { count: 1, resetAt: Date.now() + windowMs });

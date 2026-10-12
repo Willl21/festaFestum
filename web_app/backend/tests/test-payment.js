@@ -162,11 +162,14 @@ function ok(label) {
 
   console.log('\nSapuan 10 metode pembayaran:');
   const gagal = [];
+  // Akun tersendiri: 10 pesanan menunggu persis batas MAKS_PESANAN_MENUNGGU,
+  // jadi pesanan utama customerToken tidak ikut terhitung (lihat 6f).
+  const penyapu = await register('customer');
 
   for (const [i, [metode, fieldWajib]] of METODE.entries()) {
     const tgl = futureDate(120 + i);
     const bk = await api('/bookings', {
-      method: 'POST', token: customerToken,
+      method: 'POST', token: penyapu,
       body: {
         service_id: service.body.service.service_id,
         event_date: tgl, start_time: '08:00',
@@ -178,7 +181,7 @@ function ok(label) {
     });
 
     const c = await api('/payments/charge', {
-      method: 'POST', token: customerToken,
+      method: 'POST', token: penyapu,
       body: { booking_id: bk.body.booking.booking_id, payment_type: 'down_payment', method: metode },
     });
 
@@ -196,6 +199,19 @@ function ok(label) {
   }
 
   if (gagal.length) console.log(`  -> metode bermasalah: ${gagal.join(', ')}`);
+
+  // --- 6f. Batas pesanan menunggu per akun (audit 12 Okt 2026) -------------
+  // penyapu kini punya 10 pesanan belum dibayar; yang ke-11 harus ditolak.
+  const kesebelas = await api('/bookings', {
+    method: 'POST', token: penyapu,
+    body: {
+      service_id: service.body.service.service_id,
+      event_date: futureDate(135), start_time: '08:00',
+      event_location_detail: 'Gedung Uji, Depok',
+    },
+  });
+  assert.strictEqual(kesebelas.status, 429, `pesanan ke-11 harusnya 429, dapat ${kesebelas.status}`);
+  ok('pesanan menunggu ke-11 dari satu akun ditolak 429');
 
   // --- 6c. Ubah metode: tagihan lama dimatikan, yang baru terbit -----------
   const bkUbah = await api('/bookings', {

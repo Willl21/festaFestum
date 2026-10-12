@@ -14,6 +14,7 @@ import {
 } from '../lib/api'
 import { rentangJam } from '../lib/durasi'
 import Dropdown from '../components/Dropdown'
+import { konfirmasi } from '../lib/konfirmasi'
 
 const KATEGORI: Record<string, CategoryKey> = {
   florist: 'florist',
@@ -126,7 +127,12 @@ export default function PesananSayaPage() {
   }
 
   async function batalkan(p: ApiBooking) {
-    if (!window.confirm('Batalkan pesanan ini? Slotnya akan dilepas untuk orang lain.')) return
+    if (!(await konfirmasi({
+      judul: 'Batalkan pesanan?',
+      isi: <>{p.service_name}, {tanggalPanjang(p.event_date)}. Slotnya dilepas untuk orang lain dan tagihan yang belum dibayar ikut dimatikan. Tindakan ini permanen.</>,
+      ya: 'Batalkan Pesanan',
+      bahaya: true,
+    }))) return
     setSibuk(p.booking_id)
     setGalat('')
     try {

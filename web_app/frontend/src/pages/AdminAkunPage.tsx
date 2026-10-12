@@ -5,6 +5,7 @@ import { UserCircleIcon, SearchIcon, CheckCircleIcon, StarIcon } from '../compon
 import { namaKota } from '../data/categories'
 import { rupiahBulat } from '../lib/format'
 import { get, kirim } from '../lib/api'
+import { konfirmasi } from '../lib/konfirmasi'
 
 /** Registri akun — daftar seluruh pengguna, vendor, dan admin.
  *
@@ -76,6 +77,18 @@ export default function AdminAkunPage() {
   // Verifikasi akun: badge "Pengguna Terverifikasi" di halaman profil pengguna
   // berasal dari keputusan di sini.
   async function ubahVerifikasi(a: Akun) {
+    if (!(await konfirmasi(a.akun_terverifikasi
+      ? {
+          judul: 'Cabut verifikasi akun?',
+          isi: <>Lencana terverifikasi {a.name} ({a.email}) dicabut.</>,
+          ya: 'Cabut Verifikasi',
+          bahaya: true,
+        }
+      : {
+          judul: 'Verifikasi akun ini?',
+          isi: <>{a.name} ({a.email}) mendapat lencana Pengguna Terverifikasi.</>,
+          ya: 'Verifikasi',
+        }))) return
     setSibuk(a.user_id)
     setGalat('')
     try {

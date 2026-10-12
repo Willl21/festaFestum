@@ -10,6 +10,7 @@ import { grupMetode, logoMetode, metodeBayar } from '../data/payments'
 import { rupiah } from '../lib/format'
 import { getBooking, bayarBooking, urlFotoLayanan, type ApiBooking } from '../lib/api'
 import { rentangJam } from '../lib/durasi'
+import { konfirmasi } from '../lib/konfirmasi'
 
 /** Enum vendor_category dari backend -> kunci kategori di frontend. */
 const KATEGORI: Record<string, CategoryKey> = {
@@ -39,6 +40,21 @@ export default function CheckoutPage() {
 
   async function bayar() {
     if (!booking) return
+    const jenis = booking.payment_status === 'dp_paid' ? 'settlement' : 'down_payment'
+    // Tagihan aktif dengan metode LAIN dimatikan backend begitu yang baru
+    // terbit. Metode yang sama cuma memakai ulang tagihan itu, tanpa pop-up.
+    const lama = booking.payments.find((p) =>
+      p.payment_type === jenis && p.gateway_status === 'pending' && p.method !== metode
+      && (!p.expires_at || new Date(p.expires_at) > new Date()))
+    const label = (id: string) => metodeBayar.find((m) => m.id === id)?.label ?? id
+    if (lama && !(await konfirmasi({
+      judul: 'Ganti metode pembayaran?',
+      isi: <>
+        Tagihan {label(lama.method)} yang sudah terbit akan dimatikan dan diganti {label(metode)}.
+        Jangan transfer ke nomor lama lagi, pembayaran ke sana akan gagal.
+      </>,
+      ya: 'Ganti Metode',
+    }))) return
     setGalat('')
     setMembayar(true)
     try {
@@ -47,7 +63,7 @@ export default function CheckoutPage() {
       // membayar seribu rupiah untuk pesanan sepuluh juta.
       const r = await bayarBooking({
         booking_id: booking.booking_id,
-        payment_type: booking.payment_status === 'dp_paid' ? 'settlement' : 'down_payment',
+        payment_type: jenis,
         method: metode,
       })
       navigate(`/pembayaran/${r.payment.payment_id}`)

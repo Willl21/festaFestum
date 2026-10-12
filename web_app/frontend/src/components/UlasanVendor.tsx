@@ -2,6 +2,7 @@ import Bintang from './Bintang'
 import { useEffect, useState } from 'react'
 import { hapusUlasan, listUlasanVendor, type ApiUlasan, type RingkasanUlasan } from '../lib/api'
 import { ChevronDown, StarIcon } from './icons'
+import { konfirmasi } from '../lib/konfirmasi'
 
 /* Tiga kartu per halaman, ganti halaman pakai blur-out lalu blur-in per kartu
    berurutan (meniru rekaman referensi 25 Sep). KELUAR = 150ms + jeda
@@ -35,7 +36,12 @@ export default function UlasanVendor({
   const [galat, setGalat] = useState('')
 
   const hapus = async (u: ApiUlasan) => {
-    if (!window.confirm(`Hapus ulasan dari ${u.user_name}? Rating vendor dihitung ulang dan tindakan ini tidak bisa dibatalkan.`)) return
+    if (!(await konfirmasi({
+      judul: 'Hapus ulasan?',
+      isi: <>Ulasan bintang {u.rating} dari {u.user_name} dihapus permanen dan rating vendor dihitung ulang.</>,
+      ya: 'Hapus Ulasan',
+      bahaya: true,
+    }))) return
     setGalat('')
     try {
       await hapusUlasan(u.review_id)

@@ -4,6 +4,7 @@ import TukarHalus from '../components/TukarHalus'
 import { ShieldIcon, CheckCircleIcon, NoteIcon, ClockIcon, XCircleIcon } from '../components/icons'
 import { categories, namaKota } from '../data/categories'
 import { bukaBerkas, get, kirim } from '../lib/api'
+import { konfirmasi } from '../lib/konfirmasi'
 
 /** Persetujuan Vendor — antrean kurasi di Pusat Kendali admin.
  *
@@ -132,6 +133,18 @@ export default function AdminVendorPage() {
       setGalat('Alasan penolakan wajib diisi supaya vendor tahu harus memperbaiki apa.')
       return
     }
+    if (!(await konfirmasi(action === 'approve'
+      ? {
+          judul: 'Verifikasi vendor ini?',
+          isi: <>{vendor.business_name} mendapat lencana Festa Verified Vendor di halamannya.</>,
+          ya: 'Verifikasi',
+        }
+      : {
+          judul: 'Tolak verifikasi?',
+          isi: <>{vendor.business_name} diberi tahu alasannya dan harus mengunggah ulang dokumen.</>,
+          ya: 'Tolak',
+          bahaya: true,
+        }))) return
 
     setSibuk(true)
     setGalat('')

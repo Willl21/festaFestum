@@ -13,10 +13,13 @@ function gambarBermasalah(value, maxChars, sebutan = 'Gambar') {
   if (value.length > maxChars) {
     return `${sebutan} terlalu besar, maksimal ~${Math.round((maxChars * 3) / 4 / 1024)} KB`;
   }
-  // URL http diizinkan supaya gambar hasil seed (yang menunjuk ke berkas di
-  // public/) tidak ikut tertolak.
+  // Path /img/... diizinkan supaya foto katalog seed (berkas di public/
+  // frontend) tidak ikut tertolak. URL http(s) bebas TIDAK: endpoint foto
+  // me-redirect ke nilai ini, jadi https://situs-phishing jadi open redirect
+  // di domain kita, dan foto eksternal bisa mencatat IP pengunjung (audit
+  // 12 Okt 2026).
   if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value) &&
-      !/^https?:\/\//.test(value)) {
+      !/^\/img\/[\w.-]+$/.test(value)) {
     return `${sebutan} harus gambar PNG/JPEG/WebP`;
   }
   return null;

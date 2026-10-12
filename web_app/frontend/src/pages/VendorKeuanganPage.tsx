@@ -12,6 +12,7 @@ import {
   type ApiBooking, type VendorBalance,
 } from '../lib/api'
 import { samarkanRekening, type Rekening } from '../data/banks'
+import { konfirmasi } from '../lib/konfirmasi'
 
 /** Arus kas vendor: saldo yang bisa ditarik, dana yang masih ditahan escrow,
  *  dan riwayat transaksinya.
@@ -111,6 +112,17 @@ export default function VendorKeuanganPage() {
 
   async function ajukanPenarikan(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (!(await konfirmasi({
+      judul: 'Ajukan penarikan dana?',
+      isi: <>
+        <span className="font-semibold">{rupiahBulat(Number(nominal))}</span> ditransfer ke{' '}
+        <span className="font-semibold uppercase">{rekening?.bank_name}</span>{' '}
+        <span className="font-mono">{samarkanRekening(rekening?.bank_account_number ?? '')}</span>
+        {' '}a.n {rekening?.bank_account_holder}. Pastikan rekeningnya benar, transfer yang
+        sudah dikirim admin tidak bisa ditarik.
+      </>,
+      ya: 'Ajukan',
+    }))) return
     setGalat('')
     setPesan('')
     setSibuk(true)

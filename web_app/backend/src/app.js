@@ -15,9 +15,20 @@ const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 
-// Hanya percaya X-Forwarded-For kalau memang di belakang proxy (Render/Railway).
-// Kalau tidak, req.ip bisa dipalsukan dan rate limit-nya jebol.
-app.set('trust proxy', process.env.TRUST_PROXY === '1');
+// TRUST_PROXY = JUMLAH proxy di depan app (Railway: 1). Express lalu mengambil
+// IP ke-N dari KANAN di X-Forwarded-For, yaitu yang ditulis proxy kita sendiri.
+// JANGAN `true`: itu mengambil entri paling KIRI, yang bisa diisi bebas oleh
+// pengirim, jadi rate limit login bisa dilewati dengan IP palsu tiap request
+// (audit 12 Okt 2026). Kosong = tidak di belakang proxy, pakai IP koneksi.
+app.set('trust proxy', Number(process.env.TRUST_PROXY) || false);
+
+// Jangan umumkan "X-Powered-By: Express" (memudahkan penyerang memilih celah),
+// dan dua header dasar untuk semua balasan API. Cukup tiga baris, tanpa helmet.
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY' });
+  next();
+});
 
 // Origin yang boleh manggil API. Isi CORS_ORIGINS di .env waktu deploy
 // (pisah koma); default-nya dev server Vite.

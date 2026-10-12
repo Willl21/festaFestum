@@ -13,9 +13,14 @@ types.setTypeParser(1082, (v) => v);
 // Postgres lokal (CI, laptop) tidak memakai SSL dan menolak koneksi yang
 // memintanya. DB hosted tetap lewat SSL seperti sebelumnya.
 const lokal = /@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL || '');
+// DATABASE_CA = isi sertifikat CA Supabase (Dashboard > Database > SSL
+// Configuration > Download certificate), boleh dengan "\n" literal. Diisi =
+// sertifikat server diverifikasi, jadi backend yakin bicara dengan Supabase
+// asli, bukan perantara. Kosong = terenkripsi tapi tanpa verifikasi.
+const ca = process.env.DATABASE_CA?.replace(/\\n/g, '\n');
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: lokal ? false : { rejectUnauthorized: false },
+  ssl: lokal ? false : ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: false },
 });
 
 pool.on('error', (err) => {

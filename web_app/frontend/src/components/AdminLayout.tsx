@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { GridIcon, ShieldIcon, WalletIcon, UserCircleIcon, BellIcon, MenuIcon, ChatIcon } from './icons'
 import { cekAkses } from './PenjagaAkses'
 import { clearAuth, pesanBelumDibaca, usePengguna } from '../lib/api'
+import { konfirmasi } from '../lib/konfirmasi'
 
 /** Kerangka Pusat Kendali admin: sidebar gelap + topbar, isinya lewat
  *  <Outlet />. Terpisah dari VendorLayout karena menunya beda total dan
@@ -56,7 +57,8 @@ export default function AdminLayout() {
   const tolak = cekAkses('admin', '/admin/masuk')
   if (tolak) return tolak
 
-  function keluar() {
+  async function keluar() {
+    if (!(await konfirmasi({ judul: 'Keluar dari akun?', ya: 'Keluar', bahaya: true }))) return
     clearAuth()
     navigate('/admin/masuk')
   }

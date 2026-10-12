@@ -9,6 +9,7 @@ import { categories } from '../data/categories'
 import { buatBooking } from '../lib/api'
 import { KATEGORI_AI, bacaSimpanan } from '../lib/festaAi'
 import { rupiah } from '../lib/format'
+import { konfirmasi } from '../lib/konfirmasi'
 
 /** Tipe acara di form Festa AI -> event_type yang diterima POST /bookings. */
 const EVENT_TYPE: Record<string, string> = {
@@ -70,6 +71,25 @@ export default function PesanSemuaPage() {
     if (!venue.trim()) return setGalat('Venue dan alamat lengkap wajib diisi.')
     const tanpaJam = antre.find((r) => butuhJam(r.category) && !jam[r.service_id])
     if (tanpaJam) return setGalat(`Isi jam untuk ${tanpaJam.service_name}.`)
+
+    // Satu klik = beberapa pesanan sungguhan, jadi daftar & totalnya
+    // diperlihatkan dulu.
+    if (!(await konfirmasi({
+      judul: `Ajukan ${antre.length} pesanan sekaligus?`,
+      isi: <>
+        <ul className="mb-3 space-y-1">
+          {antre.map((r) => (
+            <li key={r.service_id} className="flex justify-between gap-3">
+              <span>{r.service_name} <span className="text-ink/60">({r.business_name})</span></span>
+              <span className="shrink-0 font-semibold">{rupiah(Number(r.price))}</span>
+            </li>
+          ))}
+        </ul>
+        Untuk {new Date(nilai.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}.
+        Tiap vendor perlu menerima pesanannya dulu sebelum Anda membayar DP.
+      </>,
+      ya: 'Ajukan Semua',
+    }))) return
 
     setMengirim(true)
     // Berurutan, bukan paralel: pesan galatnya jadi bisa dipasangkan ke baris

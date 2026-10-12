@@ -1,6 +1,6 @@
 const pool = require('../config/db');
 const { hitungSaldo, vendorIdMilik } = require('../lib/saldo');
-const { acquireLock, lockHolder, releaseLock } = require('../config/redis');
+const { acquireLock, releaseLock } = require('../config/redis');
 const { perTim: kategoriPerTim, BOOKING_AKTIF, berbasisJam } = require('../lib/kategori');
 const { timKosong, bacaDurasi } = require('./schedule.controller');
 const { kirimEmail, urlFrontend } = require('../lib/email');
@@ -14,6 +14,7 @@ const VALID_EVENT_TYPES = [
 // DP 30% dari total. Angka bisnis, bukan konstanta teknis — kalau nanti beda
 // per vendor, pindahkan ke kolom di tabel vendors.
 const DP_RATE = 0.3;
+const MAKS_PESANAN_MENUNGGU = 10;
 
 function isValidDate(s) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
@@ -91,6 +92,23 @@ async function createBooking(req, res, next) {
       });
     }
 
+    // Pesanan menunggu langsung memakan kapasitas vendor sampai 24 jam, dan
+    // daftar akun gratis. Tanpa batas, satu orang bisa memenuhi jadwal banyak
+    // vendor dengan pesanan yang tak pernah dibayar (audit 12 Okt 2026).
+    // 10 = dua kali "Pesan semua" Festa AI (maks 5).
+    // ponytail: dicek di luar advisory lock, jadi pesanan serentak bisa
+    // melewatinya beberapa biji. Cukup untuk menahan penimbunan.
+    const { rows: [tunggu] } = await client.query(
+      `SELECT count(*)::int AS n FROM bookings
+        WHERE user_id = $1 AND payment_status = 'pending'`,
+      [userId]
+    );
+    if (tunggu.n >= MAKS_PESANAN_MENUNGGU) {
+      return res.status(429).json({
+        message: `Anda masih punya ${tunggu.n} pesanan yang belum dibayar. Selesaikan atau batalkan dulu sebelum memesan lagi.`,
+      });
+    }
+
     const svc = await client.query(
       `SELECT s.vendor_id, s.price, s.minimum_notice_days, s.category, s.service_name,
               s.durasi_menit, s.per_orang, s.harga_per_jam_tambahan,
@@ -157,18 +175,8 @@ async function createBooking(req, res, next) {
     // berkru 3 — tidak boleh dipaksa antre satu-satu di checkout, karena
     // tanggalnya memang muat lebih dari satu pesanan.
     if (eksklusif) {
-      // Kalau user sudah hold tanggal ini lewat /schedules/hold, lock-nya
-      // sudah atas namanya — jangan direbut ulang, cukup dipakai lalu
-      // dilepas di akhir.
-      const holder = await lockHolder(vendor_id, event_date);
-      if (holder && holder !== userId) {
+      if (!(await acquireLock(vendor_id, event_date, userId))) {
         return res.status(409).json({ message: 'Tanggal sedang diproses user lain' });
-      }
-      if (!holder) {
-        const got = await acquireLock(vendor_id, event_date, userId);
-        if (!got) {
-          return res.status(409).json({ message: 'Tanggal sedang diproses user lain' });
-        }
       }
       weOwnTheLock = true;
     }

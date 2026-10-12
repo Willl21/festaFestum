@@ -8,6 +8,7 @@ import {
   listVendorBookings, konfirmasiBooking, bukaPercakapan, type ApiBooking,
 } from '../lib/api'
 import { rentangJam } from '../lib/durasi'
+import { konfirmasi, mintaAlasan } from '../lib/konfirmasi'
 
 /** Jenis acara di DB pakai snake_case; ini tampilannya. */
 const JENIS: Record<string, string> = {
@@ -72,16 +73,29 @@ export default function VendorPemesananPage() {
   }
 
   async function jawab(b: ApiBooking, action: 'terima' | 'tolak') {
-    // ponytail: window.prompt untuk alasan menolak. Jelek dilihat tapi nol
-    // markup; ganti dengan dialog sendiri kalau tampilannya dipakai demo.
+    const ringkas = <>
+      {b.customer_name}, {b.service_name},{' '}
+      {new Date(b.event_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
+      {' '}({rentangJam(b)}).
+    </>
     let alasan = ''
     if (action === 'tolak') {
-      const isi = window.prompt('Alasan menolak (boleh dikosongkan):')
-      // null = vendor menekan Batal. Penolakan tidak bisa ditarik lagi dan
-      // langsung mengirim email ke klien, jadi Batal harus benar-benar batal.
+      // Penolakan tidak bisa ditarik lagi dan langsung mengirim email ke klien,
+      // jadi Batal harus benar-benar batal.
+      const isi = await mintaAlasan({
+        judul: 'Tolak pesanan?',
+        isi: <>{ringkas} Klien langsung diberi tahu dan penolakan tidak bisa ditarik.</>,
+        alasan: { label: 'Alasan menolak' },
+        ya: 'Tolak Pesanan',
+        bahaya: true,
+      })
       if (isi === null) return
       alasan = isi
-    }
+    } else if (!(await konfirmasi({
+      judul: 'Terima pesanan?',
+      isi: <>{ringkas} Dengan menerima, Anda berkomitmen hadir di jadwal itu.</>,
+      ya: 'Terima Pesanan',
+    }))) return
     setSibuk(b.booking_id)
     setGalat('')
     try {
