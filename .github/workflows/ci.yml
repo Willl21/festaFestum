@@ -21,3 +21,63 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web_app/backend
+    # DB dan Redis sekali pakai, lahir dan mati bersama job ini. DB produksi
+    # tidak pernah disentuh.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: festa_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    # Midtrans & Brevo sengaja kosong: mode simulasi menjalankan lebih banyak
+    # skenario pembayaran, dan tidak ada secret yang perlu dititipkan ke CI.
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/festa_ci
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: rahasia-khusus-ci
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web_app/backend/package-lock.json
+      - run: npm ci
+      # schema.sql sudah memuat migrasi 001 (lihat header berkasnya), jadi
+      # 001 dilewati. Schema "extensions" dibuat dulu karena 016 memasang
+      # btree_gist ke sana, seperti di Supabase.
+      - name: Bangun skema dari nol
+        run: |
+          q() { psql -h localhost -U postgres -d festa_ci -v ON_ERROR_STOP=1 -q "$@"; }
+          q -c 'CREATE SCHEMA extensions'
+          q -f src/db/schema.sql
+          for f in src/db/migrations/*.sql; do
+            case "$f" in *001_*) continue ;; esac
+            echo "$f"
+            q -f "$f"
+          done
+      - name: Jalankan server lalu tes
+        run: |
+          npm start > server.log 2>&1 &
+          for i in $(seq 30); do curl -sf localhost:4000/health && break; sleep 1; done
+          npm test
+      - name: Log server (kalau gagal)
+        if: failure()
+        run: cat server.log

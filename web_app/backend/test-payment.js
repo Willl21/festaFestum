@@ -228,6 +228,45 @@ function ok(label) {
   assert.strictEqual(lagiUbah.body.payment.payment_id, ganti.body.payment.payment_id, 'metode sama harus memakai tagihan yang sama');
   ok('ubah metode mematikan tagihan lama dan menerbitkan yang baru; metode sama dipakai ulang');
 
+  // --- 6d. VA DP tidak boleh hidup lebih lama dari pesanannya --------------
+  // Kalau lebih lama, klien bisa transfer ke pesanan yang sudah disapu jadi
+  // 'expired'. Batas pesanan dipendekkan langsung di DB.
+  const setBatas = (sela) => pool.query(
+    `UPDATE bookings SET soft_lock_expires_at = now() + $2::interval WHERE booking_id = $1`,
+    [idUbah, sela]
+  );
+  await setBatas('30 minutes');
+  const pendek = await tagihan('bni_va');
+  assert.strictEqual(pendek.status, 201, `charge gagal: ${JSON.stringify(pendek.body)}`);
+  const { rows: [bkPendek] } = await pool.query(
+    'SELECT soft_lock_expires_at FROM bookings WHERE booking_id = $1', [idUbah]
+  );
+  assert.ok(
+    new Date(pendek.body.payment.expires_at) <= bkPendek.soft_lock_expires_at,
+    `VA (${pendek.body.payment.expires_at}) hidup lebih lama dari pesanan (${bkPendek.soft_lock_expires_at.toISOString()})`
+  );
+  ok('VA DP dipotong supaya mati bersamaan dengan pesanannya');
+
+  // Batas sudah lewat: ditolak SEBELUM tagihan lama dimatikan di Midtrans.
+  await setBatas('-1 minute');
+  const basi = await tagihan('bri_va');
+  await setBatas('1 day');
+  assert.strictEqual(basi.status, 409, `batas lewat harusnya 409, dapat ${basi.status}`);
+  const { rows: [masihHidup] } = await pool.query(
+    'SELECT gateway_status FROM payments WHERE payment_id = $1', [pendek.body.payment.payment_id]
+  );
+  assert.strictEqual(masihHidup.gateway_status, 'pending', 'tagihan lama tidak boleh disentuh saat ditolak');
+  ok('charge sesudah batas pesanan lewat ditolak 409, tagihan lama tidak tersentuh');
+
+  // --- 6e. Batal pesanan ikut mematikan VA yang masih hidup ----------------
+  const batal = await api(`/bookings/${idUbah}/batal`, { method: 'POST', token: customerToken });
+  assert.strictEqual(batal.status, 200, `batal gagal: ${JSON.stringify(batal.body)}`);
+  const { rows: [vaBatal] } = await pool.query(
+    'SELECT gateway_status FROM payments WHERE payment_id = $1', [pendek.body.payment.payment_id]
+  );
+  assert.strictEqual(vaBatal.gateway_status, 'failed', 'VA pesanan batal masih bisa ditransfer');
+  ok('batal pesanan mematikan VA yang masih hidup');
+
   // Sisa skenario butuh pembayaran benar-benar masuk. Dalam mode simulasi kita
   // bisa memicunya sendiri; kalau Midtrans aktif, VA-nya harus dibayar lewat
   // simulator di dashboard Midtrans, jadi bagian itu dilewati.

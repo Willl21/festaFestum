@@ -2,13 +2,14 @@
 // layanan AI diganti tiruan lokal yang membalas persis bentuk main.py tim AI.
 // Server app dinyalakan sendiri di port acak, jadi tidak perlu server hidup.
 //   node test-festa-ai.js
-// Tidak membuat data apa pun di DB (cuma SELECT), jadi tidak ada yang dibersihkan.
+// Membuat satu akun vendor uji (@mail.com) dan menghapusnya lagi di akhir.
 require('dotenv').config();
 const assert = require('assert');
 const http = require('http');
 const pool = require('./src/config/db');
 
 let balasanAi;
+let userUji;
 const tiruan = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c) => (body += c));
@@ -30,13 +31,31 @@ const tiruan = http.createServer((req, res) => {
       .then(async (r) => ({ status: r.status, body: await r.json() }));
 
   try {
-    const { rows: [mua, fg] } = await pool.query(
-      `(SELECT v.business_name, s.service_name, s.price, s.service_id FROM services s JOIN vendors v USING (vendor_id)
-         WHERE s.is_active AND s.category = 'makeup_artist' AND s.minimum_notice_days > 0 LIMIT 1)
-       UNION ALL
-       (SELECT v.business_name, s.service_name, s.price, s.service_id FROM services s JOIN vendors v USING (vendor_id)
-         WHERE s.is_active AND s.category = 'photographer' AND s.minimum_notice_days > 0 LIMIT 1)`
+    // Data uji sendiri, bukan katalog seed: CI berjalan di DB kosong. Nama
+    // diberi akhiran acak supaya tidak mungkin cocok dengan vendor asli.
+    const acak = Math.random().toString(36).slice(2, 8);
+    const { rows: [u] } = await pool.query(
+      `INSERT INTO users (name, email, phone, password_hash, role)
+       VALUES ('Uji AI', $1, '0800', '-', 'vendor_owner') RETURNING user_id`,
+      [`ai-${acak}@mail.com`]
     );
+    userUji = u.user_id;
+    const buat = async (kategori, vendor, layanan, harga) => {
+      const { rows: [r] } = await pool.query(
+        `WITH v AS (
+           INSERT INTO vendors (owner_user_id, business_name) VALUES ($1, $2)
+           RETURNING vendor_id, business_name
+         )
+         INSERT INTO services (vendor_id, service_name, category, price, minimum_notice_days)
+         SELECT vendor_id, $3, $4, $5, 3 FROM v
+         RETURNING service_id, service_name, price,
+                   (SELECT business_name FROM v) AS business_name`,
+        [userUji, `${vendor} ${acak}`, layanan, kategori, harga]
+      );
+      return r;
+    };
+    const mua = await buat('makeup_artist', 'Rias Uji', 'Paket Rias Pengantin', 2500000);
+    const fg = await buat('photographer', 'Foto Uji', 'Paket Dokumentasi', 4000000);
     const permintaan = { event_type: 'Pernikahan', budget: 50000000, guest_count: 100, location: 'jakarta_selatan' };
 
     // 1. Nama dicocokkan ke DB; karangan AI dibuang; harga dari DB, bukan dari AI.
@@ -95,8 +114,12 @@ const tiruan = http.createServer((req, res) => {
 
     console.log('\nSemua lolos.');
   } finally {
+    // Vendor & layanannya ikut terhapus (ON DELETE CASCADE).
+    if (userUji) await pool.query('DELETE FROM users WHERE user_id = $1', [userUji]);
     server.close();
     tiruan.close();
     await pool.end();
+    // src/app ikut membuka koneksi Redis; tanpa ini prosesnya tidak pernah keluar.
+    await require('./src/config/redis').redis?.quit();
   }
 })().catch((e) => { console.error(e); process.exit(1); });

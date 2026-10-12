@@ -343,7 +343,7 @@ async function updateService(req, res, next) {
 // Menyembunyikan layanan tetap lewat PATCH { is_active: false }; endpoint ini
 // untuk vendor yang memang mau barisnya hilang. bookings.service_id punya
 // ON DELETE RESTRICT, jadi layanan yang pernah dipesan TIDAK bisa dihapus —
-// Postgres sendiri yang menolak (23503) dan kita terjemahkan jadi 409 berisi
+// Postgres sendiri yang menolak dan kita terjemahkan jadi 409 berisi
 // saran menyembunyikannya. Satu DELETE saja, tanpa hitung pesanan dulu:
 // menghitung lebih dulu bisa meleset kalau ada pesanan masuk di sela-selanya,
 // sedangkan constraint-nya tidak pernah meleset.
@@ -365,7 +365,9 @@ async function deleteService(req, res, next) {
 
     res.json({ message: 'Layanan berhasil dihapus' });
   } catch (err) {
-    if (err.code === '23503') {
+    // 23001 = FK ON DELETE RESTRICT (DB yang dibangun dari schema.sql),
+    // 23503 = FK NO ACTION (DB produksi). Maknanya sama: masih dirujuk pesanan.
+    if (err.code === '23503' || err.code === '23001') {
       return res.status(409).json({
         message:
           'Layanan ini sudah pernah dipesan, jadi tidak bisa dihapus. Sembunyikan saja supaya tidak muncul lagi di halaman Anda.',

@@ -5,6 +5,7 @@ const { perTim: kategoriPerTim, BOOKING_AKTIF, berbasisJam } = require('../lib/k
 const { timKosong, bacaDurasi } = require('./schedule.controller');
 const { kirimEmail, urlFrontend } = require('../lib/email');
 const { beriTahu, beriTahuVendor } = require('../lib/notifikasi');
+const midtrans = require('../config/midtrans');
 
 const VALID_EVENT_TYPES = [
   'wedding', 'engagement', 'graduation', 'gala_dinner', 'corporate_seminar',
@@ -773,6 +774,34 @@ async function batalBooking(req, res, next) {
           ? 'Pesanan ini sudah tidak aktif'
           : 'Pesanan yang sudah dibayar tidak bisa dibatalkan sendiri. Hubungi admin.',
       });
+    }
+
+    // VA yang masih hidup dimatikan dulu di Midtrans, kalau tidak klien masih
+    // bisa transfer ke pesanan yang sudah batal. Pola yang sama dengan ubah
+    // metode di charge: expire ditolak = tagihannya mungkin sudah dibayar,
+    // jadi pembatalan berhenti di sini.
+    const vaHidup = await client.query(
+      `SELECT payment_id FROM payments
+        WHERE booking_id = $1 AND gateway_status = 'pending'
+          AND (expires_at IS NULL OR expires_at > now())`,
+      [booking.booking_id]
+    );
+    for (const { payment_id } of vaHidup.rows) {
+      if (midtrans.enabled) {
+        try {
+          await midtrans.core.transaction.expire(payment_id);
+        } catch (e) {
+          await client.query('ROLLBACK');
+          console.error('[midtrans] expire tagihan saat batal gagal:', e.message);
+          return res.status(409).json({
+            message: 'Tagihan pesanan ini tidak bisa dibatalkan, mungkin sudah dibayar. Buka tagihannya dan tekan "Saya Sudah Bayar" untuk mengecek.',
+          });
+        }
+      }
+      await client.query(
+        `UPDATE payments SET gateway_status = 'failed' WHERE payment_id = $1`,
+        [payment_id]
+      );
     }
 
     await client.query(

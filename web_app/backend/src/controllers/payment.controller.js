@@ -6,8 +6,9 @@ const VALID_TYPES = ['down_payment', 'settlement'];
 
 // Berapa lama VA berlaku. Dikirim ke Midtrans sebagai custom_expiry SEKALIGUS
 // disimpan di kolom expires_at, supaya angka yang dilihat user di halaman VA
-// sama persis dengan yang dipegang gateway.
-const VA_EXPIRY_HOURS = 24;
+// sama persis dengan yang dipegang gateway. Untuk DP dipotong lagi supaya
+// tidak melewati batas waktu pesanannya (lihat charge).
+const VA_EXPIRY_MENIT = 24 * 60;
 
 // Sisi sukses dari sebuah pembayaran: tandai payment lunas, majukan status
 // booking, dan kunci slotnya. Dipakai bersama oleh webhook Midtrans dan
@@ -139,7 +140,8 @@ async function charge(req, res, next) {
     // tidak ditemukan sama sekali, jadi balasannya 404 dan ID valid tidak bocor.
     // FOR UPDATE mencegah dua klik "Bayar" bersamaan bikin dua VA.
     const bk = await client.query(
-      `SELECT booking_id, total_price, dp_amount, payment_status, confirm_status
+      `SELECT booking_id, total_price, dp_amount, payment_status, confirm_status,
+              soft_lock_expires_at
          FROM bookings
         WHERE booking_id = $1 AND user_id = $2
         FOR UPDATE`,
@@ -185,6 +187,20 @@ async function charge(req, res, next) {
       amount = Math.round(Number(booking.total_price) - Number(booking.dp_amount));
     }
 
+    // VA DP tidak boleh hidup lebih lama dari pesanannya. Kalau lebih lama,
+    // penyapu sudah membuat pesanan 'expired' (slotnya bisa dipesan orang
+    // lain) sementara VA masih menerima transfer: uang klien masuk, saldo
+    // vendor bertambah, pesanannya sudah mati. Pelunasan tidak dibatasi,
+    // pesanan dp_paid tidak pernah disapu.
+    let menit = VA_EXPIRY_MENIT;
+    if (payment_type === 'down_payment' && booking.soft_lock_expires_at) {
+      menit = Math.min(menit, Math.floor((booking.soft_lock_expires_at - Date.now()) / 60000));
+    }
+    if (menit < 1) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Batas waktu pembayaran pesanan ini sudah lewat.' });
+    }
+
     // Kalau sudah ada VA aktif untuk jenis yang sama, kembalikan yang itu.
     // Bikin VA baru tiap kali user refresh cuma bikin sampah di Midtrans dan
     // bikin user bingung harus transfer ke nomor yang mana.
@@ -225,7 +241,7 @@ async function charge(req, res, next) {
       );
     }
 
-    const expiresAt = new Date(Date.now() + VA_EXPIRY_HOURS * 3600 * 1000);
+    const expiresAt = new Date(Date.now() + menit * 60000);
 
     // Baris dibuat dulu supaya payment_id bisa dipakai sebagai order_id di
     // Midtrans. Satu percobaan bayar = satu baris = satu order_id unik, jadi
@@ -247,7 +263,7 @@ async function charge(req, res, next) {
       const charged = await midtrans.core.charge({
         ...spec.build(amount),
         transaction_details: { order_id: payment.payment_id, gross_amount: amount },
-        custom_expiry: { unit: 'hour', expiry_duration: VA_EXPIRY_HOURS },
+        custom_expiry: { unit: 'minute', expiry_duration: menit },
       });
       details = spec.extract(charged);
       gatewayTxnId = charged.transaction_id || null;
