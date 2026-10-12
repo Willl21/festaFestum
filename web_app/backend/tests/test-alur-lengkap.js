@@ -4,10 +4,10 @@
 // meleset dari yang diharapkan halaman.
 //
 // Membersihkan datanya sendiri di akhir.
-// Jalankan dengan server hidup: node test-alur-lengkap.js
+// Jalankan dengan server hidup: node tests/test-alur-lengkap.js
 require('dotenv').config();
 const assert = require('assert');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 const dibuat = [];

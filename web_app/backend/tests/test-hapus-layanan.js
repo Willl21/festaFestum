@@ -1,8 +1,8 @@
 // Hapus layanan permanen: boleh kalau belum pernah dipesan, ditolak kalau sudah
 // (bookings.service_id ON DELETE RESTRICT). Jalankan dengan server hidup:
-//   node test-hapus-layanan.js
+//   node tests/test-hapus-layanan.js
 const assert = require('assert');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 const DIBUAT = [];

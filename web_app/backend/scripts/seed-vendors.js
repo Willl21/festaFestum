@@ -1,6 +1,6 @@
 // Mengisi DB dari dataset Data Scientist: data_science/datasets/vendors.csv
-// Jalankan: node seed-vendors.js          (3 vendor per kategori)
-//           node seed-vendors.js 10       (10 vendor per kategori)
+// Jalankan: node scripts/seed-vendors.js          (3 vendor per kategori)
+//           node scripts/seed-vendors.js 10       (10 vendor per kategori)
 //
 // Aman diulang: vendor yang email akunnya sudah ada akan dilewati, jadi
 // menjalankan dua kali tidak menggandakan data.
@@ -11,9 +11,9 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
-const CSV = path.join(__dirname, '..', '..', 'data_science', 'datasets', 'vendors.csv');
+const CSV = path.join(__dirname, '..', '..', '..', 'data_science', 'datasets', 'vendors.csv');
 const PER_KATEGORI = Number(process.argv[2]) || 3;
 
 // Sejak migrasi 013 tidak ada lagi ketersediaan yang perlu diseed: tidak ada

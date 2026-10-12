@@ -1,9 +1,9 @@
 // Melengkapi katalog tiap vendor: 5 layanan per vendor, lengkap dengan
 // deskripsi, harga bertingkat, field tambahan per kategori, dan fotonya.
 //
-// Jalankan: node seed-layanan.js --dry     lihat rencananya, DB tidak disentuh
-//           node seed-layanan.js           semua vendor yang belum lengkap
-//           node seed-layanan.js florist   satu kategori saja
+// Jalankan: node scripts/seed-layanan.js --dry     lihat rencananya, DB tidak disentuh
+//           node scripts/seed-layanan.js           semua vendor yang belum lengkap
+//           node scripts/seed-layanan.js florist   satu kategori saja
 //
 // Butuh PEXELS_KEY di .env kecuali dijalankan dengan --tanpa-foto.
 //
@@ -15,10 +15,10 @@
 // yang sudah punya paket tertentu dilewati, bukan digandakan. Layanan asli
 // buatan vendor tidak pernah disentuh.
 require('dotenv').config();
-const pool = require('./src/config/db');
-const { TEMPLAT } = require('./src/db/layanan-seed');
-const { periksaDetail } = require('./src/lib/layananDetail');
-const { cariFoto } = require('./src/lib/pexels');
+const pool = require('../src/config/db');
+const { TEMPLAT } = require('../src/db/layanan-seed');
+const { periksaDetail } = require('../src/lib/layananDetail');
+const { cariFoto } = require('../src/lib/pexels');
 
 const argv = process.argv.slice(2);
 const dry = argv.includes('--dry');

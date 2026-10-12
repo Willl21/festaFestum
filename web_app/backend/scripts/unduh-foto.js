@@ -1,8 +1,8 @@
 // Mengunduh foto yang sekarang masih berupa URL CDN Pexels ke
 // frontend/public/img/, lalu menulis ulang nilainya di DB jadi '/img/...'.
 //
-// Jalankan: node unduh-foto.js --dry   hitung dulu, tidak mengunduh apa pun
-//           node unduh-foto.js         unduh dan tulis ulang DB
+// Jalankan: node scripts/unduh-foto.js --dry   hitung dulu, tidak mengunduh apa pun
+//           node scripts/unduh-foto.js         unduh dan tulis ulang DB
 //
 // KENAPA TERPISAH dari seed-foto.js dan seed-layanan.js: menyeed katalog dan
 // mengunduh 700-an berkas adalah dua pekerjaan dengan kecepatan dan risiko
@@ -19,9 +19,9 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
-const IMG = path.join(__dirname, '..', 'frontend', 'public', 'img');
+const IMG = path.join(__dirname, '..', '..', 'frontend', 'public', 'img');
 const dry = process.argv.includes('--dry');
 
 // Berapa unduhan jalan bersamaan. Cukup untuk 700 berkas tanpa membuat CDN
@@ -38,7 +38,7 @@ function namaBerkas(url) {
 
 // Ukuran yang sama dengan yang dipakai saat seed. Disalin dari lib pexels
 // lewat impor supaya tidak bisa melenceng diam-diam.
-const { UKURAN } = require('./src/lib/pexels');
+const { UKURAN } = require('../src/lib/pexels');
 
 /** Menyusun ulang URL CDN dari NAMA BERKASNYA.
  *

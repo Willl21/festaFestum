@@ -1,5 +1,5 @@
 // Mengekspor vendor & layanan yang ADA DI DB sekarang ke CSV, untuk dikirim ke
-// AI Engineer. Jalankan: node ekspor-vendor-csv.js [folder-tujuan]
+// AI Engineer. Jalankan: node scripts/ekspor-vendor-csv.js [folder-tujuan]
 //
 // KENAPA PERLU. Model rekomendasinya masih dilatih dari dataset Data
 // Scientist, yang vendornya tidak kita pakai. Rekomendasi yang menunjuk
@@ -22,8 +22,8 @@ const path = require('path');
 // .env dibaca dari folder skrip ini, bukan dari folder tempat perintahnya
 // diketik — dijalankan dari root repo, dotenv tidak menemukan apa pun dan pg
 // jatuh ke Postgres localhost ("The server does not support SSL connections").
-require('dotenv').config({ path: path.join(__dirname, '.env') });
-const pool = require('./src/config/db');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+const pool = require('../src/config/db');
 
 const tujuan = process.argv[2] || 'ekspor-csv';
 

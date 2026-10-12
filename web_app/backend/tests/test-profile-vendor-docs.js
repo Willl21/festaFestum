@@ -1,7 +1,7 @@
 // Uji endpoint profil user & dokumen vendor. Jalankan dengan server hidup:
-//   node test-profile-vendor-docs.js
+//   node tests/test-profile-vendor-docs.js
 const assert = require('assert');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 

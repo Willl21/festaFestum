@@ -6,9 +6,9 @@
 // Soft delete, bukan DELETE: sebagian di antaranya masih ditunjuk pesanan
 // lama, dan bookings punya ON DELETE RESTRICT ke services.
 //
-// Jalankan: node rapikan-layanan-generik.js [--balikkan]
+// Jalankan: node scripts/rapikan-layanan-generik.js [--balikkan]
 require('dotenv').config();
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
 // Daftar eksplisit, bukan LIKE 'Paket %' — pola itu ikut menyeret templat
 // asli seperti "Paket Lamaran & Engagement". Sumbernya KATEGORI di

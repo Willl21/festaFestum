@@ -1,5 +1,5 @@
 // Uji lupa sandi, verifikasi dua langkah, dan pencabutan sesi (migrasi 022).
-// Server harus hidup:  node test-lupa-sandi-2fa.js
+// Server harus hidup:  node tests/test-lupa-sandi-2fa.js
 //
 // Email ke @mail.com memang tidak pernah dikirim (lib/email.js), dan kode
 // disimpan sebagai hash. Jadi tes ini MENEBAK kodenya dari kode_hash di DB —
@@ -9,8 +9,8 @@
 // restart backend kalau tes ini dijalankan dua kali berturut-turut.
 require('dotenv').config();
 const assert = require('assert');
-const pool = require('./src/config/db');
-const { kodeDari } = require('./test-masuk');
+const pool = require('../src/config/db');
+const { kodeDari } = require('./bantu-masuk');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 

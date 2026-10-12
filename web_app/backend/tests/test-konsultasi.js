@@ -1,9 +1,9 @@
 // Konsultasi sebelum memesan (migrasi 017): form EO -> ruang chat konsultasi ->
 // rekomendasi paket dari vendor -> pesanan -> konfirmasi vendor, semuanya di
-// SATU ruang. Jalankan dengan server hidup: node test-konsultasi.js
+// SATU ruang. Jalankan dengan server hidup: node tests/test-konsultasi.js
 require('dotenv').config();
 const assert = require('assert');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 const DIBUAT = [];

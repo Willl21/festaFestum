@@ -1,8 +1,8 @@
 // Mengisi foto portofolio vendor + foto layanan dari Pexels.
 //
-// Jalankan: node seed-foto.js --dry        lihat rencananya, DB tidak disentuh
-//           node seed-foto.js              semua vendor yang belum punya foto
-//           node seed-foto.js florist      satu kategori saja
+// Jalankan: node scripts/seed-foto.js --dry        lihat rencananya, DB tidak disentuh
+//           node scripts/seed-foto.js              semua vendor yang belum punya foto
+//           node scripts/seed-foto.js florist      satu kategori saja
 //
 // Butuh PEXELS_KEY di .env — gratis di https://www.pexels.com/api/
 // Lisensi Pexels: boleh komersial, tanpa atribusi.
@@ -17,8 +17,8 @@
 // (ini yang melindungi 3 foto asli Bloom & Co.), begitu juga layanan yang
 // image_url-nya sudah terisi.
 require('dotenv').config();
-const pool = require('./src/config/db');
-const { cariFoto } = require('./src/lib/pexels');
+const pool = require('../src/config/db');
+const { cariFoto } = require('../src/lib/pexels');
 
 const SLOT_FOTO = 3;
 

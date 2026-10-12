@@ -5,10 +5,10 @@
 //
 // Skrip ini MEMBERSIHKAN datanya sendiri di akhir, jadi aman dijalankan
 // berulang tanpa menumpuk sampah di DB.
-// Jalankan dengan server hidup: node test-discovery.js
+// Jalankan dengan server hidup: node tests/test-discovery.js
 require('dotenv').config();
 const assert = require('assert');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 

@@ -1,8 +1,8 @@
 // Uji foto portofolio vendor. Jalankan dengan server hidup:
-//   node test-vendor-galeri.js
+//   node tests/test-vendor-portofolio.js
 require('dotenv').config();
 const assert = require('assert');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 

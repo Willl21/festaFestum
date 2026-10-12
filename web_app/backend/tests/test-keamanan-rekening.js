@@ -1,8 +1,8 @@
 // Uji ganti sandi + rekening bank. Jalankan dengan server hidup:
-//   node test-keamanan-rekening.js
+//   node tests/test-keamanan-rekening.js
 require('dotenv').config();
 const assert = require('assert');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 

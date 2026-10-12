@@ -1,14 +1,14 @@
 // Uji revisi PM 26 Sep 2026: florist tanpa jam (018), lonceng notifikasi
 // (019), dan refund/laporan vendor (020). Jalankan dengan server hidup:
-//   node test-revisi-pm2.js
+//   node tests/test-revisi-pm2.js
 //
 // Yang paling mahal kalau bocor ada di bagian refund: uang yang disetujui
 // dikembalikan HARUS keluar dari saldo/escrow vendor, dan tidak boleh bisa
 // disetujui dua kali.
 require('dotenv').config();
 const assert = require('assert');
-const pool = require('./src/config/db');
-const { masukDenganKode } = require('./test-masuk');
+const pool = require('../src/config/db');
+const { masukDenganKode } = require('./bantu-masuk');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 
@@ -159,7 +159,7 @@ const notif = async (token) => (await api('/notifikasi', { token })).body;
   // membawa perannya.
   const admin = await daftar();
   await pool.query(`UPDATE users SET role = 'admin' WHERE email = $1`, [admin.email]);
-  // Admin wajib lewat langkah kode sejak migrasi 022 — lihat test-masuk.js.
+  // Admin wajib lewat langkah kode sejak migrasi 022 — lihat bantu-masuk.js.
   const adminToken = await masukDenganKode(admin.email);
 
   assert.strictEqual((await api('/admin/laporan', { token: customer.token })).status, 403);

@@ -1,10 +1,10 @@
 // Uji alur pembayaran ujung ke ujung dalam MODE SIMULASI (MIDTRANS_SERVER_KEY
 // kosong). Membuktikan: DP 30% dihitung dari DB, VA terbit, pelunasan menunggu
 // DP, status booking maju, slot terkunci, dan pembayaran ganda ditolak.
-// Jalankan dengan server hidup: node test-payment.js
+// Jalankan dengan server hidup: node tests/test-payment.js
 require('dotenv').config();
 const assert = require('assert');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
 // Semua email yang dibuat skrip ini, supaya bisa dibersihkan di akhir.
 const dibuat = [];

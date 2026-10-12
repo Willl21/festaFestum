@@ -16,9 +16,9 @@
 //   6. Vendor tidak bisa menutup tanggal yang sudah dipesan
 //   7. Lima orang berebut kapasitas 3: tepat 3 yang berhasil
 //
-// Jalankan dengan server hidup:  node test-booking-kapasitas.js
+// Jalankan dengan server hidup:  node tests/test-booking-kapasitas.js
 const assert = require('assert');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 

@@ -3,10 +3,10 @@
 // /vendor/balance, dan GET /schedules/me.
 //
 // Membersihkan datanya sendiri di akhir.
-// Jalankan dengan server hidup: node test-dashboard.js
+// Jalankan dengan server hidup: node tests/test-dashboard.js
 require('dotenv').config();
 const assert = require('assert');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 const PRICE = 2000000;

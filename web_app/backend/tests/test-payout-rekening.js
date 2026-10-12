@@ -1,13 +1,13 @@
 // Uji rekening tujuan pencairan dana vendor (migrasi 021). Server harus hidup:
-//   node test-payout-rekening.js
+//   node tests/test-payout-rekening.js
 //
 // Kasus gagal PATCH /auth/rekening sengaja tidak ada di sini (sudah di
 // test-keamanan-rekening.js): endpoint itu dibatasi 8 percobaan gagal per 15
 // menit, dan dua tes yang sama-sama menghabiskan jatah saling menjegal.
 require('dotenv').config();
 const assert = require('assert');
-const pool = require('./src/config/db');
-const { masukDenganKode } = require('./test-masuk');
+const pool = require('../src/config/db');
+const { masukDenganKode } = require('./bantu-masuk');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 
@@ -118,7 +118,7 @@ const BNI = { bank_name: 'bni', bank_account_number: '0099887766', bank_account_
   // 4. Admin melihat rekening tujuan di antrean.
   const admin = await daftar();
   await pool.query(`UPDATE users SET role = 'admin' WHERE email = $1`, [admin.email]);
-  // Admin wajib lewat langkah kode sejak migrasi 022 — lihat test-masuk.js.
+  // Admin wajib lewat langkah kode sejak migrasi 022 — lihat bantu-masuk.js.
   const adminToken = await masukDenganKode(admin.email);
   let antre = (await api('/admin/payouts?status=pending', { token: adminToken })).body.data;
   let po = antre.find((p) => p.payout_id === payoutId);

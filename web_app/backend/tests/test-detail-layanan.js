@@ -1,7 +1,7 @@
 // Field tambahan per kategori (services.details, migrasi 012).
-// Jalankan dengan server hidup: node test-detail-layanan.js
+// Jalankan dengan server hidup: node tests/test-detail-layanan.js
 const assert = require('assert');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 const DIBUAT = [];

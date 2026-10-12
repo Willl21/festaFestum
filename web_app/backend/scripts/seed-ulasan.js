@@ -1,4 +1,4 @@
-// Mengisi ulasan & rating vendor. Jalankan: node seed-ulasan.js [--hapus]
+// Mengisi ulasan & rating vendor. Jalankan: node scripts/seed-ulasan.js [--hapus]
 //
 // KENAPA PERLU. rating_avg semua vendor 0 sejak migrasi 009 — angka 4.8 yang
 // dulu terlihat itu karangan seed-vendors.js, dan begitu rating jadi turunan
@@ -22,8 +22,8 @@
 // sebelumnya (dikenali dari email pengulasnya), jadi ulasannya tidak menumpuk.
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
-const pool = require('./src/config/db');
-const { perTim } = require('./src/lib/kategori');
+const pool = require('../src/config/db');
+const { perTim } = require('../src/lib/kategori');
 
 // Domain seed, BUKAN @mail.com. Penanda @mail.com dipakai skrip tes dan
 // disapu habis tiap habis menguji — pengulas ini harus selamat dari itu.

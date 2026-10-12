@@ -7,7 +7,7 @@
 // Bukan berkas tes; dipakai test-*.js lain.
 require('dotenv').config();
 const crypto = require('crypto');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 

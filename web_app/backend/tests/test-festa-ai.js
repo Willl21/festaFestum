@@ -1,12 +1,12 @@
 // Uji perantara Festa AI (POST /api/v1/ai/recommend) TANPA memanggil Gemini:
 // layanan AI diganti tiruan lokal yang membalas persis bentuk main.py tim AI.
 // Server app dinyalakan sendiri di port acak, jadi tidak perlu server hidup.
-//   node test-festa-ai.js
+//   node tests/test-festa-ai.js
 // Membuat satu akun vendor uji (@mail.com) dan menghapusnya lagi di akhir.
 require('dotenv').config();
 const assert = require('assert');
 const http = require('http');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
 let balasanAi;
 let userUji;
@@ -23,7 +23,7 @@ const tiruan = http.createServer((req, res) => {
 (async () => {
   await new Promise((r) => tiruan.listen(0, r));
   process.env.AI_API_URL = `http://localhost:${tiruan.address().port}`;
-  const app = require('./src/app');
+  const app = require('../src/app');
   const server = await new Promise((r) => { const s = app.listen(0, () => r(s)); });
   const BASE = `http://localhost:${server.address().port}/api/v1/ai/recommend`;
   const kirim = (body) =>
@@ -120,6 +120,6 @@ const tiruan = http.createServer((req, res) => {
     tiruan.close();
     await pool.end();
     // src/app ikut membuka koneksi Redis; tanpa ini prosesnya tidak pernah keluar.
-    await require('./src/config/redis').redis?.quit();
+    await require('../src/config/redis').redis?.quit();
   }
 })().catch((e) => { console.error(e); process.exit(1); });

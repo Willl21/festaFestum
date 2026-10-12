@@ -1,7 +1,7 @@
 // Uji inti conflict-free booking: 10 user menembak slot yang sama bersamaan,
-// tepat satu harus berhasil. Jalankan dengan server hidup: node test-booking-race.js
+// tepat satu harus berhasil. Jalankan dengan server hidup: node tests/test-booking-race.js
 const assert = require('assert');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 const CONCURRENCY = 10;

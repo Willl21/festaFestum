@@ -171,7 +171,7 @@ export default function MuaPage() {
         {!memuat && !galat && tampil.length === 0 && (
           <p className="mt-7 text-[14px] text-muted">
             {vendors.length === 0 && !dipakai.kota && !dipakai.tanggal ? (
-              <>Belum ada makeup artist terdaftar. Isi datanya lewat <code>seed-vendors.js</code> di backend.</>
+              <>Belum ada makeup artist terdaftar. Isi datanya lewat <code>scripts/seed-vendors.js</code> di backend.</>
             ) : (
               <>
                 Tidak ada vendor yang cocok dengan pencarian ini

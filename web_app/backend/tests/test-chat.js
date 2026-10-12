@@ -1,8 +1,8 @@
 // Obrolan (migrasi 015): tiga jenis percakapan, siapa boleh masuk, dan
-// hitungan belum-dibaca. Jalankan dengan server hidup: node test-chat.js
+// hitungan belum-dibaca. Jalankan dengan server hidup: node tests/test-chat.js
 const assert = require('assert');
-const pool = require('./src/config/db');
-const { masukDenganKode } = require('./test-masuk');
+const pool = require('../src/config/db');
+const { masukDenganKode } = require('./bantu-masuk');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 const DIBUAT = [];
@@ -38,7 +38,7 @@ async function register(role) {
 async function registerAdmin() {
   const { token, email } = await register('customer');
   await pool.query("UPDATE users SET role = 'admin' WHERE email = $1", [email]);
-  // Admin wajib lewat langkah kode sejak migrasi 022 — lihat test-masuk.js.
+  // Admin wajib lewat langkah kode sejak migrasi 022 — lihat bantu-masuk.js.
   return masukDenganKode(email);
 }
 

@@ -94,8 +94,8 @@ Setelah itu isi data contoh:
 
 ```powershell
 cd web_app\backend
-node seed-vendors.js        # 3 vendor per kategori
-node seed-vendors.js 10     # atau 10 per kategori
+node scripts/seed-vendors.js        # 3 vendor per kategori
+node scripts/seed-vendors.js 10     # atau 10 per kategori
 ```
 
 Skrip ini membaca `data_science/datasets/vendors.csv` (read-only, milik Data
@@ -163,18 +163,18 @@ dan membuat diff-nya mustahil ditinjau.
 Jalankan dengan server hidup, dari `web_app/backend`:
 
 ```powershell
-node test-alur-lengkap.js        # 13 langkah, menelusuri alur persis seperti frontend
-node test-konfirmasi-ulasan.js   # konfirmasi vendor, pembatalan, ulasan
-node test-booking-race.js        # 10 request bersamaan -> 1 sukses, 9 ditolak
-node test-payment.js
-node test-dashboard.js
-node test-discovery.js
-node test-profil-verifikasi.js
-node test-keamanan-rekening.js
-node test-vendor-portofolio.js
+node tests/test-alur-lengkap.js        # 13 langkah, menelusuri alur persis seperti frontend
+node tests/test-konfirmasi-ulasan.js   # konfirmasi vendor, pembatalan, ulasan
+node tests/test-booking-race.js        # 10 request bersamaan -> 1 sukses, 9 ditolak
+node tests/test-payment.js
+node tests/test-dashboard.js
+node tests/test-discovery.js
+node tests/test-profil-verifikasi.js
+node tests/test-keamanan-rekening.js
+node tests/test-vendor-portofolio.js
 ```
 
-Semuanya membersihkan datanya sendiri **kecuali `test-booking-race.js`**, yang
+Semuanya membersihkan datanya sendiri **kecuali `tests/test-booking-race.js`**, yang
 meninggalkan vendor bernama "Race Test …" setiap dijalankan. Kalau memakai
 database bersama, jangan menjalankannya berulang-ulang.
 

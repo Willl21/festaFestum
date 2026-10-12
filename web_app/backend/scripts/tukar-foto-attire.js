@@ -3,17 +3,17 @@
 // skrip ini membereskan 100 baris yang terlanjur memakai kueri lama —
 // 'Kebaya Pengantin Modern' isinya gaun pengantin BARAT, bukan kebaya.
 //
-// Jalankan: node tukar-foto-attire.js --dry   lihat rencananya
-//           node tukar-foto-attire.js         unduh + tulis DB
+// Jalankan: node scripts/tukar-foto-attire.js --dry   lihat rencananya
+//           node scripts/tukar-foto-attire.js         unduh + tulis DB
 //
 // Fotonya diunduh ke frontend/public/img seperti unduh-foto.js, jadi demo
 // tidak nebeng CDN Pexels saat dinilai.
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
-const IMG = path.join(__dirname, '..', 'frontend', 'public', 'img');
+const IMG = path.join(__dirname, '..', '..', 'frontend', 'public', 'img');
 const UKURAN = 'auto=compress&cs=tinysrgb&w=900&h=600&fit=crop';
 const dry = process.argv.includes('--dry');
 

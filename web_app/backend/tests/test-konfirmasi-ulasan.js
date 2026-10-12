@@ -1,5 +1,5 @@
 // Uji konfirmasi vendor atas pesanan, pembatalan, dan ulasan.
-// Jalankan dengan server hidup:  node test-konfirmasi-ulasan.js
+// Jalankan dengan server hidup:  node tests/test-konfirmasi-ulasan.js
 //
 // Yang dijaga di sini, urut dari yang paling mahal kalau bocor:
 //   1. Pesanan TIDAK bisa dibayar sebelum vendornya menerima.
@@ -10,7 +10,7 @@
 //   4. rating_avg/rating_count vendor ikut berubah setiap ulasan masuk.
 require('dotenv').config();
 const assert = require('assert');
-const pool = require('./src/config/db');
+const pool = require('../src/config/db');
 
 const BASE = process.env.BASE_URL || 'http://localhost:4000/api/v1';
 
