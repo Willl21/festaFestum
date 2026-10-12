@@ -176,21 +176,21 @@ function bacaDurasi(layanan, jumlah, jam_tambahan, start_time) {
 // MENUTUP tanggal. Vendor tersedia secara bawaan, jadi yang perlu dicatat
 // cuma kapan dia tidak menerima pesanan. Sejak migrasi 014 satuannya tanggal
 // penuh — tidak ada lagi bagian hari yang bisa ditutup sendirian.
+/** Body { dates } untuk tutup & buka banyak tanggal sekaligus. */
+function daftarTanggalBermasalah(dates) {
+  if (!Array.isArray(dates) || dates.length === 0) return 'dates wajib diisi dan berupa array tanggal';
+  if (dates.length > 100) return 'Maksimal 100 tanggal per request';
+  if (!dates.every((d) => typeof d === 'string' && isValidDate(d))) {
+    return 'Tiap tanggal harus format YYYY-MM-DD';
+  }
+  return null;
+}
+
 async function tutupTanggal(req, res, next) {
   try {
     const { dates } = req.body;
-
-    if (!Array.isArray(dates) || dates.length === 0) {
-      return res.status(400).json({ message: 'dates wajib diisi dan berupa array tanggal' });
-    }
-    if (dates.length > 100) {
-      return res.status(400).json({ message: 'Maksimal 100 tanggal per request' });
-    }
-    for (const d of dates) {
-      if (typeof d !== 'string' || !isValidDate(d)) {
-        return res.status(400).json({ message: 'Tiap tanggal harus format YYYY-MM-DD' });
-      }
-    }
+    const salah = daftarTanggalBermasalah(dates);
+    if (salah) return res.status(400).json({ message: salah });
 
     const vendor = await pool.query(
       'SELECT vendor_id FROM vendors WHERE owner_user_id = $1',
@@ -537,30 +537,24 @@ async function listMySchedules(req, res, next) {
   }
 }
 
-// DELETE /api/v1/schedules/:scheduleId  (role: vendor_owner)
-//
-// Membuka kembali tanggal yang ditutup.
-//
-// Kepemilikan ikut di WHERE lewat subquery vendor. Baris di tabel ini pasti
-// penutupan (dijaga CHECK di migrasi 013), jadi tidak ada risiko menghapus
-// tanggal yang sedang dipesan.
-async function bukaSlot(req, res, next) {
+// POST /api/v1/schedules/buka  (vendor_owner)  Body: { dates }
+// Kebalikan tutupTanggal: penutupan di tanggal-tanggal itu dicabut. Tanggal
+// yang memang tidak ditutup dilewati saja. Kepemilikan di WHERE, jadi
+// penutupan vendor lain tidak pernah tersentuh.
+async function bukaTanggal(req, res, next) {
   try {
+    const { dates } = req.body;
+    const salah = daftarTanggalBermasalah(dates);
+    if (salah) return res.status(400).json({ message: salah });
+
     const { rows } = await pool.query(
-      `DELETE FROM vendor_schedules sch
-        WHERE sch.schedule_id = $1
-          AND sch.vendor_id IN (SELECT vendor_id FROM vendors WHERE owner_user_id = $2)
-        RETURNING sch.schedule_id`,
-      [req.params.scheduleId, req.user.user_id]
+      `DELETE FROM vendor_schedules
+        WHERE vendor_id IN (SELECT vendor_id FROM vendors WHERE owner_user_id = $1)
+          AND event_date = ANY($2::date[])
+        RETURNING event_date::text AS event_date`,
+      [req.user.user_id, dates]
     );
-
-    if (rows.length === 0) {
-      // Bisa berarti: bukan milik dia, atau tidak ada. Dua-duanya 404 supaya
-      // tidak bocor penutupan mana yang ada dan milik siapa.
-      return res.status(404).json({ message: 'Penutupan tidak ditemukan' });
-    }
-
-    res.json({ message: 'Tanggal dibuka kembali', schedule_id: rows[0].schedule_id });
+    res.json({ dibuka: rows.length, dilewati: dates.length - rows.length });
   } catch (err) {
     next(err);
   }
@@ -569,5 +563,5 @@ async function bukaSlot(req, res, next) {
 module.exports = {
   isValidDate, cekTanggal, listJamTerisi, timKosong, bacaDurasi,
   tutupTanggal, checkAvailability, listAvailability, listMySchedules,
-  bukaSlot,
+  bukaTanggal,
 };

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { VendorPageHeader } from '../components/VendorLayout'
 import { ChevronDown, CheckCircleIcon } from '../components/icons'
 import {
-  listMySchedules, tutupTanggal, ubahKapasitas, ubahJeda, getMyVendor, getMyServices, kirim,
+  listMySchedules, tutupTanggal, bukaTanggal, ubahKapasitas, ubahJeda, getMyVendor, getMyServices,
 } from '../lib/api'
 
 /** Kalender ketersediaan vendor — sumber data untuk schedule-first discovery.
@@ -24,10 +24,11 @@ import {
  *    blocked   -> vendor menutupnya sendiri (punya schedule_id, bisa dicabut)
  *    booked    -> kapasitas harian sudah habis
  *
- *  Sudah tersambung ke backend:
- *  baca          -> GET    /api/v1/schedules/me?from=&to=
- *  tutup tanggal -> POST   /api/v1/schedules
- *  buka lagi     -> DELETE /api/v1/schedules/:id
+ *  Sudah tersambung ke backend (tutup & buka menerima banyak tanggal
+ *  sekaligus, dipakai mode "Pilih Beberapa"):
+ *  baca          -> GET  /api/v1/schedules/me?from=&to=
+ *  tutup tanggal -> POST /api/v1/schedules       { dates }
+ *  buka lagi     -> POST /api/v1/schedules/buka  { dates }
  *
  *  Perubahan dikirim ke server dulu, baru state lokal ikut. Kalau dibalik,
  *  kalender bisa menampilkan penutupan yang sebenarnya gagal tersimpan.
@@ -35,11 +36,8 @@ import {
 
 type SlotStatus = 'available' | 'booked' | 'blocked'
 
-/** Satu tanggal di kalender. `id` hanya terisi kalau tanggal itu memang
- *  penutupan — DELETE butuh schedule_id, dan tanggal 'available' tidak punya
- *  baris di DB. */
+/** Satu tanggal di kalender. */
 type Hari = {
-  id: string | null
   status: SlotStatus
   customer: string | null
   jam: string | null
@@ -88,6 +86,12 @@ export default function VendorJadwalPage() {
   const [perJam, setPerJam] = useState(false)
   const [jeda, setJeda] = useState(60)
   const [simpanJedaStatus, setSimpanJedaStatus] = useState('')
+  // Mode "Pilih Beberapa": klik tanggal = centang, lalu tutup/buka sekaligus.
+  // Status disimpan saat dipilih, karena kalender hanya memuat bulan yang
+  // sedang dilihat sedangkan pilihan boleh menyeberang bulan.
+  const [modePilih, setModePilih] = useState(false)
+  const [pilihan, setPilihan] = useState<Record<string, SlotStatus>>({})
+  const [info, setInfo] = useState('')
 
   const days = useMemo(() => {
     const first = new Date(month.getFullYear(), month.getMonth(), 1)
@@ -112,7 +116,6 @@ export default function VendorJadwalPage() {
       const next: Availability = {}
       for (const row of r.data) {
         next[row.event_date.slice(0, 10)] = {
-          id: row.schedule_id,
           status: row.status,
           customer: row.customer_name,
           jam: row.start_time,
@@ -194,8 +197,8 @@ export default function VendorJadwalPage() {
     setSibuk(date)
     setGalat('')
     try {
-      if (kini.status === 'blocked' && kini.id) {
-        await kirim(`/schedules/${kini.id}`, 'DELETE')
+      if (kini.status === 'blocked') {
+        await bukaTanggal([date])
       } else {
         await tutupTanggal([date])
       }
@@ -209,6 +212,57 @@ export default function VendorJadwalPage() {
   }
 
   const hariDipilih = selected ? availability[selected] : undefined
+
+  // Yang tidak bisa dipilih: penuh, atau masih terbuka tapi sudah ada
+  // pesanannya. Menutup tanggal berpesanan ditolak backend untuk SELURUH
+  // permintaan, jadi satu tanggal seperti itu akan menggagalkan semuanya.
+  const bisaDipilih = (h: Hari | undefined): h is Hari =>
+    !!h && h.status !== 'booked' && !(h.status === 'available' && (h.terpakai > 0 || h.jumlahPesanan > 0))
+
+  function centang(date: string) {
+    const h = availability[date]
+    if (!bisaDipilih(h)) return
+    setInfo('')
+    setPilihan((lama) => {
+      const baru = { ...lama }
+      if (date in baru) delete baru[date]
+      else baru[date] = h.status
+      return baru
+    })
+  }
+
+  function keluarModePilih() {
+    setModePilih(false)
+    setPilihan({})
+  }
+
+  const jumlahDipilih = Object.keys(pilihan).length
+  const akanDitutup = Object.keys(pilihan).filter((d) => pilihan[d] === 'available').sort()
+  const akanDibuka = Object.keys(pilihan).filter((d) => pilihan[d] === 'blocked').sort()
+
+  async function jalankan(aksi: 'tutup' | 'buka') {
+    const dates = aksi === 'tutup' ? akanDitutup : akanDibuka
+    setSibuk(aksi)
+    setGalat('')
+    setInfo('')
+    try {
+      // Backend menerima maksimal 100 tanggal per permintaan.
+      for (let i = 0; i < dates.length; i += 100) {
+        const potong = dates.slice(i, i + 100)
+        await (aksi === 'tutup' ? tutupTanggal(potong) : bukaTanggal(potong))
+      }
+      const sisa = { ...pilihan }
+      for (const d of dates) delete sisa[d]
+      setPilihan(sisa)
+      if (Object.keys(sisa).length === 0) setModePilih(false)
+      setInfo(`${dates.length} tanggal ${aksi === 'tutup' ? 'ditutup' : 'dibuka kembali'}.`)
+      await muat()
+    } catch (e) {
+      setGalat((e as Error).message)
+    } finally {
+      setSibuk('')
+    }
+  }
 
   return (
     <>
@@ -275,15 +329,36 @@ export default function VendorJadwalPage() {
           {galat}
         </p>
       )}
+      {info && (
+        <p role="status" className="mt-6 border border-[#2e6b52]/30 bg-[#2e6b52]/5 px-5 py-3 text-[13px] text-[#2e6b52]">
+          {info}
+        </p>
+      )}
 
       <div className="mt-8 grid gap-7 lg:grid-cols-[1fr_320px]">
         <section className="rounded-lg border border-line bg-white p-4 sm:p-6">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-display text-[22px] font-semibold">
               {monthNames[month.getMonth()]} {month.getFullYear()}
               {memuat && <span className="ml-3 text-[13px] font-normal text-muted">memuat...</span>}
             </h2>
             <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (modePilih) return keluarModePilih()
+                  setModePilih(true)
+                  setInfo('')
+                }}
+                aria-pressed={modePilih}
+                className={`whitespace-nowrap rounded-md border px-3 text-[13px] font-semibold transition-colors ${
+                  modePilih
+                    ? 'border-navy-900 bg-navy-900 text-white hover:bg-navy-700'
+                    : 'border-line text-ink/80 hover:border-ink'
+                }`}
+              >
+                {modePilih ? 'Selesai' : 'Pilih Beberapa'}
+              </button>
               <MonthButton
                 label="Bulan sebelumnya"
                 onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
@@ -312,24 +387,31 @@ export default function VendorJadwalPage() {
               const key = iso(date)
               const hari = availability[key]
               const isPast = date < today
-              const isSelected = key === selected
+              const dicentang = modePilih && key in pilihan
+              const isSelected = modePilih ? dicentang : key === selected
+              const mati = isPast || (modePilih && !bisaDipilih(hari))
 
               return (
                 <button
                   key={key}
                   type="button"
-                  disabled={isPast}
-                  onClick={() => setSelected(key)}
+                  disabled={mati}
+                  onClick={() => (modePilih ? centang(key) : setSelected(key))}
                   aria-pressed={isSelected}
-                  className={`flex h-[64px] flex-col items-start rounded-md border p-1.5 text-left transition-colors sm:h-[74px] sm:p-2 ${
-                    isSelected ? 'border-ink bg-lavender/40' : 'border-line hover:border-navy-900/40'
-                  } ${isPast ? 'cursor-not-allowed opacity-35' : ''} ${
+                  className={`relative flex h-[64px] flex-col items-start rounded-md border p-1.5 text-left transition-colors sm:h-[74px] sm:p-2 ${
+                    dicentang
+                      ? 'border-navy-900 bg-lavender/60 ring-1 ring-navy-900'
+                      : isSelected ? 'border-ink bg-lavender/40' : 'border-line hover:border-navy-900/40'
+                  } ${mati ? 'cursor-not-allowed opacity-35' : ''} ${
                     // Tanggal yang ditutup dulu cuma beda di titik kecil berwarna
                     // putih, nyaris tak terlihat. Sekarang seluruh petaknya redup.
                     hari?.status === 'blocked' && !isSelected ? 'bg-ink/[0.06] text-ink/45' : ''
                   }`}
                 >
                   <span className="text-[13px] font-semibold">{date.getDate()}</span>
+                  {dicentang && (
+                    <CheckCircleIcon className="absolute right-1 bottom-1 h-3.5 w-3.5 text-navy-900" />
+                  )}
                   {hari?.status === 'blocked' && <span className="text-[10px] font-medium">Ditutup</span>}
                   {hari && (
                     <span className="mt-auto flex w-full items-center justify-between gap-1">
@@ -358,8 +440,56 @@ export default function VendorJadwalPage() {
           </div>
         </section>
 
-        <section className="h-fit rounded-lg border border-line bg-white p-6">
-          {!selected || !hariDipilih ? (
+        <section
+          className={`h-fit rounded-lg border border-line bg-white p-6 ${
+            // Di HP panel ini ada di bawah kalender; dalam mode pilih dibuat
+            // menempel di bawah layar supaya tombolnya tetap terjangkau.
+            modePilih ? 'max-lg:sticky max-lg:bottom-3 max-lg:z-10 max-lg:shadow-lg' : ''
+          }`}
+        >
+          {modePilih ? (
+            <>
+              <p className="text-[12px] font-semibold tracking-[0.04em] text-ink/60">PILIH BEBERAPA</p>
+              <h2 className="mt-1 font-display text-[22px] font-semibold">
+                {jumlahDipilih} tanggal dipilih
+              </h2>
+              <p className="mt-2 text-[13px] text-ink/70">
+                Klik tanggal di kalender untuk memilih, boleh pindah bulan. Tanggal yang sudah ada
+                pesanannya tidak bisa dipilih.
+              </p>
+              <div className="mt-4 flex flex-col gap-2">
+                {akanDitutup.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={!!sibuk}
+                    onClick={() => jalankan('tutup')}
+                    className="w-full rounded-md bg-amber px-4 py-3 text-[13px] font-semibold text-navy-900 transition-opacity hover:opacity-90 disabled:opacity-50"
+                  >
+                    {sibuk === 'tutup' ? 'Menyimpan...' : `Tutup ${akanDitutup.length} tanggal`}
+                  </button>
+                )}
+                {akanDibuka.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={!!sibuk}
+                    onClick={() => jalankan('buka')}
+                    className="w-full rounded-md border border-ink/30 px-4 py-3 text-[13px] font-semibold text-ink transition-colors hover:border-ink disabled:opacity-50"
+                  >
+                    {sibuk === 'buka' ? 'Menyimpan...' : `Buka ${akanDibuka.length} tanggal`}
+                  </button>
+                )}
+                {jumlahDipilih > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setPilihan({})}
+                    className="text-[13px] font-medium text-ink/70 underline underline-offset-4"
+                  >
+                    Kosongkan pilihan
+                  </button>
+                )}
+              </div>
+            </>
+          ) : !selected || !hariDipilih ? (
             <p className="text-[14px] text-ink/70">
               Pilih tanggal di kalender untuk menutup atau membukanya kembali.
             </p>

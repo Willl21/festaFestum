@@ -330,10 +330,15 @@ function aturPaket(v, body) {
     assert.strictEqual(b.status, 409, 'jam lain di tanggal tertutup harusnya ikut ditolak');
     ok('penutupan berlaku sehari penuh, bukan sepotong hari');
 
-    const buka = await api(`/schedules/${tutup.body.schedules[0].schedule_id}`, {
-      method: 'DELETE', token: v.token,
+    // Buka banyak sekaligus: TGL_A ditutup, TGL_B tidak -> 1 dibuka, 1 dilewati.
+    const buka = await api('/schedules/buka', {
+      method: 'POST', token: v.token, body: { dates: [TGL_A, TGL_B] },
     });
     assert.strictEqual(buka.status, 200, 'membuka kembali harusnya berhasil');
+    assert.deepStrictEqual(
+      [buka.body.dibuka, buka.body.dilewati], [1, 1],
+      `harusnya 1 dibuka 1 dilewati: ${JSON.stringify(buka.body)}`
+    );
     const c = await pesan(await register('customer'), v.serviceId, TGL_A, '08:00');
     assert.strictEqual(c.status, 201, 'sesudah dibuka harusnya bisa dipesan lagi');
     ok('penutupan dicabut, tanggalnya bisa dipesan lagi');

@@ -620,6 +620,10 @@ export const listMySchedules = (from: string, to: string) =>
 export const tutupTanggal = (dates: string[]) =>
   post<{ ditutup: number; dilewati: number; schedules: ApiSchedule[] }>('/schedules', { dates })
 
+/** Cabut penutupan di tanggal-tanggal itu; yang tidak ditutup dilewati. */
+export const bukaTanggal = (dates: string[]) =>
+  post<{ dibuka: number; dilewati: number }>('/schedules/buka', { dates })
+
 /** Berapa pesanan yang sanggup dilayani vendor dalam sehari. Untuk MUA dan
  *  fotografer ini jumlah tim; untuk florist dan sewa jas/kebaya jumlah unit
  *  yang bisa keluar per hari. */
