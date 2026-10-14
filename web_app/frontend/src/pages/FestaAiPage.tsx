@@ -3,10 +3,11 @@ import FestaAiSkeleton from '../components/FestaAiSkeleton'
 import TukarHalus from '../components/TukarHalus'
 import { Link } from 'react-router-dom'
 import Img from '../components/Img'
-import { SearchIcon } from '../components/icons'
+import { ChatIcon, NoteIcon, SearchIcon } from '../components/icons'
 import { rupiah } from '../lib/format'
 import { categories, KOTA, namaKota, type CategoryKey } from '../data/categories'
-import { rekomendasiAi, urlFotoLayanan, type RekomendasiAi } from '../lib/api'
+import { rekomendasiAi, urlFotoLayanan, type ParameterChatAi, type RekomendasiAi } from '../lib/api'
+import FestaAiChat from '../components/FestaAiChat'
 import Bagian from '../components/Bagian'
 import { KATEGORI_AI, KUNCI_HASIL, bacaSimpanan, type Simpanan } from '../lib/festaAi'
 import Dropdown from '../components/Dropdown'
@@ -97,29 +98,42 @@ export default function FestaAiPage() {
   const [galat, setGalat] = useState('')
   const [sudahCari, setSudahCari] = useState(simpanan !== null)
 
+  // Tab: obrolan atau form+hasil. Kembali dari halaman vendor (ada hasil
+  // tersimpan) langsung ke hasil; kunjungan baru mulai dari obrolan.
+  const [mode, setMode] = useState<'chat' | 'hasil'>(simpanan ? 'hasil' : 'chat')
   const wisuda = nilai.tipe === 'Wisuda'
 
-  async function cariPaket() {
+  /** Tanpa argumen: dari form. Dengan `chat`: parameter hasil obrolan, yang
+   *  sekalian disalin ke form supaya bisa diubah manual. Budget & tamu dari
+   *  chat berupa angka pasti, bukan rentang, jadi dikirim apa adanya. */
+  async function cariPaket(chat?: ParameterChatAi): Promise<Simpanan | null> {
     setGalat('')
-    if (!nilai.tanggal) {
+    const n = chat ? { ...nilai, tipe: chat.event_type, lokasi: chat.location, tanggal: chat.tanggal } : nilai
+    const f = chat ? fokusUntuk(n.tipe).filter((x) => chat.kategori.includes(FOKUS_KE_KATEGORI[x])) : fokus
+    const w = n.tipe === 'Wisuda'
+    if (chat) {
+      setNilai(n)
+      setFokus(f)
+    }
+    if (!n.tanggal) {
       setGalat('Pilih tanggal acara dulu: rekomendasi cuma berisi vendor yang masih bisa dipesan di tanggal itu.')
       setSudahCari(true)
-      return
+      return null
     }
     setMencari(true)
     try {
       const r = await rekomendasiAi({
-        event_type: nilai.tipe,
-        budget: budgetUntuk(nilai.tipe)[nilai.budget],
+        event_type: n.tipe,
+        budget: chat ? chat.budget : budgetUntuk(n.tipe)[n.budget],
         // Wisuda tidak menanyakan tamu; backend & AI tetap butuh angka positif.
-        guest_count: wisuda ? 1 : JUMLAH_TAMU[nilai.tamu],
-        location: nilai.lokasi,
+        guest_count: w ? 1 : chat ? Math.max(1, chat.guest_count) : JUMLAH_TAMU[n.tamu],
+        location: n.lokasi,
         // Tanpa fokus, wisuda tetap tidak boleh ditawari EO.
-        kategori: (fokus.length ? fokus : wisuda ? fokusUntuk('Wisuda') : []).map((f) => FOKUS_KE_KATEGORI[f]),
-        tanggal: nilai.tanggal,
+        kategori: (f.length ? f : w ? fokusUntuk('Wisuda') : []).map((x) => FOKUS_KE_KATEGORI[x]),
+        tanggal: n.tanggal,
       })
       const hasil: Simpanan = {
-        fokus, nilai, rekomendasi: r.data, total: r.total, penuh: r.penuh,
+        fokus: f, nilai: n, rekomendasi: r.data, total: r.total, penuh: r.penuh,
         catatan: { pembuka: r.pesan_pembuka, saran: r.saran_penghematan },
       }
       setRekomendasi(hasil.rekomendasi)
@@ -127,8 +141,10 @@ export default function FestaAiPage() {
       setPenuh(hasil.penuh)
       setCatatan(hasil.catatan)
       try { sessionStorage.setItem(KUNCI_HASIL, JSON.stringify(hasil)) } catch { /* penyimpanan diblokir: hasil cuma hilang saat kembali */ }
+      return hasil
     } catch (e) {
       setGalat((e as Error).message)
+      return null
     } finally {
       setMencari(false)
       setSudahCari(true)
@@ -150,12 +166,51 @@ export default function FestaAiPage() {
     <TukarHalus memuat={masuk} rangka={<FestaAiSkeleton label="Memuat Festa AI…" />}>
       {() => (
         <div className="mx-auto max-w-[1330px] px-6 py-10 md:px-12">
-          <div className="grid gap-10 lg:grid-cols-[420px_1fr]">
+          <header className="text-center">
+            <p className="text-[12px] tracking-[0.3em] text-maroon uppercase">Planning made easier</p>
+            <h1 className="mt-3 font-display text-[36px] leading-tight font-semibold text-navy-900 md:text-[46px]">
+              Rencanakan Acara Bersama Festa AI
+            </h1>
+            <p className="mx-auto mt-4 max-w-[560px] text-[16px] leading-relaxed text-ink/70">
+              Ceritakan kebutuhan acara kamu, dan biarkan Festa AI membantu menemukan vendor yang cocok dengan
+              tanggal, kebutuhan, dan budget kamu.
+            </p>
+          </header>
+
+          <div className="mt-8 flex justify-center gap-3">
+            {(
+              [
+                ['chat', 'Chat AI', ChatIcon],
+                ['hasil', 'Isi Form & Hasil', NoteIcon],
+              ] as const
+            ).map(([m, label, Ikon]) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                aria-pressed={mode === m}
+                className={`flex h-11 cursor-pointer items-center gap-2 rounded-full border px-6 text-[14px] transition-colors ${
+                  mode === m ? 'border-navy-900 bg-navy-900 text-white' : 'border-line bg-white hover:border-navy-900'
+                }`}
+              >
+                <Ikon className="h-[18px] w-[18px]" />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Disembunyikan, bukan dibongkar, supaya riwayat obrolan tetap ada
+              saat pindah tab. */}
+          <div className={mode === 'chat' ? 'mx-auto mt-8 max-w-[1010px]' : 'hidden'}>
+            <FestaAiChat onLengkap={cariPaket} onLihatSemua={() => setMode('hasil')} />
+          </div>
+
+          <div className={mode === 'hasil' ? 'mt-10 grid gap-10 lg:grid-cols-[420px_1fr]' : 'hidden'}>
             {/* PARAMETER */}
             <aside className="h-fit rounded-sm border border-line bg-white p-7 lg:sticky lg:top-[90px]">
-              <h1 className="border-b border-line pb-5 font-display text-[30px] font-semibold">
+              <h2 className="border-b border-line pb-5 font-display text-[30px] font-semibold">
                 Parameter Acara
-              </h1>
+              </h2>
 
               <div className="mt-6 space-y-5">
                 {(
@@ -229,7 +284,7 @@ export default function FestaAiPage() {
 
               <button
                 type="button"
-                onClick={cariPaket}
+                onClick={() => cariPaket()}
                 disabled={mencari}
                 className="mt-7 flex h-14 w-full items-center justify-center gap-3 rounded-sm bg-navy-900 text-[17px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
               >
@@ -364,7 +419,7 @@ export default function FestaAiPage() {
 
                     {!sudahCari && !mencari && (
                       <p className="border border-line bg-white py-16 text-center text-[15px] text-muted">
-                        Atur parameter acara di sebelah kiri, lalu tekan "Cari Paket".
+                        Ceritakan acaramu ke Festa AI, atau isi form di sebelah kiri.
                       </p>
                     )}
                   </div>

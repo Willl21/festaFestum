@@ -18,6 +18,24 @@ function galat(status, message) {
   return Object.assign(new Error(message), { status });
 }
 
+async function panggilAi(path, body) {
+  try {
+    const r = await fetch(`${AI_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(BATAS_WAKTU_MS),
+    });
+    const ai = await r.json();
+    if (!r.ok) throw new Error(ai.error || `AI membalas ${r.status}`);
+    return ai;
+  } catch (err) {
+    // Detail galat AI (nama model, kunci API) cukup di log server.
+    console.error('Festa AI gagal:', err.message);
+    throw galat(502, 'Festa AI sedang tidak bisa dihubungi. Coba lagi sebentar lagi.');
+  }
+}
+
 // POST /api/v1/ai/recommend
 // { event_type, budget, guest_count, location, kategori?: string[], tanggal?: 'YYYY-MM-DD' }
 async function rekomendasi(req, res, next) {
@@ -41,21 +59,9 @@ async function rekomendasi(req, res, next) {
       throw galat(400, 'Tanggal acara harus format YYYY-MM-DD');
     }
 
-    let ai;
-    try {
-      const r = await fetch(`${AI_URL}/api/v1/ai/recommend`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event_type, budget, guest_count, location, preferred_style: [], fokus_prioritas: kategori }),
-        signal: AbortSignal.timeout(BATAS_WAKTU_MS),
-      });
-      ai = await r.json();
-      if (!r.ok) throw new Error(ai.error || `AI membalas ${r.status}`);
-    } catch (err) {
-      // Detail galat AI (nama model, kunci API) cukup di log server.
-      console.error('Festa AI gagal:', err.message);
-      throw galat(502, 'Festa AI sedang tidak bisa dihubungi. Coba lagi sebentar lagi.');
-    }
+    const ai = await panggilAi('/api/v1/ai/recommend', {
+      event_type, budget, guest_count, location, preferred_style: [], fokus_prioritas: kategori,
+    });
 
     // "Nama Bisnis - Nama Layanan". Dipotong di " - " PERTAMA; nama bisnis
     // di katalog tidak ada yang memuat " - ", nama layanan boleh.
@@ -117,4 +123,28 @@ async function rekomendasi(req, res, next) {
   }
 }
 
-module.exports = { rekomendasi };
+// POST /api/v1/ai/chat
+// { pesan: [{ role: 'user' | 'assistant', content }] } -> { balasan, lengkap, parameter }
+// Obrolan tidak disimpan di server; riwayatnya dikirim ulang frontend tiap
+// giliran. Parameter tidak divalidasi di sini: kalau lengkap, frontend
+// meneruskannya ke /recommend yang memvalidasi semuanya.
+async function chat(req, res, next) {
+  try {
+    const { pesan } = req.body;
+    const sah =
+      Array.isArray(pesan) && pesan.length > 0 && pesan.length <= 20 &&
+      pesan.every((m) => m && ['user', 'assistant'].includes(m.role) &&
+        typeof m.content === 'string' && m.content.trim() && m.content.length <= 1000) &&
+      pesan[pesan.length - 1].role === 'user';
+    if (!sah) throw galat(400, 'Format percakapan tidak sah');
+
+    const ai = await panggilAi('/api/v1/ai/chat', {
+      pesan: pesan.map((m) => ({ role: m.role, content: m.content.trim() })),
+    });
+    res.json({ balasan: String(ai.balasan || ''), lengkap: ai.lengkap === true, parameter: ai.parameter ?? null });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { rekomendasi, chat };

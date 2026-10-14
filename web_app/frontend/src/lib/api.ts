@@ -281,6 +281,23 @@ export const rekomendasiAi = (body: {
     body
   )
 
+export type PesanAi = { role: 'user' | 'assistant'; content: string }
+
+/** Parameter hasil obrolan; bentuknya sama dengan body rekomendasiAi. */
+export type ParameterChatAi = {
+  event_type: string
+  tanggal: string
+  location: string
+  budget: number
+  guest_count: number
+  kategori: string[]
+}
+
+/** Chatbot Festa AI. Obrolan tidak disimpan server: riwayat dikirim ulang
+ *  tiap giliran. `lengkap` = parameter siap diteruskan ke rekomendasiAi. */
+export const chatAi = (pesan: PesanAi[]) =>
+  post<{ balasan: string; lengkap: boolean; parameter: ParameterChatAi | null }>('/ai/chat', { pesan })
+
 export type ApiService = {
   service_id: string
   service_name: string

@@ -197,7 +197,14 @@ export const ChatIcon = ({ className = 'h-5 w-5' }) => (
   </svg>
 )
 
-export const UserCircleIcon = ({ className = 'h-5 w-5' }) => (
+export const SendIcon = ({ className = 'h-5 w-5' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+    <path d="M20.5 3.5 3.5 10.5l7 3 3 7 7-17Z" strokeLinejoin="round" />
+    <path d="m10.5 13.5 4-4" strokeLinecap="round" />
+  </svg>
+)
+
+export const UserCircleIcon =({ className = 'h-5 w-5' }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
     <circle cx="12" cy="12" r="9.2" />
     <circle cx="12" cy="10" r="3" />
