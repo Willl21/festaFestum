@@ -4,7 +4,7 @@ import Img from './Img'
 import { ArrowRight, PlusIcon, SendIcon, UserCircleIcon } from './icons'
 import { chatAi, urlFotoLayanan, type ParameterChatAi, type PesanAi } from '../lib/api'
 import { KATEGORI_AI, type Simpanan } from '../lib/festaAi'
-import { categories, type CategoryKey } from '../data/categories'
+import { categories, namaKota, type CategoryKey } from '../data/categories'
 import { rupiah } from '../lib/format'
 
 /** Riwayat yang dikirim ke AI: 12 pesan terakhir (hemat token, kuota Gemini
@@ -250,6 +250,12 @@ function HasilChat({ hasil, onLihatSemua }: { hasil: Simpanan | null; onLihatSem
   }
   return (
     <div className="mt-3">
+      {/* Alasan dari AI, mis. kategori yang diambil dari kota terdekat. */}
+      {hasil.catatan.pembuka && (
+        <p className="mb-3 w-fit max-w-[min(520px,100%)] rounded-lg border border-line bg-white px-4 py-3 text-[14px] leading-relaxed">
+          {hasil.catatan.pembuka}
+        </p>
+      )}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {hasil.rekomendasi.map((r) => {
           const kat = categories[KATEGORI[r.category] ?? 'eo']
@@ -265,6 +271,9 @@ function HasilChat({ hasil, onLihatSemua }: { hasil: Simpanan | null; onLihatSem
                 <div className="min-w-0">
                   <p className="font-display text-[17px] font-semibold">{kat.label}</p>
                   <p className="text-[12px] text-muted">oleh {r.business_name}</p>
+                  {r.city !== hasil.nilai.lokasi && (
+                    <p className="text-[12px] text-maroon">{namaKota(r.city)} · di luar kota acara</p>
+                  )}
                   <p className="mt-1 text-[14px] font-semibold">{rupiah(Number(r.price))}</p>
                 </div>
               </div>

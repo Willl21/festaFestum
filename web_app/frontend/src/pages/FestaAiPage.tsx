@@ -82,6 +82,9 @@ export default function FestaAiPage() {
   const [penuh, setPenuh] = useState(simpanan?.penuh ?? 0)
   const [rekomendasi, setRekomendasi] = useState<RekomendasiAi[]>(simpanan?.rekomendasi ?? [])
   const [total, setTotal] = useState(simpanan?.total ?? 0)
+  // Kota acara pencarian terakhir (form bisa sudah diubah sesudahnya): vendor
+  // di kota lain hasil fallback "kota terdekat" di layanan AI diberi tanda.
+  const [kotaHasil, setKotaHasil] = useState(simpanan?.nilai.lokasi ?? '')
   const [catatan, setCatatan] = useState(simpanan?.catatan ?? { pembuka: '', saran: '' })
   // Halaman ini tidak mengambil data saat dibuka, jadi tidak ada yang bisa
   // dipakai sebagai penanda "sedang memuat". Penanda ini murni untuk animasi
@@ -138,6 +141,7 @@ export default function FestaAiPage() {
       }
       setRekomendasi(hasil.rekomendasi)
       setTotal(hasil.total)
+      setKotaHasil(n.lokasi)
       setPenuh(hasil.penuh)
       setCatatan(hasil.catatan)
       try { sessionStorage.setItem(KUNCI_HASIL, JSON.stringify(hasil)) } catch { /* penyimpanan diblokir: hasil cuma hilang saat kembali */ }
@@ -364,6 +368,9 @@ export default function FestaAiPage() {
                               <span className="mt-3 w-fit rounded-sm bg-[#fdeceb] px-3 py-1.5 text-[13px] text-[#c0392b]">
                                 {kat.label} - {namaKota(r.city)} - rating {Number(r.rating_avg)}
                               </span>
+                              {r.city !== kotaHasil && (
+                                <span className="mt-2 text-[12px] text-muted">Di luar kota acara, terdekat yang tersedia</span>
+                              )}
                               <div className="mt-auto flex items-end justify-between gap-4 pt-6">
                                 <Link
                                   to={`/${kat.slug}/${r.vendor_id}?layanan=${r.service_id}&dari=festa-ai`}

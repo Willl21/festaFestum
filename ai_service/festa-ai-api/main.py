@@ -78,16 +78,49 @@ def load_catalog(vendor_path: str = VENDOR_CSV_PATH, layanan_path: str = LAYANAN
     _catalog_cache["df"] = df
     return df
 
+def kode_kota(location: str) -> str:
+    return location.strip().lower().replace(" ", "_")
+
 def filter_by_location(df: pd.DataFrame, location: str) -> pd.DataFrame:
-    loc = location.strip().lower().replace("_", " ")
-    if not loc:
-        return df
+    return df[df["city"].astype(str).str.lower() == kode_kota(location)]
 
-    def matches(city) -> bool:
-        c = str(city).lower().replace("_", " ")
-        return (loc in c) or (c in loc)
+# Urutan kota dari yang terdekat, perkiraan jarak antar-wilayah. Dipakai
+# kalau satu kategori kosong di kota acara. Ditulis tangan, bukan ditanya ke
+# AI: model tidak bisa diandalkan soal geografi.
+KOTA_TERDEKAT = {
+    "jakarta_utara": ["jakarta_pusat", "jakarta_timur", "jakarta_barat", "bekasi", "jakarta_selatan", "tangerang", "depok", "tangerang_selatan", "bogor"],
+    "jakarta_pusat": ["jakarta_utara", "jakarta_barat", "jakarta_timur", "jakarta_selatan", "bekasi", "tangerang", "depok", "tangerang_selatan", "bogor"],
+    "jakarta_barat": ["jakarta_pusat", "tangerang", "jakarta_selatan", "jakarta_utara", "tangerang_selatan", "jakarta_timur", "depok", "bekasi", "bogor"],
+    "jakarta_selatan": ["jakarta_pusat", "depok", "tangerang_selatan", "jakarta_timur", "jakarta_barat", "jakarta_utara", "tangerang", "bekasi", "bogor"],
+    "jakarta_timur": ["bekasi", "jakarta_pusat", "jakarta_selatan", "jakarta_utara", "depok", "jakarta_barat", "bogor", "tangerang_selatan", "tangerang"],
+    "bekasi": ["jakarta_timur", "jakarta_utara", "jakarta_pusat", "depok", "jakarta_selatan", "bogor", "jakarta_barat", "tangerang_selatan", "tangerang"],
+    "depok": ["jakarta_selatan", "bogor", "jakarta_timur", "tangerang_selatan", "bekasi", "jakarta_pusat", "jakarta_barat", "jakarta_utara", "tangerang"],
+    "bogor": ["depok", "jakarta_selatan", "jakarta_timur", "tangerang_selatan", "bekasi", "jakarta_pusat", "tangerang", "jakarta_barat", "jakarta_utara"],
+    "tangerang": ["tangerang_selatan", "jakarta_barat", "jakarta_pusat", "jakarta_selatan", "jakarta_utara", "depok", "jakarta_timur", "bogor", "bekasi"],
+    "tangerang_selatan": ["tangerang", "jakarta_selatan", "depok", "jakarta_barat", "jakarta_pusat", "bogor", "jakarta_timur", "jakarta_utara", "bekasi"],
+}
 
-    return df[df["city"].apply(matches)]
+def isi_kategori_kosong(catalog: pd.DataFrame, df: pd.DataFrame, location: str, kategori: list[str]):
+    """Kategori yang diminta tapi kosong di kota acara diisi dari SATU kota
+    terdekat yang punya. Mengembalikan katalog baru + catatan untuk AI."""
+    kota = kode_kota(location)
+    tambahan, catatan = [df], []
+    for kat in kategori:
+        if (df["category"] == kat).any():
+            continue
+        nama_kat = KATEGORI.get(kat, kat)
+        for k in KOTA_TERDEKAT.get(kota, []):
+            calon = catalog[(catalog["city"] == k) & (catalog["category"] == kat)]
+            if not calon.empty:
+                tambahan.append(calon)
+                catatan.append(
+                    f"{nama_kat} tidak tersedia di {KOTA.get(kota, kota)}; layanan {nama_kat} di data diambil "
+                    f"dari {KOTA[k]}, kota terdekat yang punya."
+                )
+                break
+        else:
+            catatan.append(f"{nama_kat} tidak tersedia di kota mana pun.")
+    return pd.concat(tambahan), catatan
 
 def format_katalog(df: pd.DataFrame) -> str:
     if df.empty:
@@ -106,9 +139,10 @@ def format_katalog(df: pd.DataFrame) -> str:
     ]
     return "\n".join(lines)
 
-def build_system_instruction(katalog_layanan: str, req: EventRequest) -> str:
+def build_system_instruction(katalog_layanan: str, req: EventRequest, catatan: list[str] = []) -> str:
     gaya = ", ".join(req.preferred_style) if req.preferred_style else "-"
     prioritas = ", ".join(req.fokus_prioritas) if req.fokus_prioritas else "Tidak ada"
+    ketersediaan = "\n".join(f"- {c}" for c in catatan) if catatan else "- Semua kategori tersedia di kota acara."
     
     return f"""
 # PERAN
@@ -126,6 +160,9 @@ Blok berikut adalah satu-satunya sumber informasi layanan vendor yang sah untuk 
 - Budget total: Rp{req.budget}
 - Gaya/preferensi: {gaya}
 - Kategori Prioritas Utama: {prioritas}
+
+# CATATAN KETERSEDIAAN
+{ketersediaan}
 
 # ATURAN WAJIB
 
@@ -154,7 +191,7 @@ Kembalikan JSON sesuai response_schema yang ditentukan di kode.
 - "vendor_terpilih" diisi dengan format "nama_bisnis - nama_layanan".
 - "kategori" diisi persis dari nilai category pada layanan yang dipilih.
 - "harga" diisi persis dari nilai price pada layanan yang dipilih.
-- "pesan_pembuka" maksimal 2 kalimat, netral dan faktual.
+- "pesan_pembuka" maksimal 2 kalimat, netral dan faktual. Jika CATATAN KETERSEDIAAN menyebut layanan diambil dari kota lain atau tidak tersedia, dan kategori itu ikut Anda rekomendasikan atau diminta klien, "pesan_pembuka" WAJIB menjelaskannya dengan bahasa yang ramah, misalnya: "Fotografer belum ada di Jakarta Utara, jadi saya carikan dari Jakarta Pusat yang paling dekat."
 """
 
 @app.get("/")
@@ -170,9 +207,12 @@ def get_recommendation(req: EventRequest):
         # sudah melewatinya. Kategori di luar fokus juga dibuang backend.
         if req.fokus_prioritas:
             catalog_lokasi = catalog_lokasi[catalog_lokasi["category"].isin(req.fokus_prioritas)]
+        catalog_lokasi, catatan = isi_kategori_kosong(
+            catalog, catalog_lokasi, req.location, req.fokus_prioritas or list(KATEGORI)
+        )
         katalog_layanan = format_katalog(catalog_lokasi)
 
-        system_instruction = build_system_instruction(katalog_layanan, req)
+        system_instruction = build_system_instruction(katalog_layanan, req, catatan)
 
         prompt_user = (
             f"Klien ingin mengadakan {req.event_type} di {req.location} "
@@ -281,6 +321,8 @@ Hari ini: {hari_ini}
 - Bahasa Indonesia santai tapi sopan, maksimal 3 kalimat per balasan.
 - Tanyakan paling banyak 2 hal yang belum diketahui per balasan. Jangan menanyakan ulang yang sudah dijawab.
 - Kalau kota klien di luar daftar, katakan layanan baru tersedia di Jabodetabek dan minta pilih kota terdekat.
+- LOKASI: kalau klien menyebut tempat terkenal (misalnya JIC, GBK, JIExpo, Kampus UI Depok), petakan ke kotanya dan SEBUTKAN pemetaannya di balasan, misalnya "JIC (Jakarta Utara)", supaya klien bisa mengoreksi.
+- Kalau lokasi belum jelas, TANYAKAN dan "lengkap" = false. Contoh tidak jelas: hanya "Jakarta" (bagian mana?), "Tangerang" (Kota Tangerang atau Tangerang Selatan?), "di rumah", nama gedung/tempat yang tidak Anda kenal pasti. Jangan pernah menebak kota diam-diam.
 - Kalau tipe acara di luar daftar, tawarkan tipe terdekat dari daftar.
 - "lengkap" = true HANYA jika event_type, tanggal, location, dan budget sudah disebut klien secara jelas (dan guest_count untuk selain Wisuda). Saat lengkap, "balasan" berisi ringkasan singkat parameternya dan kabar bahwa paket vendor sedang dicarikan.
 - Klien boleh mengubah parameter kapan saja; pakai nilai terbaru.
