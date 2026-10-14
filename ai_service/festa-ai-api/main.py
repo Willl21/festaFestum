@@ -4,10 +4,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
-from groq import Groq
+from openai import OpenAI          # dulu: from groq import Groq
 
-API_KEY = os.environ.get("GROQ_API_KEY")
-client = Groq(api_key=API_KEY)
+API_KEY = os.environ.get("GEMINI_API_KEY")
+client = OpenAI(
+    api_key=API_KEY,
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+)
 
 app = FastAPI(title="Festa Festum AI API")
 
@@ -176,7 +179,7 @@ def get_recommendation(req: EventRequest):
 
         # PEMANGGILAN GROQ API
         response = client.chat.completions.create(
-            model="openai/gpt-oss-120b", # model Llama di Groq kini khusus Enterprise
+            model="gemini-3.5-flash-lite", # model Llama di Groq kini khusus Enterprise
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": prompt_user}

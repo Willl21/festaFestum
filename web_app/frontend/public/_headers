@@ -8,14 +8,16 @@
 #   orang lain. Mencegah clickjacking, mis. tombol "Setujui Pencairan" admin
 #   ditumpuk di bawah tombol palsu di situs lain.
 # - nosniff: browser tidak menebak-nebak tipe berkas.
-# - CSP masih REPORT-ONLY: pelanggaran cuma dilaporkan di console, tidak
-#   diblokir. Kalau console situs produksi bersih, ganti nama header jadi
-#   "Content-Security-Policy" supaya berlaku. Hash sha256 di script-src =
-#   onload="this.media='all'" pemuat Google Fonts di index.html; ubah isi
-#   handler itu = hash-nya harus dihitung ulang.
+# - CSP BERLAKU sejak 12 Okt 2026, sesudah dicoba Report-Only tanpa satu pun
+#   pelanggaran di produksi. Sumber baru (CDN, script pihak ketiga, endpoint
+#   API lain) WAJIB ditambahkan di sini dulu, kalau tidak browser memblokirnya.
+#   Ragu? Ganti sementara nama header jadi Content-Security-Policy-Report-Only.
+#   Hash sha256 di script-src = onload="this.media='all'" pemuat Google Fonts
+#   di index.html; ubah isi handler itu = hash-nya harus dihitung ulang.
+#   play.google.com (statistik Google Sign-In) sengaja tidak diizinkan.
 /*
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client 'unsafe-hashes' 'sha256-MhtPZXr7+LpJUY5qtMutB+qWfQtMaPccfe7QXtCcEYc='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com/gsi/style; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://festafestum-production.up.railway.app https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client 'unsafe-hashes' 'sha256-MhtPZXr7+LpJUY5qtMutB+qWfQtMaPccfe7QXtCcEYc='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com/gsi/style; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://festafestum-production.up.railway.app https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'
